@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 33% 97%;
+    --foreground: 215 68% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 68% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 68% 14%;
+    --primary: 215 68% 14%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 215 68% 14%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 45 65% 52%;
+    --accent-foreground: 215 68% 14%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 16% 90%;
+    --input: 220 16% 90%;
+    --ring: 45 65% 52%;
+    --chart-1: 215 68% 30%;
+    --chart-2: 45 65% 52%;
+    --chart-3: 152 60% 42%;
+    --chart-4: 197 37% 40%;
+    --chart-5: 27 87% 60%;
+    --radius: 0.75rem;
+    --font-heading: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --sidebar-background: 215 68% 14%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 45 65% 52%;
+    --sidebar-primary-foreground: 215 68% 14%;
+    --sidebar-accent: 45 65% 52%;
+    --sidebar-accent-foreground: 215 68% 14%;
+    --sidebar-border: 215 40% 22%;
+    --sidebar-ring: 45 65% 52%;
+  }
+
+  .dark {
+    --background: 215 68% 8%;
+    --foreground: 210 40% 96%;
+    --card: 215 50% 12%;
+    --card-foreground: 210 40% 96%;
+    --popover: 215 50% 12%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 215 68% 12%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 215 30% 18%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 215 30% 18%;
+    --muted-foreground: 220 10% 65%;
+    --accent: 45 65% 52%;
+    --accent-foreground: 215 68% 14%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 30% 20%;
+    --input: 215 30% 20%;
+    --ring: 45 65% 52%;
+    --sidebar-background: 215 68% 12%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 45 65% 52%;
+    --sidebar-primary-foreground: 215 68% 14%;
+    --sidebar-accent: 45 65% 52%;
+    --sidebar-accent-foreground: 215 68% 14%;
+    --sidebar-border: 215 40% 20%;
+    --sidebar-ring: 45 65% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5 {
+    @apply font-heading;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+/* Force LTR direction for phone numbers, dates, and numeric fields */
+.ltr-nums {
+  direction: ltr !important;
+  unicode-bidi: embed !important;
+  text-align: left;
+}
+.dir-ltr {
+  direction: ltr !important;
+  unicode-bidi: embed !important;
+}
+
+
+
+/* Touch & Mobile Smooth Scroll Utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+html, body {
+  direction: rtl;
+  text-align: right;
+}
+
+
+/* Smooth Circulars News Ticker */
+@keyframes marquee-rtl {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(50%); }
+}
+
+@keyframes marquee-ltr {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee-rtl {
+  display: flex;
+  width: max-content;
+  animation: marquee-rtl 35s linear infinite;
+}
+
+.animate-marquee-rtl:hover {
+  animation-play-state: paused;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 15mm 10mm;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  header, aside, nav, .no-print, .print-hidden, [data-no-print] {
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .print-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  .print-table th, .print-table td {
+    border: 1px solid #cbd5e1 !important;
+    color: #000000 !important;
+  }
+  .print-table th {
+    background-color: #f1f5f9 !important;
+    font-weight: bold !important;
+  }
+}

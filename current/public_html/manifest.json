@@ -1,0 +1,16 @@
+{
+  "name": "Green Arrow HR System",
+  "short_name": "Green Arrow HR",
+  "description": "نظام إدارة الموارد البشرية والخدمة الذاتية - Green Arrow",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1F3A",
+  "theme_color": "#10B981",
+  "icons": [
+    {
+      "src": "/green-arrow-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
