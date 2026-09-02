@@ -37,6 +37,7 @@ import {
   Search,
   CheckCircle2,
   Upload,
+  Camera,
   Eye,
   Download,
   Trash2,
@@ -554,47 +555,135 @@ export default function EmployeeDetail() {
   const empAdvances = advancesList.filter(a => String(a.employee_number) === String(employee.employee_number));
   const activeAdvance = empAdvances.find(a => a.status === 'active' || a.status === 'approved_pending_accountant');
 
+  // Avatar URL resolution from employee data or local storage
+  const avatarUrl = employee?.avatar_url || (employee ? (localStorage.getItem(`hr_employee_photo_${employee.id}`) || localStorage.getItem(`hr_employee_photo_${employee.employee_number}`)) : null);
+
+  // Upload Employee Profile Photo (Authorized for HR / Admin / Owner)
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !employee) return;
+
+    if (file.size > 4 * 1024 * 1024) {
+      toast({ title: 'حجم الصورة كبير جداً', description: 'الحد الأقصى لحجم الصورة هو 4 ميجابايت.', variant: 'destructive' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      
+      // 1. Store in Local Storage
+      localStorage.setItem(`hr_employee_photo_${employee.id}`, dataUrl);
+      localStorage.setItem(`hr_employee_photo_${employee.employee_number}`, dataUrl);
+      
+      // 2. Update Employee Object State
+      const updated = { ...employee, avatar_url: dataUrl };
+      setEmployee(updated);
+
+      try {
+        await base44.entities.Employee.update(employee.id, { avatar_url: dataUrl });
+      } catch (err) {}
+
+      // 3. Dispatch global event for reactive update
+      window.dispatchEvent(new CustomEvent('hr_employee_updated', { detail: updated }));
+      window.dispatchEvent(new CustomEvent('hr_employee_photo_updated', { detail: { id: employee.id, employee_number: employee.employee_number, avatar_url: dataUrl } }));
+
+      toast({
+        title: '✓ تم تحديث صورة الموظف بنجاح',
+        description: `تم حفظ وتثبيت صورة الموظف (${employee.full_name}) في ملفه التعريفي وكافة الشاشات.`
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16" dir="rtl">
       
-      {/* ─── TOP EXECUTIVE HERO PROFILE BANNER ────────────────────────────── */}
-      <div className="bg-card border border-border p-6 rounded-3xl shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-emerald-700/20">
-              {employee.full_name?.slice(0, 2) || 'مو'}
+      {/* ─── TOP EXECUTIVE HERO PROFILE BANNER (CENTERED CIRCULAR VIP DESIGN) ─── */}
+      <div className="bg-card border border-border p-6 sm:p-8 rounded-3xl shadow-sm space-y-6 text-center">
+        
+        {/* Centered Circular Avatar with Camera Upload */}
+        <div className="flex flex-col items-center justify-center space-y-3">
+          <div className="relative group">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-700 p-1 shadow-xl shadow-emerald-500/20 border-2 border-emerald-400/40 mx-auto overflow-hidden flex items-center justify-center">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={employee.full_name}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center text-white font-heading font-black text-2xl sm:text-3xl">
+                  {employee.full_name?.slice(0, 2) || 'مو'}
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-heading font-black text-xl text-foreground">{employee.full_name}</h1>
-                <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-mono font-bold text-xs">
-                  #{employee.employee_number}
+
+            {/* Camera Upload Button for HR / Admin / Owner */}
+            {canEdit && (
+              <>
+                <input
+                  type="file"
+                  id="hr-avatar-file-input"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                <label
+                  htmlFor="hr-avatar-file-input"
+                  className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center cursor-pointer shadow-lg border-2 border-background transition-transform active:scale-95"
+                  title="رفع / تغيير صورة الموظف (صلاحية HR)"
+                >
+                  <Camera className="w-4 h-4" />
+                </label>
+              </>
+            )}
+          </div>
+
+          {/* Centered Name and Badges */}
+          <div className="space-y-1.5 max-w-lg mx-auto">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <h1 className="font-heading font-black text-xl sm:text-2xl text-foreground">
+                {employee.full_name}
+              </h1>
+              <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-mono font-bold text-xs">
+                #{employee.employee_number}
+              </Badge>
+              {isInsured ? (
+                <Badge className="bg-sky-500/10 text-sky-700 border-sky-300 text-xs font-bold">
+                  مؤمن عليه (21 يوم) ✓
                 </Badge>
-                {isInsured ? (
-                  <Badge className="bg-sky-500/10 text-sky-700 border-sky-300 text-xs font-bold">
-                    مؤمن عليه (21 يوم) ✓
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs font-bold">غير مؤمن</Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground font-mono" dir="ltr">{fullNameEn}</p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1 flex-wrap">
-                <span className="flex items-center gap-1"><Briefcase className="w-3.5 h-3.5 text-emerald-600" />{employee.job_title || 'موظف'}</span>
-                <span>•</span>
-                <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-sky-600" />{employee.branch_name || employee.branch || 'مكتب الإدارة'}</span>
-                <span>•</span>
-                <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-indigo-600" />{employee.shift || 'فترة عمل'}</span>
-              </div>
+              ) : (
+                <Badge variant="outline" className="text-xs font-bold">غير مؤمن</Badge>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground font-mono" dir="ltr">{fullNameEn}</p>
+
+            <div className="flex items-center justify-center gap-2.5 text-xs text-muted-foreground pt-1 flex-wrap">
+              <span className="flex items-center gap-1 font-semibold text-foreground">
+                <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+                {employee.job_title || 'موظف'}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 text-sky-600" />
+                {employee.branch_name || employee.branch || 'مكتب الإدارة'}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                {employee.shift || 'فترة عمل'}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Centered Actions */}
+          <div className="flex items-center justify-center gap-2 flex-wrap pt-2">
             {hasPermission(user, 'leave.create') && (
               <Button
                 onClick={() => setGrantLeaveModal(true)}
-                className="bg-teal-600 hover:bg-teal-500 text-white rounded-2xl text-xs font-bold gap-1.5 h-10 px-4 shadow-sm"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold gap-1.5 h-10 px-5 shadow-sm"
               >
                 <CalendarDays className="w-4 h-4" />
                 <span>+ منح إجازة</span>
@@ -610,8 +699,6 @@ export default function EmployeeDetail() {
                 <span>+ رفع مستند</span>
               </Button>
             )}
-            
-
             <Button
               onClick={() => window.print()}
               variant="outline"
@@ -621,11 +708,10 @@ export default function EmployeeDetail() {
               <span>طباعة الملف A4</span>
             </Button>
           </div>
-
         </div>
 
-        {/* ─── QUICK METRICS BAR ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-5 border-t border-border/80 text-xs">
+        {/* ─── QUICK METRICS BAR (6-GRID) ─────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-5 border-t border-border/80 text-xs text-right">
           <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border">
             <div className="text-muted-foreground text-[10px] font-bold">الراتب الأساسي:</div>
             <div className="font-mono font-black text-sm text-foreground mt-0.5"><MaskedSalary value={employee.salary} /></div>

@@ -183,27 +183,26 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
 
       {/* ─── 1. TV NEWS TICKER STRIP (LIGHT THEME) ─────────────────────────── */}
       <div
-        className={`relative overflow-hidden bg-gradient-to-r from-emerald-50/95 via-white to-slate-50 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 text-slate-900 dark:text-slate-100 rounded-2xl sm:rounded-3xl border border-emerald-200/90 dark:border-slate-800 shadow-md p-1.5 sm:p-2 transition-all flex items-center justify-between gap-2 ${className}`}
+        className={`relative overflow-hidden bg-gradient-to-r from-emerald-50/95 via-white to-slate-50 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 text-slate-900 dark:text-slate-100 rounded-2xl sm:rounded-3xl border border-emerald-200/90 dark:border-slate-800 shadow-md p-1 sm:p-2 transition-all flex items-center justify-between gap-1 sm:gap-2 ${className}`}
         dir="rtl"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
       >
         
-        {/* Right / Start: Fixed Glowing Live Badge */}
-        <div className="flex items-center gap-2 shrink-0 z-10 bg-white/95 dark:bg-slate-900/95 ps-1 pe-2 py-1 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-heading font-black text-[11px] sm:text-xs shadow-sm">
+        {/* Right / Start: Glowing Live Badge (Ultra-compact on Mobile) */}
+        <div className="flex items-center gap-1.5 shrink-0 z-10 bg-white/95 dark:bg-slate-900/95 ps-1 pe-1.5 sm:pe-2 py-0.5 sm:py-1 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-heading font-black text-[10px] sm:text-xs shadow-sm">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-200"></span>
             </span>
-            <Megaphone className="w-3.5 h-3.5" />
+            <Megaphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             <span className="hidden sm:inline">التعاميم والتوجيهات:</span>
-            <span className="sm:hidden">التعاميم:</span>
           </div>
         </div>
 
-        {/* Center: Infinite Seamless Smooth Marquee (TV News Style) */}
-        <div className="flex-1 overflow-hidden relative cursor-pointer mask-fade-edges">
+        {/* Center: Infinite Seamless Smooth Marquee (Takes 90%+ of Mobile Width) */}
+        <div className="flex-1 overflow-hidden relative cursor-pointer min-w-0">
           <div className={`tv-marquee-track ${isPaused ? 'paused' : ''}`}>
             {tickerItems.map((item, idx) => {
               const meta = getAuthorMeta(item);
@@ -213,27 +212,27 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
                 <div
                   key={`${item.id}-${idx}`}
                   onClick={() => setSelectedAnnouncement(item)}
-                  className="inline-flex items-center gap-2.5 px-4 py-1 group hover:bg-emerald-100/50 dark:hover:bg-slate-800/60 rounded-xl transition-all"
+                  className="inline-flex items-center gap-2 px-2 sm:px-4 py-1 group hover:bg-emerald-100/50 dark:hover:bg-slate-800/60 rounded-xl transition-all"
                   title="انقر لقراءة نص التعميم بالكامل"
                 >
                   {/* Distinct Author Pill */}
-                  <Badge className={`text-[10px] font-black border py-0.5 px-2 rounded-lg flex items-center gap-1 shrink-0 ${meta.badgeClass}`}>
-                    <AuthorIcon className="w-3 h-3 shrink-0" />
+                  <Badge className={`text-[9.5px] sm:text-[10px] font-black border py-0.5 px-1.5 sm:px-2 rounded-lg flex items-center gap-1 shrink-0 ${meta.badgeClass}`}>
+                    <AuthorIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
                     <span>{meta.shortLabel}</span>
                   </Badge>
 
                   {/* Title in Deep Navy Blue */}
-                  <span className="text-xs sm:text-[13px] font-heading font-black text-[#0B1E33] dark:text-emerald-300 group-hover:text-emerald-700 transition-colors shrink-0">
+                  <span className="text-[11.5px] sm:text-[13px] font-heading font-black text-[#0B1E33] dark:text-emerald-300 group-hover:text-emerald-700 transition-colors shrink-0">
                     {item.title}:
                   </span>
 
                   {/* Content in Dark Gray */}
-                  <span className="text-xs text-slate-700 dark:text-slate-300 font-medium group-hover:text-slate-950 transition-colors">
+                  <span className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 font-medium group-hover:text-slate-950 transition-colors">
                     {item.content}
                   </span>
 
                   {/* News Bullet Separator */}
-                  <span className="text-emerald-500 font-bold px-3 select-none text-xs">
+                  <span className="text-emerald-500 font-bold px-2 sm:px-3 select-none text-xs">
                     ✦ ✦
                   </span>
                 </div>
@@ -242,16 +241,16 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
           </div>
         </div>
 
-        {/* Left / End: Control Buttons (Pause / View / Post) */}
-        <div className="flex items-center gap-1.5 shrink-0 z-10 bg-white/95 dark:bg-slate-900/95 ps-2 pe-1 py-1 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800">
+        {/* Left / End: Control Buttons (Compact on Mobile) */}
+        <div className="flex items-center gap-1 shrink-0 z-10 bg-white/95 dark:bg-slate-900/95 ps-1.5 pe-1 py-0.5 sm:py-1 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800">
           
           {/* Pause / Resume Button */}
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-700"
-            title={isPaused ? 'استئناف حركة الشريط' : 'إيقاف حركة الشريط مؤقتاً'}
+            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-700"
+            title={isPaused ? 'استئناف حركة الشريط' : 'إيقاف مؤقت'}
           >
-            {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> : <Pause className="w-3.5 h-3.5" />}
+            {isPaused ? <Play className="w-3 h-3 text-emerald-600 fill-emerald-600" /> : <Pause className="w-3 h-3" />}
           </button>
 
           {/* Read Modal Button */}
@@ -259,7 +258,7 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
             size="sm"
             onClick={() => setSelectedAnnouncement(announcements[0])}
             variant="outline"
-            className="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-xl text-[11px] h-7 px-2.5 gap-1 font-bold shadow-sm"
+            className="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-xl text-[10px] sm:text-[11px] h-6 sm:h-7 px-2 gap-1 font-bold shadow-sm"
           >
             <FileText className="w-3 h-3 text-emerald-600" />
             <span className="hidden sm:inline">عرض التعميم</span>
@@ -271,9 +270,9 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
             <Button
               size="sm"
               onClick={() => setCreateModalOpen(true)}
-              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-heading font-black text-[11px] h-7 px-3 rounded-xl gap-1 shadow-md shadow-amber-500/20"
+              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-heading font-black text-[10px] sm:text-[11px] h-6 sm:h-7 px-2 sm:px-3 rounded-xl gap-1 shadow-md shadow-amber-500/20"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               <span className="hidden sm:inline">نشر تعميم ✍️</span>
               <span className="sm:hidden">نشر</span>
             </Button>
