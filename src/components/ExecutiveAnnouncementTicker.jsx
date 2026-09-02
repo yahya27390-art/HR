@@ -44,7 +44,6 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
   const { toast } = useToast();
 
   const [announcements, setAnnouncements] = useState(getLiveAnnouncements);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
   // Modals
@@ -83,25 +82,6 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
     return () => window.removeEventListener('hr_announcements_updated', handleUpdate);
   }, []);
 
-  // Auto-rotation timer (every 8 seconds when not paused)
-  useEffect(() => {
-    if (isPaused || announcements.length <= 1) return;
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % announcements.length);
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [isPaused, announcements.length]);
-
-  const currentItem = announcements[currentIndex] || announcements[0];
-
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % announcements.length);
-  };
-
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + announcements.length) % announcements.length);
-  };
-
   const handleCreateSubmit = (e) => {
     e.preventDefault();
     if (!form.title || !form.content) {
@@ -118,7 +98,7 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
       const created = addAnnouncement(form, user);
       toast({
         title: '✓ تم نشر التعميم بنجاح',
-        description: 'تم بث التعميم لجميع الموظفين والشاشات في النظام فوراً.'
+        description: 'تم بث التعميم على شريط الأخبار التلفزيوني لجميع الموظفين فوراً.'
       });
       setCreateModalOpen(false);
       setForm({
@@ -129,7 +109,6 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
         priority: 'high',
         is_pinned: true
       });
-      setCurrentIndex(0);
     } catch (e) {
       toast({ title: 'خطأ', description: e.message, variant: 'destructive' });
     } finally {
@@ -137,18 +116,16 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
     }
   };
 
-  if (!currentItem) return null;
-
-  // Distinct Author Color Pill Helper
+  // Distinct Author Color Meta
   const getAuthorMeta = (item) => {
-    const role = (item.author_role || '').toLowerCase();
-    const name = (item.author_name || '').toLowerCase();
+    const role = (item?.author_role || '').toLowerCase();
+    const name = (item?.author_name || '').toLowerCase();
 
     if (role.includes('مدير عام') || role.includes('owner') || name.includes('فهد') || name.includes('الجوعي')) {
       return {
         label: '👑 فهد الجوعي (المدير العام)',
-        roleTitle: 'المدير العام',
-        badgeClass: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-sm',
+        shortLabel: '👑 المدير العام',
+        badgeClass: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700',
         icon: Crown
       };
     }
@@ -156,8 +133,8 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
     if (role.includes('حسابات') || role.includes('accountant') || role.includes('مالي') || name.includes('هشام') || name.includes('زغلول')) {
       return {
         label: '💼 هشام زغلول (مدير الحسابات)',
-        roleTitle: 'مدير الحسابات والمالية',
-        badgeClass: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 shadow-sm',
+        shortLabel: '💼 مدير الحسابات',
+        badgeClass: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
         icon: Calculator
       };
     }
@@ -165,122 +142,145 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
     // HR / Default
     return {
       label: '📋 يحيى باشا (الموارد البشرية)',
-      roleTitle: 'مدير الموارد البشرية',
-      badgeClass: 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 shadow-sm',
+      shortLabel: '📋 الموارد البشرية',
+      badgeClass: 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700',
       icon: UserCheck
     };
   };
 
-  const authorMeta = getAuthorMeta(currentItem);
+  if (!announcements || announcements.length === 0) return null;
+
+  // Duplicate the list 4 times for a perfectly seamless, infinite marquee loop
+  const tickerItems = [...announcements, ...announcements, ...announcements, ...announcements];
 
   return (
     <>
-      {/* ─── 1. LIGHT-THEMED HIGH-CONTRAST TICKER STRIP ─────────────────────── */}
+      {/* ─── CONTINUOUS TV NEWS TICKER CSS ──────────────────────────────────── */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes tvMarqueeAnimation {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(50%);
+          }
+        }
+        .tv-marquee-track {
+          display: inline-flex;
+          align-items: center;
+          white-space: nowrap;
+          width: max-content;
+          animation: tvMarqueeAnimation 45s linear infinite;
+          will-change: transform;
+        }
+        .tv-marquee-track.paused {
+          animation-play-state: paused !important;
+        }
+        .tv-marquee-track:hover {
+          animation-play-state: paused;
+        }
+      `}} />
+
+      {/* ─── 1. TV NEWS TICKER STRIP (LIGHT THEME) ─────────────────────────── */}
       <div
-        className={`relative overflow-hidden bg-gradient-to-r from-emerald-50/90 via-white to-slate-50 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 text-slate-900 dark:text-slate-100 rounded-2xl sm:rounded-3xl border border-emerald-200/80 dark:border-slate-800 shadow-md p-2 sm:p-2.5 transition-all ${className}`}
+        className={`relative overflow-hidden bg-gradient-to-r from-emerald-50/95 via-white to-slate-50 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 text-slate-900 dark:text-slate-100 rounded-2xl sm:rounded-3xl border border-emerald-200/90 dark:border-slate-800 shadow-md p-1.5 sm:p-2 transition-all flex items-center justify-between gap-2 ${className}`}
         dir="rtl"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        
+        {/* Right / Start: Fixed Glowing Live Badge */}
+        <div className="flex items-center gap-2 shrink-0 z-10 bg-white/95 dark:bg-slate-900/95 ps-1 pe-2 py-1 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-heading font-black text-[11px] sm:text-xs shadow-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-200"></span>
+            </span>
+            <Megaphone className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">التعاميم والتوجيهات:</span>
+            <span className="sm:hidden">التعاميم:</span>
+          </div>
+        </div>
+
+        {/* Center: Infinite Seamless Smooth Marquee (TV News Style) */}
+        <div className="flex-1 overflow-hidden relative cursor-pointer mask-fade-edges">
+          <div className={`tv-marquee-track ${isPaused ? 'paused' : ''}`}>
+            {tickerItems.map((item, idx) => {
+              const meta = getAuthorMeta(item);
+              const AuthorIcon = meta.icon;
+
+              return (
+                <div
+                  key={`${item.id}-${idx}`}
+                  onClick={() => setSelectedAnnouncement(item)}
+                  className="inline-flex items-center gap-2.5 px-4 py-1 group hover:bg-emerald-100/50 dark:hover:bg-slate-800/60 rounded-xl transition-all"
+                  title="انقر لقراءة نص التعميم بالكامل"
+                >
+                  {/* Distinct Author Pill */}
+                  <Badge className={`text-[10px] font-black border py-0.5 px-2 rounded-lg flex items-center gap-1 shrink-0 ${meta.badgeClass}`}>
+                    <AuthorIcon className="w-3 h-3 shrink-0" />
+                    <span>{meta.shortLabel}</span>
+                  </Badge>
+
+                  {/* Title in Deep Navy Blue */}
+                  <span className="text-xs sm:text-[13px] font-heading font-black text-[#0B1E33] dark:text-emerald-300 group-hover:text-emerald-700 transition-colors shrink-0">
+                    {item.title}:
+                  </span>
+
+                  {/* Content in Dark Gray */}
+                  <span className="text-xs text-slate-700 dark:text-slate-300 font-medium group-hover:text-slate-950 transition-colors">
+                    {item.content}
+                  </span>
+
+                  {/* News Bullet Separator */}
+                  <span className="text-emerald-500 font-bold px-3 select-none text-xs">
+                    ✦ ✦
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Left / End: Control Buttons (Pause / View / Post) */}
+        <div className="flex items-center gap-1.5 shrink-0 z-10 bg-white/95 dark:bg-slate-900/95 ps-2 pe-1 py-1 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800">
           
-          {/* Left / Start: Live Announcement Pulse Tag */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-600 text-white font-heading font-black text-xs shadow-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-200"></span>
-              </span>
-              <Megaphone className="w-3.5 h-3.5" />
-              <span>التعاميم والتوجيهات:</span>
-            </div>
-
-            {/* Distinct Author Pill */}
-            <Badge className={`text-[10px] font-black border py-0.5 px-2.5 rounded-lg flex items-center gap-1 ${authorMeta.badgeClass}`}>
-              <authorMeta.icon className="w-3 h-3 shrink-0" />
-              <span>{authorMeta.label}</span>
-            </Badge>
-
-            <span className="text-[10px] font-mono text-slate-500 hidden md:inline">
-              ({currentIndex + 1} من {announcements.length})
-            </span>
-          </div>
-
-          {/* Middle: Announcement Title in NAVY BLUE & Content in DARK GRAY */}
-          <div
-            onClick={() => setSelectedAnnouncement(currentItem)}
-            className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer group px-1 sm:px-2 py-1 rounded-xl hover:bg-emerald-50/60 dark:hover:bg-slate-800/60 transition-all"
-            title="انقر لقراءة نص التعميم بالكامل"
+          {/* Pause / Resume Button */}
+          <button
+            onClick={() => setIsPaused(!isPaused)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-700"
+            title={isPaused ? 'استئناف حركة الشريط' : 'إيقاف حركة الشريط مؤقتاً'}
           >
-            {/* Title in Deep Navy Blue */}
-            <span className="text-xs sm:text-[13px] font-heading font-black text-[#0B1E33] dark:text-emerald-300 group-hover:text-emerald-700 transition-colors shrink-0">
-              {currentItem.title}:
-            </span>
+            {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> : <Pause className="w-3.5 h-3.5" />}
+          </button>
 
-            {/* Content snippet in Dark Slate / Charcoal Gray */}
-            <span className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate max-w-xl group-hover:text-slate-900 transition-colors">
-              {currentItem.content}
-            </span>
+          {/* Read Modal Button */}
+          <Button
+            size="sm"
+            onClick={() => setSelectedAnnouncement(announcements[0])}
+            variant="outline"
+            className="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-xl text-[11px] h-7 px-2.5 gap-1 font-bold shadow-sm"
+          >
+            <FileText className="w-3 h-3 text-emerald-600" />
+            <span className="hidden sm:inline">عرض التعميم</span>
+            <span className="sm:hidden">عرض</span>
+          </Button>
 
-            <Eye className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline" />
-          </div>
-
-          {/* Right / End: Interactive Controls & Actions */}
-          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
-            
-            {/* Previous & Next Buttons */}
-            <div className="flex items-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5 shadow-sm">
-              <button
-                onClick={handlePrev}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:text-emerald-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                title="التعميم السابق"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsPaused(!isPaused)}
-                className="w-6 h-7 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 transition-all"
-                title={isPaused ? 'استئناف التمرير التلقائي' : 'إيقاف مؤقت'}
-              >
-                {isPaused ? <Play className="w-3 h-3 text-emerald-600" /> : <Pause className="w-3 h-3" />}
-              </button>
-              <button
-                onClick={handleNext}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:text-emerald-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                title="التعميم التالي"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Read Full Modal Button */}
+          {/* Publish New Announcement */}
+          {canPublish && (
             <Button
               size="sm"
-              onClick={() => setSelectedAnnouncement(currentItem)}
-              variant="outline"
-              className="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-xl text-[11px] h-7 px-2.5 gap-1 font-bold shadow-sm"
+              onClick={() => setCreateModalOpen(true)}
+              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-heading font-black text-[11px] h-7 px-3 rounded-xl gap-1 shadow-md shadow-amber-500/20"
             >
-              <FileText className="w-3 h-3 text-emerald-600" />
-              <span className="hidden sm:inline">عرض التعميم</span>
-              <span className="sm:hidden">عرض</span>
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">نشر تعميم ✍️</span>
+              <span className="sm:hidden">نشر</span>
             </Button>
-
-            {/* Publish New Announcement (for Authorized Roles) */}
-            {canPublish && (
-              <Button
-                size="sm"
-                onClick={() => setCreateModalOpen(true)}
-                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-heading font-black text-[11px] h-7 px-3 rounded-xl gap-1 shadow-md shadow-amber-500/20"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">نشر تعميم ✍️</span>
-                <span className="sm:hidden">نشر</span>
-              </Button>
-            )}
-
-          </div>
+          )}
 
         </div>
+
       </div>
 
       {/* ─── 2. READ ANNOUNCEMENT LETTERHEAD MODAL ──────────────────────────── */}
@@ -391,7 +391,7 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
                 نشر تعميم أو توجيه إداري جديد
               </h2>
               <p className="text-[11px] text-slate-400">
-                بث فوري للملاحظات والقرارات على شريط الأخبار والشاشات
+                بث فوري للملاحظات والقرارات على شريط الأخبار التلفزيوني والشاشات
               </p>
             </div>
           </div>
