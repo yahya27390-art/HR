@@ -1,7 +1,7 @@
 import { base44 } from '@/api/base44Client';
 
-const CONTRACTS_STORAGE_KEY = 'hr_flow_v11_contracts_store';
-const RESIGNATION_NOTICES_KEY = 'hr_flow_v11_resignation_notices';
+const CONTRACTS_STORAGE_KEY = 'hr_flow_v12_contracts_store';
+const RESIGNATION_NOTICES_KEY = 'hr_flow_v12_resignation_notices';
 
 // Default Saudi Internal Contract Standard Articles Template
 export const SAUDI_INTERNAL_CONTRACT_TERMS = [
@@ -82,10 +82,12 @@ export function saveStoredContracts(contracts) {
   }
 }
 
-// Generate standard contracts from employee directory
-export async function initializeUnifiedContracts(employeesList = null) {
-  const existing = getStoredContracts();
-  if (existing && existing.length > 0) return existing;
+// Generate standard contracts from employee directory (ALL START UNSIGNED BY DEFAULT)
+export async function initializeUnifiedContracts(employeesList = null, forceReset = false) {
+  if (!forceReset) {
+    const existing = getStoredContracts();
+    if (existing && existing.length > 0) return existing;
+  }
 
   let employees = employeesList;
   if (!employees || employees.length === 0) {
@@ -97,7 +99,6 @@ export async function initializeUnifiedContracts(employeesList = null) {
   }
 
   const generated = (employees || []).map(emp => {
-    const isInsured = emp.is_insured === true || emp.is_insured === 'true' || Boolean(emp.gosi_number);
     const empNum = String(emp.employee_number || emp.id || '').replace('emp_', '');
     const joinDate = emp.join_date || '2025-01-01';
     
@@ -108,11 +109,7 @@ export async function initializeUnifiedContracts(employeesList = null) {
     endObj.setFullYear(endObj.getFullYear() + 1);
     const endDate = isNaN(endObj.getTime()) ? '2026-12-31' : endObj.toISOString().split('T')[0];
 
-    // Determine category: Qiwa for insured/Saudi or GOSI, Internal for others
-    const contractCategory = isInsured ? 'qiwa' : 'internal';
-    const contractNumber = isInsured 
-      ? `QW-KSA-${empNum}-${startObj.getFullYear() || '2025'}` 
-      : `CNT-INT-${empNum}-${startObj.getFullYear() || '2025'}`;
+    const contractNumber = `CNT-DORAT-${empNum}-${startObj.getFullYear() || '2025'}`;
 
     return {
       id: `contract_${empNum}`,
@@ -125,7 +122,7 @@ export async function initializeUnifiedContracts(employeesList = null) {
       branch: emp.branch_name || emp.branch || 'الفرع الرئيسي',
       nationality: emp.nationality || 'سعودي',
       national_id: emp.national_id || '',
-      category: contractCategory, // 'qiwa' | 'internal'
+      category: 'internal', // Default category: Internal until signed or Qiwa uploaded
       contract_type: 'limited_auto_renew', // 1 year auto renew
       duration_months: 12,
       start_date: startDate,
@@ -142,13 +139,18 @@ export async function initializeUnifiedContracts(employeesList = null) {
       bank_name: emp.bank_name || 'مصرف الراجحي',
       shift_name: emp.shift || 'شفت قياسي',
       
-      // Digital Signature & Approval State
-      signed_by_employee: contractCategory === 'qiwa', // Qiwa already officially verified
-      signed_at: contractCategory === 'qiwa' ? `${startDate}T10:00:00.000Z` : null,
-      signed_by_name: contractCategory === 'qiwa' ? emp.full_name : null,
-      signature_verification_code: contractCategory === 'qiwa' ? `QIWA-VER-${empNum}-SEC` : null,
-      signed_ip: contractCategory === 'qiwa' ? '127.0.0.1' : null,
-      approval_status: contractCategory === 'qiwa' ? 'approved' : 'pending_signature', // 'approved' | 'pending_signature' | 'rejected'
+      // STRICT ZERO-SIGNATURE INITIALIZATION: No contract is pre-signed!
+      signed_by_employee: false,
+      signed_at: null,
+      signed_by_name: null,
+      signature_verification_code: null,
+      signed_ip: null,
+      signed_method: null, // 'internal_digital_signature' | 'qiwa_document_upload'
+      approval_status: 'pending_signature', // 'pending_signature' | 'approved' | 'rejected'
+      qiwa_contract_number: null,
+      qiwa_document_url: null,
+      terms_accepted: false,
+      penalty_clause_acknowledged: false,
       
       status: 'active', // 'active' | 'expiring_soon' | 'resigned' | 'terminated'
       created_at: new Date().toISOString()
@@ -159,7 +161,7 @@ export async function initializeUnifiedContracts(employeesList = null) {
   return generated;
 }
 
-// Sign and digitally approve a contract by employee
+// Sign and digitally approve Internal Contract by employee
 export function signEmployeeContract(contractId, employeeData, additionalData = {}) {
   const contracts = getStoredContracts() || [];
   const idx = contracts.findIndex(c => c.id === contractId || c.contract_number === contractId);
@@ -167,20 +169,23 @@ export function signEmployeeContract(contractId, employeeData, additionalData = 
   if (idx === -1) throw new Error('العقد غير موجود');
 
   const now = new Date().toISOString();
-  const verCode = `DIGI-SIGN-${employeeData.employee_number || employeeData.id}-${Date.now().toString(36).toUpperCase()}`;
+  const empNum = employeeData.employee_number || employeeData.id;
+  const verCode = `DIGI-INT-${empNum}-${Date.now().toString(36).toUpperCase()}`;
 
   contracts[idx] = {
     ...contracts[idx],
+    category: 'internal',
     signed_by_employee: true,
     signed_at: now,
     signed_by_name: employeeData.full_name,
     signature_verification_code: verCode,
     signed_ip: additionalData.ip || 'بوابة الموظف الذاتية (تطبيق درة السيارة)',
+    signed_method: 'internal_digital_signature',
     approval_status: 'approved',
     terms_accepted: true,
     terms_accepted_at: now,
     penalty_clause_acknowledged: true,
-    notes: additionalData.notes || 'تم التوقيع والمصادقة الإلكترونية بنجاح'
+    notes: additionalData.notes || 'تم التوقيع والمصادقة على العقد الداخلي والشروط الجزائية إلكترونياً'
   };
 
   saveStoredContracts(contracts);
@@ -190,7 +195,52 @@ export function signEmployeeContract(contractId, employeeData, additionalData = 
     detail: {
       contract: contracts[idx],
       employee_name: employeeData.full_name,
-      signed_at: now
+      signed_at: now,
+      method: 'internal'
+    }
+  }));
+
+  return contracts[idx];
+}
+
+// Upload & Authenticate Qiwa Contract Document by Employee
+export function uploadAndVerifyQiwaContract(contractId, employeeData, { fileDataUrl, qiwaNumber, notes }) {
+  const contracts = getStoredContracts() || [];
+  const idx = contracts.findIndex(c => c.id === contractId || c.contract_number === contractId);
+
+  if (idx === -1) throw new Error('العقد غير موجود');
+
+  const now = new Date().toISOString();
+  const empNum = employeeData.employee_number || employeeData.id;
+  const verCode = `QIWA-DOC-${empNum}-${Date.now().toString(36).toUpperCase()}`;
+
+  contracts[idx] = {
+    ...contracts[idx],
+    category: 'qiwa',
+    signed_by_employee: true,
+    signed_at: now,
+    signed_by_name: employeeData.full_name,
+    signature_verification_code: verCode,
+    signed_ip: 'منصة قوى (تم الرفع والتوثيق عبر بوابة الموظف)',
+    signed_method: 'qiwa_document_upload',
+    approval_status: 'approved',
+    qiwa_contract_number: qiwaNumber || `QW-KSA-${empNum}`,
+    qiwa_document_url: fileDataUrl || null,
+    terms_accepted: true,
+    terms_accepted_at: now,
+    penalty_clause_acknowledged: true,
+    notes: notes || 'تم رفع وتوثيق عقد قوى الرسمي المعتمد من قبل الموظف'
+  };
+
+  saveStoredContracts(contracts);
+
+  // Trigger notification event for Admin/Owner Dashboard
+  window.dispatchEvent(new CustomEvent('hr_contract_signed', {
+    detail: {
+      contract: contracts[idx],
+      employee_name: employeeData.full_name,
+      signed_at: now,
+      method: 'qiwa'
     }
   }));
 

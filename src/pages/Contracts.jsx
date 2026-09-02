@@ -219,7 +219,19 @@ export default function Contracts() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                const refreshed = await initializeUnifiedContracts(employees, true);
+                setContracts(refreshed);
+                toast({ title: '✓ تم تحديث حالة العقود', description: 'جميع العقود أصبحت الآن غير موقعة وبانتظار اعتماد وتوقيع الموظف أو رفع عقد قوى.' });
+              }}
+              className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-200 text-xs h-11 px-4 rounded-2xl gap-2 font-bold"
+            >
+              <RotateCw className="w-4 h-4" />
+              <span>إعادة تعيين العقود لغير موقعة</span>
+            </Button>
             <Button
               onClick={() => { setEditingContract(null); setFormOpen(true); }}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg shadow-emerald-500/20 shrink-0"
