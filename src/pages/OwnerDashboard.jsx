@@ -20,6 +20,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { getAdvances } from '@/lib/payrollEngine';
 import { getUnifiedRequests, approveRequestStep, rejectRequest } from '@/lib/requestsEngine';
 import { getStoredContracts, initializeUnifiedContracts, getStoredResignationNotices } from '@/lib/contractsEngine';
+import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 
 export default function OwnerDashboard() {
   const { user } = useAuth();

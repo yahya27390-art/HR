@@ -8,6 +8,7 @@ import { getEmployeeContract, initializeUnifiedContracts } from '@/lib/contracts
 import ContractViewerModal from '@/components/ContractViewerModal';
 import ResignationNoticeModal from '@/components/ResignationNoticeModal';
 import PayslipPrint from '@/components/PayslipPrint';
+import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 import {
   Home,
   Clock,

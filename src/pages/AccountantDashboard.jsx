@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { getAdvances } from '@/lib/payrollEngine';
 import { getUnifiedRequests } from '@/lib/requestsEngine';
+import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 
 const PAYROLL_STAGES = [
   { id: 'draft', label: '1. مسودة المسير', desc: 'تجميع بيانات الحضور والموظفين', icon: '📝', color: 'slate' },

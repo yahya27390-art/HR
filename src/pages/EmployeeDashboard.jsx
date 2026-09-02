@@ -17,6 +17,7 @@ import {
   CalendarDays, Award, Clock4, UserCheck
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 
 const formatPunchTime = (val) => {
   if (!val || val === '--:--') return '--:--';
