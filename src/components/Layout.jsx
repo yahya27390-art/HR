@@ -6,6 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import MobileSidebar from '@/components/MobileSidebar';
+import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 import { getNavItems } from '@/lib/nav';
 import { Grid, Menu, ChevronLeft, User, Clock, FileSignature } from 'lucide-react';
 
@@ -45,8 +46,10 @@ export default function Layout() {
         <div className="no-print print:hidden">
           <Header onOpenMobileMenu={() => setMobileMenuOpen(true)} />
         </div>
-        
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 lg:py-6 pb-28 lg:pb-12 max-w-[1650px] w-full mx-auto">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 pb-28 lg:pb-12 max-w-[1650px] w-full mx-auto space-y-4 sm:space-y-5">
+          <div className="no-print print:hidden">
+            <ExecutiveAnnouncementTicker />
+          </div>
           <Outlet />
         </main>
       </div>
