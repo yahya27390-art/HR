@@ -170,7 +170,7 @@ export default function ExecutiveAnnouncementTicker({ className = '' }) {
           align-items: center;
           white-space: nowrap;
           width: max-content;
-          animation: tvMarqueeAnimation 45s linear infinite;
+          animation: tvMarqueeAnimation 95s linear infinite;
           will-change: transform;
         }
         .tv-marquee-track.paused {

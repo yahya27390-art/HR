@@ -837,7 +837,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
           align-items: center;
           white-space: nowrap;
           width: max-content;
-          animation: tvMarqueeAnimation 45s linear infinite;
+          animation: tvMarqueeAnimation 95s linear infinite;
           will-change: transform;
         }
         .tv-marquee-track.paused {
