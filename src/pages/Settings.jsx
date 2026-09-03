@@ -123,6 +123,7 @@ export default function Settings() {
   const subscriptionStats = useMemo(() => {
     const active = employeesList.filter(e => e.status === 'active');
     const inactive = employeesList.filter(e => e.status !== 'active');
+    const onLeave = employeesList.filter(e => e.status === 'on_leave');
     const maxQuota = 20;
     const remainingQuota = Math.max(0, maxQuota - active.length);
 
@@ -134,10 +135,40 @@ export default function Settings() {
       maxQuota,
       activeCount: active.length,
       inactiveCount: inactive.length,
+      onLeaveCount: onLeave.length,
+      totalEmployees: employeesList.length,
       remainingQuota,
       smsRemaining: 500,
       smsExpiryDate: '2026-11-09'
     };
+  }, [employeesList]);
+
+  // Real Dynamic Branch Distribution from Database
+  const branchDistribution = useMemo(() => {
+    const map = {};
+    const total = employeesList.length || 1;
+
+    employeesList.forEach(emp => {
+      const rawBranch = emp.branch_name || emp.branch || 'الفرع الرئيسي (بريدة)';
+      const cleanBranch = rawBranch.trim();
+      if (!map[cleanBranch]) {
+        map[cleanBranch] = {
+          name: cleanBranch,
+          count: 0,
+          employees: []
+        };
+      }
+      map[cleanBranch].count += 1;
+      map[cleanBranch].employees.push(emp);
+    });
+
+    const colors = ['#0284c7', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6'];
+
+    return Object.values(map).map((b, idx) => ({
+      ...b,
+      color: colors[idx % colors.length],
+      percent: Math.round((b.count / total) * 100)
+    })).sort((a, b) => b.count - a.count);
   }, [employeesList]);
 
   // ─── 2. COMPANY LEGAL PROFILE STATE ────────────────────────────────────────
@@ -598,45 +629,32 @@ export default function Settings() {
             <Card className="p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card flex flex-col justify-between">
               <div className="flex items-center justify-between border-b pb-3">
                 <h3 className="font-heading font-black text-sm text-foreground flex items-center gap-2">
-                  <span>🏢 توزيع الكادر عبر الفروع</span>
+                  <span>🏢 توزيع الكادر عبر الفروع الفعلية</span>
                 </h3>
-                <span className="text-xs font-mono text-muted-foreground">3 فروع نشطة</span>
+                <span className="text-xs font-mono text-muted-foreground">{branchDistribution.length} فروع مسجلة</span>
               </div>
 
-              <div className="my-4 space-y-3 text-xs">
-                <div className="space-y-1">
-                  <div className="flex justify-between font-bold">
-                    <span>الفرع الرئيسي (بريدة)</span>
-                    <span className="font-mono text-sky-600">3 موظفين (50%)</span>
+              <div className="my-4 space-y-3.5 text-xs">
+                {branchDistribution.map((branch, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between font-bold">
+                      <span className="text-foreground">{branch.name}</span>
+                      <span className="font-mono text-emerald-600 font-bold">
+                        {branch.count} موظفين ({branch.percent}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${branch.percent}%`, backgroundColor: branch.color }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-sky-500 rounded-full" style={{ width: '50%' }} />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between font-bold">
-                    <span>فرع هيونداي</span>
-                    <span className="font-mono text-emerald-600">2 موظفين (33%)</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '33%' }} />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between font-bold">
-                    <span>فرع كيا (السليم)</span>
-                    <span className="font-mono text-purple-600">1 موظف (17%)</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-purple-500 rounded-full" style={{ width: '17%' }} />
-                  </div>
-                </div>
+                ))}
               </div>
 
               <div className="pt-3 border-t text-[11px] text-muted-foreground text-center">
-                جميع الفروع مربوطة سحابياً بنظام الحضور الموحد
+                إجمالي الكادر: {subscriptionStats.totalEmployees} موظف مسجلين وموزعين على الفروع
               </div>
             </Card>
 
@@ -949,58 +967,44 @@ export default function Settings() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* Branch 1 */}
-            <Card className="p-4 rounded-2xl border space-y-3">
-              <div className="flex items-center justify-between">
-                <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold text-[10px]">الفرع الرئيسي 🏢</Badge>
-                <span className="text-[10.5px] font-mono text-muted-foreground">BR-01</span>
-              </div>
-              <h3 className="font-heading font-black text-sm text-foreground">فرع بريدة - المركز الرئيسي</h3>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                <span>طريق الملك عبدالعزيز، بريدة، القصيم</span>
-              </p>
-              <div className="pt-2 border-t text-[11px] flex justify-between">
-                <span className="text-muted-foreground">الكادر النشط:</span>
-                <span className="font-bold text-emerald-600">3 موظفين</span>
-              </div>
-            </Card>
+            {branchDistribution.map((branch, idx) => (
+              <Card key={idx} className="p-5 rounded-2xl border space-y-3.5 bg-card flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold text-[10px]">
+                      فرع نشط 🏢
+                    </Badge>
+                    <span className="text-[10.5px] font-mono text-muted-foreground">BR-0{idx + 1}</span>
+                  </div>
+                  <h3 className="font-heading font-black text-sm text-foreground">{branch.name}</h3>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    <span>المملكة العربية السعودية، منطقة القصيم</span>
+                  </p>
 
-            {/* Branch 2 */}
-            <Card className="p-4 rounded-2xl border space-y-3">
-              <div className="flex items-center justify-between">
-                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">فرع هيونداي 🚗</Badge>
-                <span className="text-[10.5px] font-mono text-muted-foreground">BR-02</span>
-              </div>
-              <h3 className="font-heading font-black text-sm text-foreground">فرع قطع غيار هيونداي</h3>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>حي الصناعية، بريدة، القصيم</span>
-              </p>
-              <div className="pt-2 border-t text-[11px] flex justify-between">
-                <span className="text-muted-foreground">الكادر النشط:</span>
-                <span className="font-bold text-emerald-600">2 موظفين</span>
-              </div>
-            </Card>
+                  <div className="pt-2 border-t space-y-1.5">
+                    <div className="text-[10.5px] font-bold text-muted-foreground">الكادر المسجل بالفرع:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {branch.employees.map((emp) => (
+                        <span 
+                          key={emp.id || emp.employee_number}
+                          className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10.5px] font-medium text-foreground border border-slate-200 dark:border-slate-700"
+                        >
+                          {emp.full_name?.split(' ')[0]} {emp.full_name?.split(' ')[1] || ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-            {/* Branch 3 */}
-            <Card className="p-4 rounded-2xl border space-y-3">
-              <div className="flex items-center justify-between">
-                <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold text-[10px]">فرع كيا 🏎️</Badge>
-                <span className="text-[10.5px] font-mono text-muted-foreground">BR-03</span>
-              </div>
-              <h3 className="font-heading font-black text-sm text-foreground">فرع كيا (السليم)</h3>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                <span>شارع السليم، بريدة، القصيم</span>
-              </p>
-              <div className="pt-2 border-t text-[11px] flex justify-between">
-                <span className="text-muted-foreground">الكادر النشط:</span>
-                <span className="font-bold text-emerald-600">1 موظف</span>
-              </div>
-            </Card>
-
+                <div className="pt-2 border-t text-[11px] flex justify-between items-center">
+                  <span className="text-muted-foreground">الكادر النشط:</span>
+                  <span className="font-bold text-emerald-600 font-mono">
+                    {branch.count} موظفين ({branch.percent}%)
+                  </span>
+                </div>
+              </Card>
+            ))}
           </div>
         </Card>
       )}
