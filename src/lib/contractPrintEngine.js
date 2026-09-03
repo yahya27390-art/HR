@@ -372,7 +372,7 @@ export function generateContractHtml(contract, company = null) {
     <table class="header-table">
       <tr>
         <td class="header-right">
-          <div class="company-title-ar">${comp.name_ar || 'مؤسسة درة السيارة لقطع غيار السيارات'}</div>
+          <div class="company-title-ar">${comp.name_ar || 'شركة درة السيارة لقطع غيار السيارات'}</div>
           <div class="company-sub-ar">إدارة الموارد البشرية والشؤون القانونية</div>
           <div class="meta-text">سجل تجاري: <strong>${comp.cr_number || '7016475555'}</strong></div>
           <div class="meta-text">الرقم الضريبي: <strong>${comp.tax_number || '311861381500003'}</strong></div>
@@ -391,7 +391,7 @@ export function generateContractHtml(contract, company = null) {
 
         <td class="header-left">
           <div style="font-size: 10px; font-weight: 900; color: #0B1F3A;">KINGDOM OF SAUDI ARABIA</div>
-          <div style="font-size: 8.5px; color: #475569; font-weight: 700;">DORAT AL-SAYARAH TRADING EST.</div>
+          <div style="font-size: 8.5px; color: #475569; font-weight: 700;">DORAT AL-SAYARAH TRADING CO.</div>
           <div style="font-size: 8px; color: #334155; margin-top: 2px; font-family: monospace;">Ref: <strong>${contractNumber}</strong></div>
           <div style="font-size: 8px; color: #334155; font-family: monospace;">Date: <strong>${dateGregorian}</strong></div>
           <div style="font-size: 8px; color: #047857; font-weight: 800; margin-top: 1px;">STATUS: ${isSigned ? 'AUTHENTICATED ✓' : 'PENDING SIGNATURE'}</div>
@@ -411,7 +411,7 @@ export function generateContractHtml(contract, company = null) {
     <table class="data-table">
       <tr>
         <th>الطرف الأول (صاحب العمل):</th>
-        <td>مؤسسة درة السيارة لقطع غيار السيارات (س.ت: ${comp.cr_number || '7016475555'})</td>
+        <td>شركة درة السيارة لقطع غيار السيارات (س.ت: ${comp.cr_number || '7016475555'})</td>
         <th>الممثل النظامي:</th>
         <td>فهد ناصر محمد الجوعي (المدير العام)</td>
       </tr>
@@ -419,7 +419,7 @@ export function generateContractHtml(contract, company = null) {
         <th>الطرف الثاني (العامل):</th>
         <td class="highlight-val">${contract.employee_name}</td>
         <th>الرقم الوظيفي:</th>
-        <td><strong style="font-family: monospace; color: #0B1F3A;">#${contract.employee_number}</strong></td>
+        <td><strong style="font-family: monospace; color: #0B1F3A;">${contract.employee_number}</strong></td>
       </tr>
       <tr>
         <th>رقم الهوية / الإقامة:</th>
@@ -487,7 +487,7 @@ export function generateContractHtml(contract, company = null) {
         <div class="sig-col">
           <div class="sig-card">
             <div class="sig-title">الطرف الأول (صاحب العمل / المنشأة)</div>
-            <div class="sig-info"><strong>المنشأة:</strong> مؤسسة درة السيارة لقطع غيار السيارات</div>
+            <div class="sig-info"><strong>المنشأة:</strong> شركة درة السيارة لقطع غيار السيارات</div>
             <div class="sig-info"><strong>المفوض بالتوقيع:</strong> فهد ناصر محمد الجوعي</div>
             <div class="sig-info"><strong>الصفة:</strong> المدير العام</div>
             <div class="seal-badge">✓ معتمد ومختوم بالختم الإلكتروني للمنشأة</div>
@@ -500,7 +500,7 @@ export function generateContractHtml(contract, company = null) {
           <div class="sig-card">
             <div class="sig-title">الطرف الثاني (الموظف / العامل)</div>
             <div class="sig-info"><strong>الاسم:</strong> ${contract.employee_name}</div>
-            <div class="sig-info"><strong>الرقم الوظيفي:</strong> #${contract.employee_number}</div>
+            <div class="sig-info"><strong>الرقم الوظيفي:</strong> ${contract.employee_number}</div>
             
             ${isSigned ? `
               <div class="seal-badge">
@@ -523,7 +523,7 @@ export function generateContractHtml(contract, company = null) {
 
     <!-- 6. DOCUMENT AUDIT FOOTER -->
     <div class="contract-footer">
-      <div>وثيقة رسمية صادرة آلياً من نظام إدارة الموارد البشرية • مؤسسة درة السيارة لقطع غيار السيارات</div>
+      <div>وثيقة رسمية صادرة آلياً من نظام إدارة الموارد البشرية • شركة درة السيارة لقطع غيار السيارات</div>
       <div style="direction: ltr;">CR: ${comp.cr_number || '7016475555'} • VAT: ${comp.tax_number || '311861381500003'} • PAGE 1</div>
     </div>
 

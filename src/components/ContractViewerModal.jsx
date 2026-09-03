@@ -208,7 +208,7 @@ export default function ContractViewerModal({
           <div className="border-b-2 border-emerald-500/80 pb-6 flex items-start justify-between">
             <div className="space-y-1 text-right">
               <h2 className="font-heading font-black text-xl text-emerald-400">
-                مؤسسة درة السيارة لقطع غيار السيارات
+                شركة درة السيارة لقطع غيار السيارات
               </h2>
               <div className="text-xs text-slate-400 space-y-0.5">
                 <div>سجل تجاري: <strong className="text-slate-200 font-mono">7016475555</strong></div>
@@ -338,7 +338,7 @@ export default function ContractViewerModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               {/* Employer Signature Box */}
               <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
-                <div className="font-bold text-emerald-400">الطرف الأول: درة السيارة لقطع غيار السيارات</div>
+                <div className="font-bold text-emerald-400">الطرف الأول: شركة درة السيارة لقطع غيار السيارات</div>
                 <div className="text-slate-400 text-[11px]">المفوض بالتوقيع: فهد ناصر الجوعي (المدير العام)</div>
                 <div className="flex items-center gap-2 text-emerald-400 font-bold pt-2">
                   <CheckCircle2 className="w-4 h-4" />
@@ -428,7 +428,7 @@ export default function ContractViewerModal({
                       className="mt-0.5"
                     />
                     <label htmlFor="agree-terms" className="text-xs text-slate-200 font-semibold cursor-pointer select-none">
-                      أقر بأنني اطلعت على كافة بنود هذا العقد ولائحة العمل الخاصة بالمؤسسة وأوافق عليها موافقة تامة ونهائية.
+                      أقر بأنني اطلعت على كافة بنود هذا العقد ولائحة العمل الخاصة بالشركة وأوافق عليها موافقة تامة ونهائية.
                     </label>
                   </div>
 

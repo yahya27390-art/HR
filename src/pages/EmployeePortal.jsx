@@ -740,7 +740,7 @@ export default function EmployeePortal() {
                         </Badge>
                       </div>
                       <div className="text-xs text-slate-400 font-mono mt-0.5">
-                        رقم العقد: {empContract.contract_number} • صاحب العمل: درة السيارة لقطع غيار السيارات
+                        رقم العقد: {empContract.contract_number} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات
                       </div>
                     </div>
                   </div>
