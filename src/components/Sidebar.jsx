@@ -104,6 +104,16 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
       setIsSubMenuOpen(true);
     }
     setSearchQuery('');
+
+    // Automatically navigate to the first sub-item of the selected module
+    const targetMod = visibleModules.find(m => m.id === modId);
+    if (targetMod && Array.isArray(targetMod.items) && targetMod.items.length > 0) {
+      const accessibleItems = targetMod.items.filter(it => !it.permission || hasPermission(user, it.permission));
+      const firstItem = accessibleItems[0] || targetMod.items[0];
+      if (firstItem && firstItem.to) {
+        navigate(firstItem.to);
+      }
+    }
   };
 
   return (
