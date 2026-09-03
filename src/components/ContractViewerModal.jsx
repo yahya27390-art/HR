@@ -28,6 +28,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SAUDI_INTERNAL_CONTRACT_TERMS, signEmployeeContract, uploadAndVerifyQiwaContract } from '@/lib/contractsEngine';
+import { printContractDocument } from '@/lib/contractPrintEngine';
+import { getCompanyProfile } from '@/lib/companyProfile';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function ContractViewerModal({
@@ -157,33 +159,12 @@ export default function ContractViewerModal({
   };
 
   const handlePrint = () => {
-    window.print();
+    printContractDocument(contract, getCompanyProfile());
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto text-right p-0 gap-0 border-0 bg-slate-950 text-slate-100 shadow-2xl rounded-3xl" dir="rtl">
-        
-        {/* Printable Section Header & Styles */}
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            body * {
-              visibility: hidden;
-            }
-            .printable-contract-area, .printable-contract-area * {
-              visibility: visible;
-            }
-            .printable-contract-area {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              color: black !important;
-              background: white !important;
-            }
-          }
-        `}} />
-
         {/* ─── MODAL TOP BAR ────────────────────────────────────────────── */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 border-b border-slate-800 sticky top-0 z-20 backdrop-blur-md">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
