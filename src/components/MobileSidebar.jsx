@@ -90,15 +90,11 @@ export default function MobileSidebar({ isOpen, onClose }) {
         {/* Top Header Bar */}
         <div className="p-4 border-b border-emerald-800/30 shrink-0 bg-slate-950/80 backdrop-blur-lg flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 p-0.5 shadow-lg shadow-emerald-500/20">
-              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center p-1">
-                <img 
-                  src={companyProfile.logo_url || "/company-logo.svg"} 
-                  alt="Logo" 
-                  className="w-full h-full object-contain filter drop-shadow-sm" 
-                />
-              </div>
-            </div>
+            <img 
+              src={companyProfile.logo_url || "/company-logo.png"} 
+              alt="شعار درة السيارة" 
+              className="w-10 h-10 object-contain drop-shadow-md shrink-0" 
+            />
             <div>
               <h2 className="font-heading font-black text-xs text-white tracking-wide">
                 درة السيارة

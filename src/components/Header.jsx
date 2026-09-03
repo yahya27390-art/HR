@@ -68,18 +68,16 @@ export default function Header({ onOpenMobileMenu }) {
         </Button>
 
         {/* Brand Logo & Name */}
-        <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-slate-900 to-emerald-950 border border-emerald-500/30 text-white flex items-center justify-center shadow-md p-1 group-hover:scale-105 transition-transform">
-            <img 
-              src={profile.logo_url || "/company-logo.svg"} 
-              alt="logo" 
-              className="w-full h-full object-contain filter drop-shadow" 
-            />
-          </div>
+        <Link to="/" className="flex items-center gap-3 group">
+          <img 
+            src={profile.logo_url || "/company-logo.png"} 
+            alt="شعار درة السيارة" 
+            className="h-10 w-auto max-w-[44px] object-contain group-hover:scale-105 transition-transform" 
+          />
           <div>
             <div className="text-xs sm:text-sm font-heading font-black text-foreground tracking-tight flex items-center gap-1.5">
               <span>درة السيارة</span>
-              <span className="text-[9px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded-md font-mono">HR</span>
+              <span className="text-[9px] bg-sky-500/15 text-sky-600 dark:text-sky-400 font-bold px-1.5 py-0.5 rounded-md font-mono">HR</span>
             </div>
             <div className="text-[9.5px] text-muted-foreground font-medium hidden sm:block">الموارد البشرية والخدمة الذاتية</div>
           </div>

@@ -125,10 +125,10 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
         {/* Brand Mini Logo */}
         <Link 
           to="/" 
-          className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md mb-3 hover:scale-105 transition-transform shrink-0 p-1"
-          title="Green Arrow HR - لوحة التحكم"
+          className="w-12 h-12 flex items-center justify-center mb-3 hover:scale-105 transition-transform shrink-0 p-0.5"
+          title="درة السيارة HR - لوحة التحكم"
         >
-          <img src={profile.logo_url || "/company-logo.svg"} alt="logo" className="w-8 h-8 object-contain" />
+          <img src={profile.logo_url || "/company-logo.png"} alt="شعار درة السيارة" className="w-11 h-11 object-contain" />
         </Link>
 
         {/* Primary Module Icons List */}

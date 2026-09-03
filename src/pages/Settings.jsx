@@ -754,19 +754,19 @@ export default function Settings() {
               </div>
 
               {/* Logo Upload Section */}
-              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-950 border p-2 shadow-sm flex items-center justify-center shrink-0">
+              <div className="p-5 rounded-3xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 flex items-center justify-center shrink-0">
                     <img
-                      src={companyProfile.logo_url || "/company-logo.svg"}
-                      alt="Logo"
-                      className="w-full h-full object-contain filter drop-shadow"
+                      src={companyProfile.logo_url || "/company-logo.png"}
+                      alt="شعار درة السيارة"
+                      className="w-full h-full object-contain drop-shadow"
                     />
                   </div>
                   <div>
-                    <h4 className="font-heading font-black text-xs text-foreground">شعار الشركة الرسمي (Company Logo)</h4>
+                    <h4 className="font-heading font-black text-xs text-foreground">شعار الشركة الرسمي المعتمد (Company Logo)</h4>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      يُفضل استخدام صورة عالية الدقة بصيغة PNG أو SVG ذات خلفية شفافة لطباعة العقود ونماذج A4
+                      شعار شركة درة السيارة لقطع غيار السيارات بدقة عالية وخلفية شفافة لجميع النماذج والعقود
                     </p>
                   </div>
                 </div>

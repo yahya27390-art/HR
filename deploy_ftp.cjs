@@ -1,44 +1,62 @@
 const ftp = require('basic-ftp');
 const path = require('path');
+const fs = require('fs');
 
 async function deploy() {
-  const client = new ftp.Client();
-  client.ftp.verbose = true;
-  client.ftp.timeout = 60000;
-
-  let retries = 3;
-  while (retries > 0) {
-    try {
-      console.log(`Connecting to Hostinger FTP (Attempt ${4 - retries}/3)...`);
-      await client.access({
-        host: '82.198.228.36',
-        user: 'u602943255.gold-hare-970225.hostingersite.com',
-        password: 'Dell2020KoKa*',
-        port: 21,
-        secure: false
-      });
-
-      console.log('Connected successfully!');
-      const distPath = path.resolve(__dirname, 'dist');
-      console.log(`Uploading all files from ${distPath} to Hostinger...`);
-      
-      await client.uploadFromDir(distPath);
-
-      console.log('✓ All production files uploaded successfully to Hostinger!');
-      break;
-    } catch (err) {
-      console.error(`Error during deployment: ${err.message}`);
-      retries--;
-      if (retries === 0) {
-        console.error('All 3 deployment attempts failed.');
+  const distPath = path.resolve(__dirname, 'dist');
+  
+  // Dynamically collect all files in dist and dist/assets
+  const files = [];
+  function scanDir(dir, prefix) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const fullPath = path.join(dir, ent.name);
+      const relPath = path.posix.join(prefix, ent.name);
+      if (ent.isDirectory()) {
+        scanDir(fullPath, relPath);
       } else {
-        console.log('Retrying in 3 seconds...');
-        await new Promise(r => setTimeout(r, 3000));
+        files.push({ local: fullPath, remote: `/public_html/${relPath}` });
       }
-    } finally {
-      client.close();
     }
   }
+  scanDir(distPath, '');
+
+  for (const item of files) {
+    if (!fs.existsSync(item.local)) continue;
+    let uploaded = false;
+
+    for (let t = 1; t <= 5; t++) {
+      const client = new ftp.Client();
+      client.ftp.verbose = false;
+      client.ftp.timeout = 25000;
+
+      try {
+        await client.access({
+          host: '82.198.228.36',
+          user: 'u602943255.gold-hare-970225.hostingersite.com',
+          password: 'Dell2020KoKa*',
+          port: 21,
+          secure: false
+        });
+
+        await client.ensureDir(path.posix.dirname(item.remote));
+        await client.uploadFrom(item.local, item.remote);
+        console.log(`✓ Uploaded: ${path.basename(item.remote)}`);
+        uploaded = true;
+        client.close();
+        break;
+      } catch (e) {
+        client.close();
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    if (!uploaded) {
+      console.warn(`Warning: Could not upload ${item.remote}`);
+    }
+  }
+
+  console.log('✓ Deployment process finished!');
 }
 
 deploy();

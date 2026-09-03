@@ -273,14 +273,12 @@ export default function Login() {
 
         {/* Top Header Logo */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 shadow-sm flex items-center justify-center shrink-0">
-              <img 
-                src={company.logo_url || "/company-logo.svg"} 
-                alt="Logo" 
-                className="w-full h-full object-contain filter drop-shadow-sm" 
-              />
-            </div>
+          <div className="flex items-center gap-3.5">
+            <img 
+              src={company.logo_url || "/company-logo.png"} 
+              alt="شعار شركة درة السيارة" 
+              className="h-14 w-auto max-w-[58px] object-contain shrink-0 drop-shadow-md" 
+            />
             <div>
               <h1 className="font-heading font-black text-base text-foreground tracking-tight flex items-center gap-1.5">
                 <span>شركة درة السيارة</span>
