@@ -94,8 +94,11 @@ export default function EmployeePortal() {
     notes: ''
   });
 
-  // Attendance Filter
-  const [attMonth, setAttMonth] = useState('2026-08');
+  // Attendance Filter - Default dynamically to current month (e.g. 2026-09)
+  const [attMonth, setAttMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   // Load Data with Strict Employee Isolation
   useEffect(() => {
@@ -405,31 +408,55 @@ export default function EmployeePortal() {
 
           {/* Monthly Attendance Quick Stats */}
           {currentMonthPayroll && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                <div className="text-xs text-muted-foreground">أيام الحضور الفعلي</div>
-                <div className="text-2xl font-black font-mono text-emerald-600 mt-1">
-                  {currentMonthPayroll.presentDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-foreground">
+                    ملخص الدوام والحضور لشهر:
+                  </span>
+                  <Badge variant="outline" className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-xs bg-emerald-500/10 border-emerald-500/30">
+                    {attMonth}
+                  </Badge>
                 </div>
-              </Card>
-              <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                <div className="text-xs text-muted-foreground">دوام الجمعات (إضافي)</div>
-                <div className="text-2xl font-black font-mono text-blue-600 mt-1">
-                  {currentMonthPayroll.fridayWorkedDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+                
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground text-[11px] font-medium">عرض شهر آخر:</span>
+                  <input
+                    type="month"
+                    value={attMonth}
+                    onChange={(e) => setAttMonth(e.target.value)}
+                    className="h-7 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-background px-2.5 shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
                 </div>
-              </Card>
-              <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                <div className="text-xs text-muted-foreground">أيام الغياب المسجلة</div>
-                <div className="text-2xl font-black font-mono text-rose-600 mt-1">
-                  {currentMonthPayroll.absentDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
-                </div>
-              </Card>
-              <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                <div className="text-xs text-muted-foreground">عجز وتأخير الساعات</div>
-                <div className="text-xl font-black font-mono text-amber-600 mt-1">
-                  {Math.floor((currentMonthPayroll.totalShortfallMinutes || 0) / 60)} س و {(currentMonthPayroll.totalShortfallMinutes || 0) % 60} د
-                </div>
-              </Card>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground">أيام الحضور الفعلي</div>
+                  <div className="text-2xl font-black font-mono text-emerald-600 mt-1">
+                    {currentMonthPayroll.presentDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+                  </div>
+                </Card>
+                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground">دوام الجمعات (إضافي)</div>
+                  <div className="text-2xl font-black font-mono text-blue-600 mt-1">
+                    {currentMonthPayroll.fridayWorkedDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+                  </div>
+                </Card>
+                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground">أيام الغياب المسجلة</div>
+                  <div className="text-2xl font-black font-mono text-rose-600 mt-1">
+                    {currentMonthPayroll.absentDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+                  </div>
+                </Card>
+                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground">عجز وتأخير الساعات</div>
+                  <div className="text-xl font-black font-mono text-amber-600 mt-1">
+                    {Math.floor((currentMonthPayroll.totalShortfallMinutes || 0) / 60)} س و {(currentMonthPayroll.totalShortfallMinutes || 0) % 60} د
+                  </div>
+                </Card>
+              </div>
             </div>
           )}
 

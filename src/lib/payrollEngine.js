@@ -848,7 +848,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     fridayDailyRate = 50,
     overtimeDailyRate = 100,
     daysPerMonth = 30,
-    monthPrefix = '2026-08',
+    monthPrefix = new Date().toISOString().slice(0, 7),
   } = settings;
 
   const shiftName = emp.shift || '';
