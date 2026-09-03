@@ -94,6 +94,7 @@ import EmployeePortal from './EmployeePortal';
 import { useAuth as _useAuthForRoute } from '@/lib/AuthContext';
 
 import DashboardViewSwitcherBar, { isSpecializedRole } from '@/components/DashboardViewSwitcherBar';
+import EktefaStyleExecutiveDashboard from '@/components/EktefaStyleExecutiveDashboard';
 
 function DashboardRouter() {
   const { user } = _useAuthForRoute();
@@ -120,10 +121,8 @@ function DashboardRouter() {
 
   // Render the role-specific specialized dashboard
   const renderSpecializedDashboard = () => {
-    if (role === 'owner' || role === 'general_manager') return <OwnerDashboard />;
     if (role === 'accountant') return <AccountantDashboard />;
-    if (role === 'hr') return <HRDashboard />;
-    return <AdminDashboard />;
+    return <EktefaStyleExecutiveDashboard />;
   };
 
   return (
