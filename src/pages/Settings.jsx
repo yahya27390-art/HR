@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
 import { base44 } from '@/api/base44Client';
-import { getCompanyProfile, saveCompanyProfile } from '@/lib/companyProfile';
+import { getCompanyProfile, saveCompanyProfile, fetchCloudCompanyProfile } from '@/lib/companyProfile';
 import {
   PERMISSIONS,
   PERMISSION_MODULES,
@@ -174,16 +174,23 @@ export default function Settings() {
   // ─── 2. COMPANY LEGAL PROFILE STATE ────────────────────────────────────────
   const [companyProfile, setCompanyProfile] = useState(() => getCompanyProfile());
 
-  const handleSaveProfile = (e) => {
+  useEffect(() => {
+    fetchCloudCompanyProfile().then(p => {
+      if (p) setCompanyProfile(p);
+    });
+  }, []);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    saveCompanyProfile(companyProfile);
+    const saved = await saveCompanyProfile(companyProfile);
+    setCompanyProfile(saved);
     toast({
       title: 'تم حفظ بيانات المنشأة والشعار بنجاح ✅',
-      description: 'تم تحديث الشعار والاسم التجاري ومزامنتها لجميع مستخدمي النظام.'
+      description: 'تم تحديث الشعار والاسم التجاري ومزامنتها سحابياً لجميع الأجهزة والمستخدمين.'
     });
   };
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -197,16 +204,15 @@ export default function Settings() {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target?.result;
       if (typeof base64 === 'string') {
         const updated = { ...companyProfile, logo_url: base64 };
         setCompanyProfile(updated);
-        localStorage.setItem('hr_flow_company_profile', JSON.stringify(updated));
-        window.dispatchEvent(new Event('storage'));
+        await saveCompanyProfile(updated);
         toast({
-          title: 'تم تحديث الشعار بنجاح ✨',
-          description: 'تم تطبيق الشعار الجديد ذو الخلفية الشفافة الفاخرة.'
+          title: 'تم رفع ومزامنة الشعار بنجاح ✨',
+          description: 'تم تثبيت الشعار الجديد سحابياً وسيظهر تلقائياً على كافة الأجهزة والحسابات.'
         });
       }
     };

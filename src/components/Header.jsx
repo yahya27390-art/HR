@@ -1,4 +1,4 @@
-import { getCompanyProfile } from '@/lib/companyProfile';
+import { useCompanyProfile } from '@/lib/companyProfile';
 import { PrivacyMaskToggle } from '@/lib/FinancialPrivacyContext';
 import NotificationsDropdown from '@/components/NotificationsDropdown';
 import { initFullCloudSync, exportSystemBackupJSON } from '@/lib/cloudSyncEngine';
@@ -35,6 +35,7 @@ import {
 
 export default function Header({ onOpenMobileMenu }) {
   const { user, logout } = useAuth();
+  const { profile } = useCompanyProfile();
   const roleMeta = getRoleMeta(user);
   const { lang, toggleLanguage } = useI18n();
   const navigate = useNavigate();
@@ -70,7 +71,7 @@ export default function Header({ onOpenMobileMenu }) {
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-slate-900 to-emerald-950 border border-emerald-500/30 text-white flex items-center justify-center shadow-md p-1 group-hover:scale-105 transition-transform">
             <img 
-              src={getCompanyProfile().logo_url || "/company-logo.svg"} 
+              src={profile.logo_url || "/company-logo.svg"} 
               alt="logo" 
               className="w-full h-full object-contain filter drop-shadow" 
             />

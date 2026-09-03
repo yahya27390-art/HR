@@ -1,4 +1,4 @@
-import { getCompanyProfile } from '@/lib/companyProfile';
+import { useCompanyProfile } from '@/lib/companyProfile';
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
@@ -38,14 +38,13 @@ const ROUTE_MODULE_MAP = {
   '/payroll': 'payroll',
   '/end-of-service': 'payroll',
   '/reports': 'reports',
-  '/settings': 'settings',
-  '/users': 'settings',
-  '/print-templates': 'settings',
-  '/evaluations': 'settings',
+  '/evaluations': 'reports',
+  '/settings': 'settings'
 };
 
 export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
   const { user } = useAuth();
+  const { profile } = useCompanyProfile();
   const roleMeta = getRoleMeta(user);
   const location = useLocation();
   const navigate = useNavigate();
@@ -129,7 +128,7 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
           className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md mb-3 hover:scale-105 transition-transform shrink-0 p-1"
           title="Green Arrow HR - لوحة التحكم"
         >
-          <img src={getCompanyProfile().logo_url || "/company-logo.svg"} alt="logo" className="w-8 h-8 object-contain" />
+          <img src={profile.logo_url || "/company-logo.svg"} alt="logo" className="w-8 h-8 object-contain" />
         </Link>
 
         {/* Primary Module Icons List */}

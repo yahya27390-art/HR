@@ -25,10 +25,10 @@ import {
   ChevronRight
 } from "lucide-react";
 import { safeReturnTo } from "@/lib/authReturnTo";
-import { getCompanyProfile } from "@/lib/companyProfile";
+import { useCompanyProfile } from "@/lib/companyProfile";
 
 export default function Login() {
-  const company = getCompanyProfile();
+  const { profile: company } = useCompanyProfile();
 
   // Read domain from URL param or saved storage or fallback to doratcars
   const [domain, setDomain] = useState(() => {
