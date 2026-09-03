@@ -17,6 +17,7 @@ import {
   KeyRound
 } from "lucide-react";
 import { safeReturnTo } from "@/lib/authReturnTo";
+import { getCompanyProfile } from "@/lib/companyProfile";
 
 export default function Login() {
   // Read domain from URL param or saved storage or fallback to doratcars
@@ -100,14 +101,18 @@ export default function Login() {
         {/* Top Header Logo */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-950 text-emerald-400 border border-emerald-800/60 flex items-center justify-center font-black text-sm shadow-md">
-              GA
+            <div className="w-11 h-11 rounded-2xl bg-slate-900 border border-slate-750 text-white flex items-center justify-center shadow-md p-1.5 shrink-0">
+              <img 
+                src={getCompanyProfile().logo_url || "/company-logo.svg"} 
+                alt="Logo" 
+                className="w-full h-full object-contain" 
+              />
             </div>
             <div>
               <div className="font-heading font-black text-base text-foreground tracking-tight flex items-center gap-1.5">
-                <span>Green Arrow</span>
+                <span>شركة درة السيارة</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span className="text-xs font-normal text-muted-foreground">HR</span>
+                <span className="text-xs font-normal text-muted-foreground font-mono">HR</span>
               </div>
               <div className="text-[10px] text-muted-foreground font-mono">
                 Enterprise Cloud Platform

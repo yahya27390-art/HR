@@ -33,21 +33,18 @@ export default function MobileSidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const groups = useMemo(() => getNavGroups(user), [user]);
 
-  const [companyProfile, setCompanyProfile] = useState(() => {
-    const saved = localStorage.getItem('hr_flow_company_profile');
-    return saved ? JSON.parse(saved) : { 
-      name: 'درة السيارة لقطع غيار السيارات', 
-      logo_url: '/company-logo.svg' 
-    };
-  });
+  const [companyProfile, setCompanyProfile] = useState(() => getCompanyProfile());
 
   useEffect(() => {
     const updateHandler = () => {
-      const saved = localStorage.getItem('hr_flow_company_profile');
-      if (saved) setCompanyProfile(JSON.parse(saved));
+      setCompanyProfile(getCompanyProfile());
     };
     window.addEventListener('company_profile_updated', updateHandler);
-    return () => window.removeEventListener('company_profile_updated', updateHandler);
+    window.addEventListener('storage', updateHandler);
+    return () => {
+      window.removeEventListener('company_profile_updated', updateHandler);
+      window.removeEventListener('storage', updateHandler);
+    };
   }, []);
 
   useEffect(() => {
