@@ -9,6 +9,8 @@ import ContractViewerModal from '@/components/ContractViewerModal';
 import ResignationNoticeModal from '@/components/ResignationNoticeModal';
 import PayslipPrint from '@/components/PayslipPrint';
 import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
+import { getStoredEvaluations, getEvaluationTier, STANDARD_EVALUATION_CRITERIA, PURCHASING_EVALUATION_CRITERIA } from '@/lib/evaluationsEngine';
+import { printEvaluationDocument } from '@/lib/evaluationPrintEngine';
 import {
   Home,
   Clock,
@@ -719,42 +721,122 @@ export default function EmployeePortal() {
         </Card>
       )}
 
-      {/* ─── 7. TAB 5: MY PERFORMANCE ───────────────────────────────────────── */}
-      {activeTab === 'performance' && (
-        <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="flex items-center justify-between border-b pb-4">
-            <div>
-              <h2 className="font-heading font-black text-lg text-foreground">سجل تقييم الأداء الوظيفي</h2>
-              <p className="text-xs text-muted-foreground">نتائج التقييمات الربع سنوية، نقاط القوة، وأهداف التطوير</p>
+      {/* ─── 7. TAB 5: MY PERFORMANCE (تقييم الأداء الشهري ومؤشرات الإنجاز) ─── */}
+      {activeTab === 'performance' && (() => {
+        const allEvals = getStoredEvaluations();
+        const clean = (v) => String(v || '').replace('emp_', '').trim();
+        const empNum = clean(currentEmp?.employee_number || currentEmp?.id);
+        
+        // Find latest evaluation for this employee
+        const myEvals = allEvals.filter(ev => clean(ev.employee_number || ev.employee_id) === empNum);
+        const latestEval = myEvals[0] || null;
+
+        if (!latestEval) {
+          return (
+            <Card className="p-8 rounded-3xl border shadow-sm bg-card text-center space-y-3">
+              <Star className="w-12 h-12 text-amber-500/40 mx-auto" />
+              <h2 className="font-heading font-black text-base text-foreground">سجل تقييم الأداء الوظيفي</h2>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                لم يتم رصد تقرير تقييم أداء معتمد لشهرك الحالي حتى الآن. يتم رصد التقييمات الشهرية دورياً من قبل الإدارة العامة.
+              </p>
+            </Card>
+          );
+        }
+
+        const tier = getEvaluationTier(latestEval.total_score);
+        const isPurchasing = Boolean(latestEval.has_purchasing_duty);
+        const criteriaList = isPurchasing ? PURCHASING_EVALUATION_CRITERIA : STANDARD_EVALUATION_CRITERIA;
+        const scores = latestEval.scores || {};
+
+        return (
+          <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-heading font-black text-lg text-foreground">سجل تقييم الأداء الوظيفي (KPIs)</h2>
+                  <Badge variant="outline" className="font-mono text-xs font-bold text-amber-600 bg-amber-500/10 border-amber-500/30">
+                    شهر {latestEval.month}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  تفصيل معايير الأداء والنسب المرجحة المعتمدة رسمياً من الإدارة العامة
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge className={`${tier.badgeClass} text-xs font-bold px-3.5 py-1.5`}>
+                  {tier.grade} ({latestEval.total_score}%)
+                </Badge>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    printEvaluationDocument(latestEval, getCompanyProfile());
+                    toast({ title: '✓ جاري تجهيز تقرير التقييم للطباعة...' });
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-9 gap-1.5 shadow-sm"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>طباعة الشهادة A4</span>
+                </Button>
+              </div>
             </div>
-            <Badge className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1">
-              ⭐ ممتاز مرتفع (A+)
-            </Badge>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200">
-              <div className="text-xs font-bold text-emerald-800">الانضباط والالتزام بالدوام</div>
-              <div className="text-2xl font-black font-mono text-emerald-600 mt-1">98%</div>
-            </Card>
-            <Card className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border-blue-200">
-              <div className="text-xs font-bold text-blue-800">جودة الإنجاز والإنتاجية</div>
-              <div className="text-2xl font-black font-mono text-blue-600 mt-1">96%</div>
-            </Card>
-            <Card className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/20 border-purple-200">
-              <div className="text-xs font-bold text-purple-800">التعاون والعمل الجماعي</div>
-              <div className="text-2xl font-black font-mono text-purple-600 mt-1">95%</div>
-            </Card>
-          </div>
+            {/* Criteria Breakdown Grid */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>تفصيل المعايير والدرجات المحققة:</span>
+                <span className="text-muted-foreground font-mono">الوزن الإجمالي: 100%</span>
+              </div>
 
-          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-2">
-            <div className="font-bold text-xs text-foreground">توصيات وملاحظات الإدارة:</div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              موظف متميز ومثال يُحتذى به في الانضباط وخدمة العملاء. الاستمرار في الحفاظ على هذا المستوى الاحترافي الممتاز.
-            </p>
-          </div>
-        </Card>
-      )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                {criteriaList.map(c => {
+                  const score = scores[c.id] || 0;
+                  return (
+                    <Card key={c.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-foreground text-xs">{c.name}</span>
+                        <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-600">
+                          {c.weight}%
+                        </Badge>
+                      </div>
+                      <div className="flex items-baseline justify-between pt-1">
+                        <span className="text-[10.5px] text-muted-foreground line-clamp-1">{c.desc}</span>
+                        <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 ms-2 shrink-0">
+                          {score}%
+                        </span>
+                      </div>
+                      {/* Progress Bar */}
+                      <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+                        />
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Management Notes & Strengths */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900 to-slate-900 border border-emerald-800/40 text-xs space-y-2.5">
+              <div className="font-bold text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>ملاحظات وتوجيهات المدير العام ({latestEval.evaluated_by || 'فهد ناصر محمد الجوعي'}):</span>
+              </div>
+              <p className="text-slate-200 leading-relaxed text-xs">
+                {latestEval.notes || 'أداء متميز وتفانٍ كامل في العمل وخدمة العملاء. الاستمرار في الحفاظ على هذا المستوى.'}
+              </p>
+              {latestEval.strengths && (
+                <div className="pt-1 text-[11px] text-slate-300">
+                  <strong className="text-emerald-300">أبرز نقاط القوة:</strong> {latestEval.strengths}
+                </div>
+              )}
+            </div>
+
+          </Card>
+        );
+      })()}
 
       {/* ─── 8. TAB 6: MY DOCUMENTS & CONTRACTS ──────────────────────────────── */}
       {activeTab === 'documents' && (

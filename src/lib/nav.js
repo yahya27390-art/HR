@@ -113,6 +113,7 @@ export const navigationModules = [
       { to: '/approvals', label: 'مركز الاعتمادات والطلبات', icon: CheckCircle2, permission: 'approvals.manage' },
       { to: '/alerts', label: 'مركز التنبيهات والوثائق', icon: Bell, permission: 'alerts.view' },
       { to: '/leave-policies', label: 'سياسات واستحقاقات الإجازات', icon: BookOpen, permission: 'settings.view' },
+      { to: '/evaluations', label: 'تقييم الأداء ومؤشرات KPIs', icon: Award, permission: 'employees.view' },
       { to: '/rewards-penalties', label: 'المكافآت والجزاءات', icon: Award, permission: 'employees.edit' },
     ]
   },
@@ -139,18 +140,19 @@ export const navigationModules = [
     id: 'reports',
     label: 'التقارير',
     icon: FileSpreadsheet,
-    color: '#f43f5e', // Rose/Coral Ektefa Color
-    badgeColor: 'bg-rose-500 text-white',
-    activeBg: 'bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200',
+    color: '#059669', // Emerald
+    badgeColor: 'bg-emerald-600 text-white',
+    activeBg: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
     permission: 'reports.view',
     items: [
-      { to: '/reports', label: 'مركز التقارير الشامل', icon: FileSpreadsheet },
+      { to: '/reports', label: 'مركز التقارير والكشوفات', icon: FileSpreadsheet },
       { to: '/reports?report=daily_biometrics', label: 'تقرير البصمات اليومي', icon: Clock },
       { to: '/reports?report=payroll_details', label: 'تفاصيل الرواتب والأجور', icon: Wallet, permission: 'employees.salary.view' },
       { to: '/reports?report=employee_master_data', label: 'بيانات الموظفين الشاملة', icon: Users },
       { to: '/reports?report=leave_report', label: 'تقرير الإجازات والأرصدة', icon: CalendarDays },
       { to: '/reports?report=advances_and_loans', label: 'تقرير السلف والقروض', icon: CreditCard, permission: 'loans.view' },
-      { to: '/documents-print', label: 'طباعة النماذج والمستندات الرسمية', icon: FolderOpen, permission: 'reports.view' },
+      { to: '/documents-print', label: 'طباعة الخطابات والنماذج', icon: FileText },
+      { to: '/evaluations', label: 'تقارير تقييم الأداء والمؤشرات', icon: Award },
     ]
   },
   {
