@@ -62,7 +62,7 @@ export default function Evaluations() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
-  const [selectedMonth, setSelectedMonth] = useState('2026-08'); // default to existing evaluations month or current
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr());
   const [searchQuery, setSearchQuery] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [tierFilter, setTierFilter] = useState('all');
@@ -78,16 +78,16 @@ export default function Evaluations() {
     employee_name: '',
     job_title: '',
     branch: '',
-    month: selectedMonth,
+    month: currentMonthStr(),
     has_purchasing_duty: false,
     scores: {
-      attendance_discipline: 95,
-      uniform_appearance: 95,
-      job_execution_quality: 95,
-      whatsapp_customer_care: 95,
-      google_reviews_reputation: 95,
-      branch_sales_target: 95,
-      branch_purchasing_duties: 95
+      attendance_discipline: 90,
+      uniform_appearance: 90,
+      job_execution_quality: 90,
+      whatsapp_customer_care: 90,
+      google_reviews_reputation: 90,
+      branch_sales_target: 90,
+      branch_purchasing_duties: 90
     },
     notes: '',
     strengths: '',
@@ -100,7 +100,11 @@ export default function Evaluations() {
     try {
       const emps = await base44.entities.Employee.list();
       setEmployees(emps || []);
-      setEvaluations(getStoredEvaluations());
+      const stored = getStoredEvaluations();
+      try {
+        localStorage.setItem('hr_flow_v12_evaluations_store', JSON.stringify(stored));
+      } catch {}
+      setEvaluations(stored);
     } catch (e) {
       console.error('Error loading evaluations:', e);
     } finally {

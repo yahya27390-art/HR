@@ -219,13 +219,17 @@ export function getStoredEvaluations() {
   try {
     const raw = localStorage.getItem(EVALUATIONS_STORAGE_KEY);
     if (!raw) {
-      return getInitialEvaluationsSeed();
+      return [];
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (Array.isArray(parsed)) {
+      // Filter out any previous dummy seed items
+      return parsed.filter(e => !String(e.id || '').startsWith('eval_seed_'));
+    }
+    return [];
   } catch (e) {
     console.error('Error reading evaluations store:', e);
-    return getInitialEvaluationsSeed();
+    return [];
   }
 }
 
@@ -277,121 +281,4 @@ export function deleteEvaluation(id) {
     console.error('Error deleting evaluation:', e);
     return false;
   }
-}
-
-/**
- * Initial evaluations data seed for reference
- */
-function getInitialEvaluationsSeed() {
-  const seed = [
-    {
-      id: 'eval_seed_1',
-      employee_id: 'emp_1002',
-      employee_number: '1002',
-      employee_name: 'طه محمود المحيميد',
-      job_title: 'مسؤول المتجر الإلكتروني وتنسيق المبيعات',
-      branch: 'الفرع الرئيسي',
-      month: '2026-08',
-      has_purchasing_duty: false,
-      scores: {
-        attendance_discipline: 98,
-        uniform_appearance: 95,
-        job_execution_quality: 96,
-        whatsapp_customer_care: 98,
-        google_reviews_reputation: 92,
-        branch_sales_target: 95
-      },
-      total_score: 95.7,
-      grade: 'ممتاز مرتفع 🌟',
-      notes: 'أداء استثنائي وتفانٍ كبير في إدارة المتجر والرد الفوري على استفسارات الزبائن وحل الشكاوى.',
-      strengths: 'سرعة الاستجابة، مهارات البيع الإلكتروني، الأمانة والدقة.',
-      improvement_areas: 'الاستمرار في تحفيز مراجعات خرائط جوجل.',
-      evaluated_by: 'فهد ناصر محمد الجوعي (المدير العام)',
-      evaluated_at: '2026-08-31T18:00:00.000Z'
-    },
-    {
-      id: 'eval_seed_2',
-      employee_id: 'emp_1003',
-      employee_number: '1003',
-      employee_name: 'عبد العزيز الجوعي',
-      job_title: 'مسؤول مشتريات ومبيعات قطع الغيار',
-      branch: 'فرع هيونداي والقطع الكورية',
-      month: '2026-08',
-      has_purchasing_duty: true,
-      scores: {
-        attendance_discipline: 95,
-        uniform_appearance: 92,
-        job_execution_quality: 96,
-        whatsapp_customer_care: 90,
-        google_reviews_reputation: 94,
-        branch_sales_target: 95,
-        branch_purchasing_duties: 98
-      },
-      total_score: 94.7,
-      grade: 'ممتاز',
-      notes: 'متميز جداً في تأمين طلبات القطع النادرة لفرع هيونداي والتفاوض الممتاز مع الموردين وتوفير النواقص فوراً.',
-      strengths: 'العلاقات الممتازة مع الموردين، السرعة في توفير القطع المطلوبة، الانضباط.',
-      improvement_areas: 'مواصلة تنظيم كشوفات فواتير الموردين الشهرية أولاً بأول.',
-      evaluated_by: 'فهد ناصر محمد الجوعي (المدير العام)',
-      evaluated_at: '2026-08-31T18:00:00.000Z'
-    },
-    {
-      id: 'eval_seed_3',
-      employee_id: 'emp_1004',
-      employee_number: '1004',
-      employee_name: 'صالح المحيميد',
-      job_title: 'مسؤول مشتريات ومبيعات فرع كيا',
-      branch: 'فرع كيا',
-      month: '2026-08',
-      has_purchasing_duty: true,
-      scores: {
-        attendance_discipline: 96,
-        uniform_appearance: 94,
-        job_execution_quality: 95,
-        whatsapp_customer_care: 92,
-        google_reviews_reputation: 95,
-        branch_sales_target: 94,
-        branch_purchasing_duties: 97
-      },
-      total_score: 94.6,
-      grade: 'ممتاز',
-      notes: 'كفاءة عالية ومتابعة دقيقة لمشتريات فرع كيا وخدمة عملاء ممتازة وعالية الاحترافية.',
-      strengths: 'سرعة توفير قطع كيا، رضا العملاء، الدقة في الجرد.',
-      improvement_areas: 'التوسع في طلبات الجملة لقطع الصيانة السريعة.',
-      evaluated_by: 'فهد ناصر محمد الجوعي (المدير العام)',
-      evaluated_at: '2026-08-31T18:00:00.000Z'
-    },
-    {
-      id: 'eval_seed_4',
-      employee_id: 'emp_1005',
-      employee_number: '1005',
-      employee_name: 'خالد الجوعي',
-      job_title: 'مشرف المشتريات ومبيعات الفروع',
-      branch: 'الفرع الرئيسي',
-      month: '2026-08',
-      has_purchasing_duty: true,
-      scores: {
-        attendance_discipline: 94,
-        uniform_appearance: 93,
-        job_execution_quality: 94,
-        whatsapp_customer_care: 90,
-        google_reviews_reputation: 92,
-        branch_sales_target: 93,
-        branch_purchasing_duties: 96
-      },
-      total_score: 93.3,
-      grade: 'ممتاز',
-      notes: 'مجهودات طيبة في تنسيق مشتريات الفروع ومتابعة سلاسل الإمداد.',
-      strengths: 'إدارة المشتريات، متابعة الشحنات، التواصل الفعال.',
-      improvement_areas: 'التركيز على تقييمات العملاء عبر خرائط جوجل.',
-      evaluated_by: 'فهد ناصر محمد الجوعي (المدير العام)',
-      evaluated_at: '2026-08-31T18:00:00.000Z'
-    }
-  ];
-
-  try {
-    localStorage.setItem(EVALUATIONS_STORAGE_KEY, JSON.stringify(seed));
-  } catch (e) {}
-
-  return seed;
 }
