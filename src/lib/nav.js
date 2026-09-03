@@ -26,6 +26,8 @@ import {
   Award,
   CreditCard,
   Building,
+  Building2,
+  ShieldCheck,
   KeyRound,
   Calculator,
   CheckCircle2,
