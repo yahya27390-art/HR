@@ -4,35 +4,40 @@ const path = require('path');
 async function deploy() {
   const client = new ftp.Client();
   client.ftp.verbose = true;
-  try {
-    console.log('Connecting to Hostinger FTP at 82.198.228.36...');
-    await client.access({
-      host: '82.198.228.36',
-      user: 'u602943255.gold-hare-970225.hostingersite.com',
-      password: 'Dell2020KoKa*',
-      port: 21,
-      secure: false
-    });
+  client.ftp.timeout = 60000;
 
-    console.log('Connected successfully! Checking remote directory listing...');
-    const list = await client.list();
-    console.log('Remote contents:', list.map(item => item.name));
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      console.log(`Connecting to Hostinger FTP (Attempt ${4 - retries}/3)...`);
+      await client.access({
+        host: '82.198.228.36',
+        user: 'u602943255.gold-hare-970225.hostingersite.com',
+        password: 'Dell2020KoKa*',
+        port: 21,
+        secure: false
+      });
 
-    const hasPublicHtml = list.some(item => item.name === 'public_html' && item.isDirectory);
-    if (hasPublicHtml) {
-      console.log('Navigating into public_html directory...');
-      await client.cd('public_html');
+      console.log('Connected successfully!');
+      const distPath = path.resolve(__dirname, 'dist');
+      console.log(`Uploading all files from ${distPath} to Hostinger...`);
+      
+      await client.uploadFromDir(distPath);
+
+      console.log('✓ All production files uploaded successfully to Hostinger!');
+      break;
+    } catch (err) {
+      console.error(`Error during deployment: ${err.message}`);
+      retries--;
+      if (retries === 0) {
+        console.error('All 3 deployment attempts failed.');
+      } else {
+        console.log('Retrying in 3 seconds...');
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    } finally {
+      client.close();
     }
-
-    const distPath = path.resolve(__dirname, 'dist');
-    console.log(`Uploading all files from ${distPath} to Hostinger...`);
-    await client.uploadFromDir(distPath);
-
-    console.log('✓ All production files uploaded successfully!');
-  } catch (err) {
-    console.error('Deployment error:', err);
-  } finally {
-    client.close();
   }
 }
 

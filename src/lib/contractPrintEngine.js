@@ -501,6 +501,7 @@ export function generateContractHtml(contract, company = null) {
             <div class="sig-title">الطرف الثاني (الموظف / العامل)</div>
             <div class="sig-info"><strong>الاسم:</strong> ${contract.employee_name}</div>
             <div class="sig-info"><strong>الرقم الوظيفي:</strong> ${contract.employee_number}</div>
+            <div class="sig-info"><strong>رقم الهوية / الإقامة:</strong> ${contract.national_id || '—'}</div>
             
             ${isSigned ? `
               <div class="seal-badge">

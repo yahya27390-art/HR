@@ -354,6 +354,10 @@ export default function ContractViewerModal({
                   : 'bg-amber-950/20 border-amber-800/40'
               }`}>
                 <div className="font-bold text-slate-200">الطرف الثاني: {contract.employee_name}</div>
+                <div className="text-[11px] text-slate-400 space-y-0.5">
+                  <div>الرقم الوظيفي: <strong className="font-mono text-slate-200">{contract.employee_number}</strong></div>
+                  <div>رقم الهوية / الإقامة: <strong className="font-mono text-slate-200">{contract.national_id || '—'}</strong></div>
+                </div>
                 {isSigned ? (
                   <>
                     <div className="text-emerald-400 font-bold flex items-center gap-1.5">
