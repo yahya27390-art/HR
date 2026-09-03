@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
@@ -44,7 +45,27 @@ import {
   AlertTriangle,
   FileCheck2,
   Megaphone,
-  Briefcase
+  Briefcase,
+  Building,
+  Layers,
+  Wallet,
+  FileCheck,
+  GitBranch,
+  CalendarDays,
+  CalendarRange,
+  Award,
+  CreditCard,
+  Fingerprint,
+  BookOpen,
+  ClipboardList,
+  KeyRound,
+  Printer,
+  ChevronLeft,
+  ChevronRight,
+  Landmark,
+  Plus,
+  Trash2,
+  Check
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,7 +73,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -60,6 +80,14 @@ export default function Settings() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { currentTheme, themes, setTheme, isDark, toggleDarkMode } = useTheme();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Active Tab from URL query parameter (default: 'company')
+  const activeTab = searchParams.get('tab') || 'company';
+  const setActiveTab = (tabId) => {
+    setSearchParams({ tab: tabId });
+  };
 
   // Check if user is Super Admin or Owner
   const isSystemAdmin = useMemo(() => {
@@ -73,170 +101,47 @@ export default function Settings() {
     );
   }, [user]);
 
-  // ─── 1. RBAC STATE ────────────────────────────────────────────────────────
-  const [selectedRole, setSelectedRole] = useState('owner');
-  const [targetMode, setTargetMode] = useState('role'); // 'role' | 'employee'
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  // ─── 1. REAL DB STATS FOR SUBSCRIPTION OVERVIEW (Ektefa Layout) ────────────
   const [employeesList, setEmployeesList] = useState([]);
-  const [permissionSearch, setPermissionSearch] = useState('');
-  
-  // Current Role Permissions Map
-  const [activePermissions, setActivePermissions] = useState(() => {
-    return new Set(getRolePermissions('owner'));
-  });
+  const [loadingStats, setLoadingStats] = useState(true);
 
-  // Employee Custom Overrides Map
-  const [employeeOverrides, setEmployeeOverrides] = useState({ granted: [], revoked: [] });
-
-  // Load Employees for Overrides Selector
   useEffect(() => {
-    const loadEmps = async () => {
+    async function loadStats() {
       try {
+        setLoadingStats(true);
         const emps = await base44.entities.Employee.list();
-        if (Array.isArray(emps) && emps.length > 0) {
-          setEmployeesList(emps);
-          if (!selectedEmployeeId) {
-            setSelectedEmployeeId(emps[0].id || emps[0].employee_number);
-          }
-        }
-      } catch (e) {}
-    };
-    loadEmps();
+        setEmployeesList(emps || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingStats(false);
+      }
+    }
+    loadStats();
   }, []);
 
-  // Sync active permissions when role or target mode changes
-  useEffect(() => {
-    if (targetMode === 'role') {
-      const perms = getRolePermissions(selectedRole);
-      setActivePermissions(new Set(perms));
-    } else if (targetMode === 'employee' && selectedEmployeeId) {
-      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
-      const role = targetEmp?.role || 'employee';
-      const baseRolePerms = getRolePermissions(role);
-      const overrides = getEmployeeCustomOverrides(selectedEmployeeId);
-      setEmployeeOverrides(overrides);
+  const subscriptionStats = useMemo(() => {
+    const active = employeesList.filter(e => e.status === 'active');
+    const inactive = employeesList.filter(e => e.status !== 'active');
+    const maxQuota = 20;
+    const remainingQuota = Math.max(0, maxQuota - active.length);
 
-      // Effective permissions
-      const granted = overrides.granted || [];
-      const revoked = new Set(overrides.revoked || []);
-      const effective = [...baseRolePerms, ...granted].filter(p => !revoked.has(p));
-      setActivePermissions(new Set(effective));
-    }
-  }, [selectedRole, targetMode, selectedEmployeeId, employeesList]);
-
-  // Toggle single permission
-  const handleTogglePermission = (permId) => {
-    if (targetMode === 'role') {
-      setActivePermissions(prev => {
-        const next = new Set(prev);
-        if (next.has(permId)) {
-          next.delete(permId);
-        } else {
-          next.add(permId);
-        }
-        return next;
-      });
-    } else {
-      // Employee Override Mode
-      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
-      const basePerms = new Set(getRolePermissions(targetEmp?.role || 'employee'));
-      const isBaseGranted = basePerms.has(permId);
-
-      setActivePermissions(prev => {
-        const next = new Set(prev);
-        const willEnable = !next.has(permId);
-
-        if (willEnable) next.add(permId);
-        else next.delete(permId);
-
-        setEmployeeOverrides(curr => {
-          let granted = new Set(curr.granted || []);
-          let revoked = new Set(curr.revoked || []);
-
-          if (willEnable) {
-            revoked.delete(permId);
-            if (!isBaseGranted) granted.add(permId);
-          } else {
-            granted.delete(permId);
-            if (isBaseGranted) revoked.add(permId);
-          }
-
-          return { granted: Array.from(granted), revoked: Array.from(revoked) };
-        });
-
-        return next;
-      });
-    }
-  };
-
-  // Save Permissions
-  const handleSavePermissions = () => {
-    if (targetMode === 'role') {
-      const list = Array.from(activePermissions);
-      saveRolePermissions(selectedRole, list);
-      toast({
-        title: '✓ تم حفظ وتطبيق صلاحيات الدور بنجاح',
-        description: `تم تحديث مصفوفة صلاحيات (${ROLE_META[selectedRole]?.label || selectedRole}) وتطبيقها فوراً لكافة المستخدمين.`
-      });
-    } else {
-      saveEmployeeCustomOverrides(selectedEmployeeId, employeeOverrides);
-      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
-      toast({
-        title: '✓ تم حفظ الصلاحيات المخصصة للموظف',
-        description: `تم تثبيت الصلاحيات الفردية للموظف (${targetEmp?.full_name || selectedEmployeeId}) بنجاح.`
-      });
-    }
-  };
-
-  // Quick Action Presets
-  const handleGrantAll = () => {
-    const all = Object.values(PERMISSIONS);
-    setActivePermissions(new Set(all));
-    if (targetMode === 'employee') {
-      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
-      const basePerms = new Set(getRolePermissions(targetEmp?.role || 'employee'));
-      const granted = all.filter(p => !basePerms.has(p));
-      setEmployeeOverrides({ granted, revoked: [] });
-    }
-    toast({ title: '✓ تم تفعيل كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
-  };
-
-  const handleRevokeAll = () => {
-    setActivePermissions(new Set());
-    if (targetMode === 'employee') {
-      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
-      const basePerms = Array.from(getRolePermissions(targetEmp?.role || 'employee'));
-      setEmployeeOverrides({ granted: [], revoked: basePerms });
-    }
-    toast({ title: '✓ تم تعطيل كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
-  };
-
-  const handleResetRecommended = () => {
-    if (targetMode === 'role') {
-      const def = DEFAULT_ROLE_PERMISSIONS[selectedRole] || DEFAULT_ROLE_PERMISSIONS.employee;
-      setActivePermissions(new Set(def));
-    } else {
-      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
-      const baseRolePerms = getRolePermissions(targetEmp?.role || 'employee');
-      setActivePermissions(new Set(baseRolePerms));
-      setEmployeeOverrides({ granted: [], revoked: [] });
-    }
-    toast({ title: '✓ تمت استعادة الصلاحيات القياسية الموصى بها.' });
-  };
-
-  // ─── 2. COMPANY PROFILE STATE ─────────────────────────────────────────────
-  const [companyProfile, setCompanyProfile] = useState(() => {
-    const saved = localStorage.getItem('hr_flow_company_profile');
-    return saved ? JSON.parse(saved) : {
-      name: 'Green Arrow HR',
-      legal_name: 'شركة درة السيارة لقطع غيار السيارات',
-      cr_number: '7016475555',
-      tax_number: '311861381500003',
-      phone: '+966 54 169 7999',
-      address: 'المملكة العربية السعودية',
-      logo_url: '/company-logo.svg'
+    return {
+      domain: 'doratcars',
+      planName: 'باقة الشركات المعتمدة (Enterprise Pro)',
+      startDate: '2025-11-09',
+      endDate: '2026-11-09',
+      maxQuota,
+      activeCount: active.length,
+      inactiveCount: inactive.length,
+      remainingQuota,
+      smsRemaining: 500,
+      smsExpiryDate: '2026-11-09'
     };
-  });
+  }, [employeesList]);
+
+  // ─── 2. COMPANY LEGAL PROFILE STATE ────────────────────────────────────────
+  const [companyProfile, setCompanyProfile] = useState(() => getCompanyProfile());
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
@@ -277,20 +182,142 @@ export default function Settings() {
     reader.readAsDataURL(file);
   };
 
-  // ─── 3. PAYROLL & FINANCIAL SETTINGS ───────────────────────────────────────
+  // ─── 3. RBAC STATE & HANDLERS ─────────────────────────────────────────────
+  const [selectedRole, setSelectedRole] = useState('owner');
+  const [targetMode, setTargetMode] = useState('role'); // 'role' | 'employee'
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [permissionSearch, setPermissionSearch] = useState('');
+  
+  const [activePermissions, setActivePermissions] = useState(() => {
+    return new Set(getRolePermissions('owner'));
+  });
+
+  const [employeeOverrides, setEmployeeOverrides] = useState({ granted: [], revoked: [] });
+
+  useEffect(() => {
+    if (employeesList.length > 0 && !selectedEmployeeId) {
+      setSelectedEmployeeId(employeesList[0].id || employeesList[0].employee_number);
+    }
+  }, [employeesList, selectedEmployeeId]);
+
+  useEffect(() => {
+    if (targetMode === 'role') {
+      const perms = getRolePermissions(selectedRole);
+      setActivePermissions(new Set(perms));
+    } else if (targetMode === 'employee' && selectedEmployeeId) {
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      const role = targetEmp?.role || 'employee';
+      const baseRolePerms = getRolePermissions(role);
+      const overrides = getEmployeeCustomOverrides(selectedEmployeeId);
+      setEmployeeOverrides(overrides);
+
+      const granted = overrides.granted || [];
+      const revoked = new Set(overrides.revoked || []);
+      const effective = [...baseRolePerms, ...granted].filter(p => !revoked.has(p));
+      setActivePermissions(new Set(effective));
+    }
+  }, [selectedRole, targetMode, selectedEmployeeId, employeesList]);
+
+  const handleTogglePermission = (permId) => {
+    if (targetMode === 'role') {
+      setActivePermissions(prev => {
+        const next = new Set(prev);
+        if (next.has(permId)) next.delete(permId);
+        else next.add(permId);
+        return next;
+      });
+    } else {
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      const basePerms = new Set(getRolePermissions(targetEmp?.role || 'employee'));
+      const isBaseGranted = basePerms.has(permId);
+
+      setActivePermissions(prev => {
+        const next = new Set(prev);
+        const willEnable = !next.has(permId);
+
+        if (willEnable) next.add(permId);
+        else next.delete(permId);
+
+        setEmployeeOverrides(curr => {
+          let granted = new Set(curr.granted || []);
+          let revoked = new Set(curr.revoked || []);
+
+          if (willEnable) {
+            revoked.delete(permId);
+            if (!isBaseGranted) granted.add(permId);
+          } else {
+            granted.delete(permId);
+            if (isBaseGranted) revoked.add(permId);
+          }
+
+          return { granted: Array.from(granted), revoked: Array.from(revoked) };
+        });
+
+        return next;
+      });
+    }
+  };
+
+  const handleSavePermissions = () => {
+    if (targetMode === 'role') {
+      const list = Array.from(activePermissions);
+      saveRolePermissions(selectedRole, list);
+      toast({
+        title: '✓ تم حفظ وتطبيق صلاحيات الدور بنجاح',
+        description: `تم تحديث مصفوفة صلاحيات (${ROLE_META[selectedRole]?.label || selectedRole}) وتطبيقها فوراً لكافة المستخدمين.`
+      });
+    } else {
+      saveEmployeeCustomOverrides(selectedEmployeeId, employeeOverrides);
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      toast({
+        title: '✓ تم حفظ الصلاحيات المخصصة للموظف',
+        description: `تم تثبيت الصلاحيات الفردية للموظف (${targetEmp?.full_name || selectedEmployeeId}) بنجاح.`
+      });
+    }
+  };
+
+  const handleGrantAll = () => {
+    const all = Object.values(PERMISSIONS);
+    setActivePermissions(new Set(all));
+    toast({ title: '✓ تم تفعيل كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
+  };
+
+  const handleRevokeAll = () => {
+    setActivePermissions(new Set());
+    toast({ title: '✓ تم تعطيل كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
+  };
+
+  const handleResetRecommended = () => {
+    if (targetMode === 'role') {
+      const def = DEFAULT_ROLE_PERMISSIONS[selectedRole] || DEFAULT_ROLE_PERMISSIONS.employee;
+      setActivePermissions(new Set(def));
+    } else {
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      const baseRolePerms = getRolePermissions(targetEmp?.role || 'employee');
+      setActivePermissions(new Set(baseRolePerms));
+      setEmployeeOverrides({ granted: [], revoked: [] });
+    }
+    toast({ title: '✓ تمت استعادة الصلاحيات القياسية الموصى بها.' });
+  };
+
+  const filteredModules = useMemo(() => {
+    if (!permissionSearch.trim()) return PERMISSION_MODULES;
+    const query = permissionSearch.toLowerCase();
+    return PERMISSION_MODULES.map(mod => {
+      const matchedPerms = mod.permissions.filter(p =>
+        p.label.toLowerCase().includes(query) ||
+        p.desc.toLowerCase().includes(query) ||
+        p.id.toLowerCase().includes(query)
+      );
+      return { ...mod, permissions: matchedPerms };
+    }).filter(mod => mod.permissions.length > 0);
+  }, [permissionSearch]);
+
+  // ─── 4. PAYROLL & FINANCIAL SETTINGS ───────────────────────────────────────
   const [payrollSettings, setPayrollSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('hr_flow_payroll_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          fridayDailyRate: parsed.fridayDailyRate || parsed.friday_daily_rate || 50,
-          overtimeDailyRate: parsed.overtimeDailyRate || parsed.overtime_daily_rate || 100,
-          daysPerMonth: parsed.daysPerMonth || parsed.days_per_month || 30,
-          gosiSaudiRate: parsed.gosiSaudiRate || 9.75,
-          maxAdvanceInstallments: parsed.maxAdvanceInstallments || 12,
-        };
-      }
+      if (saved) return JSON.parse(saved);
     } catch {}
     return {
       fridayDailyRate: 50,
@@ -307,7 +334,7 @@ export default function Settings() {
     toast({ title: '✓ تم حفظ إعدادات الرواتب والبدلات بنجاح' });
   };
 
-  // ─── 4. GPS & ATTENDANCE SETTINGS ──────────────────────────────────────────
+  // ─── 5. GPS & ATTENDANCE SETTINGS ──────────────────────────────────────────
   const [gpsSettings, setGpsSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('hr_gps_settings');
@@ -328,7 +355,7 @@ export default function Settings() {
     toast({ title: '✓ تم حفظ إعدادات الدوام ونطاق الـ GPS بنجاح' });
   };
 
-  // ─── 5. BACKUP & EXPORT SYSTEM DATA ────────────────────────────────────────
+  // ─── 6. BACKUP & EXPORT SYSTEM DATA ────────────────────────────────────────
   const handleExportSystemBackup = () => {
     try {
       const backupData = {
@@ -346,7 +373,7 @@ export default function Settings() {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `green_arrow_backup_${new Date().toISOString().split('T')[0]}.json`);
+      downloadAnchor.setAttribute("download", `doratcars_backup_${new Date().toISOString().split('T')[0]}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -360,696 +387,843 @@ export default function Settings() {
     }
   };
 
-  // Filter Permissions by Search
-  const filteredModules = useMemo(() => {
-    if (!permissionSearch.trim()) return PERMISSION_MODULES;
-    const query = permissionSearch.toLowerCase();
-    return PERMISSION_MODULES.map(mod => {
-      const matchedPerms = mod.permissions.filter(p =>
-        p.label.toLowerCase().includes(query) ||
-        p.desc.toLowerCase().includes(query) ||
-        p.id.toLowerCase().includes(query)
-      );
-      return { ...mod, permissions: matchedPerms };
-    }).filter(mod => mod.permissions.length > 0);
-  }, [permissionSearch]);
-
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-20" dir="rtl" style={{ direction: 'rtl', textAlign: 'right' }}>
+    <div className="space-y-6 max-w-7xl mx-auto pb-20 font-sans" dir="rtl">
       
       {/* ─── PAGE TITLE & HEADER ───────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card border border-border p-6 rounded-3xl shadow-sm">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-heading font-black tracking-tight text-foreground flex items-center gap-2.5">
-            <Sliders className="w-8 h-8 text-emerald-600" />
-            لوحة الإعدادات والتحكم الإداري
-          </h1>
-          <p className="text-xs lg:text-sm text-muted-foreground mt-1">
-            التحكم الشامل في مصفوفة الصلاحيات (RBAC)، إعدادات المنشأة، معادلات الرواتب، وسياج الموقع الجغرافي
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 rounded-3xl shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold text-2xl shadow-inner shrink-0">
+            ⚙️
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-heading font-black tracking-tight text-foreground flex items-center gap-2">
+              <span>إعدادات النظام والتحكم المؤسسي</span>
+              <Badge variant="outline" className="text-xs font-mono font-bold">
+                {activeTab.toUpperCase()}
+              </Badge>
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              إدارة المنشأة، مصفوفة الصلاحيات، الحسابات البنكية، بنود الأجور، وسياج الموقع الجغرافي
+            </p>
+          </div>
         </div>
 
-        {isSystemAdmin && (
-          <Badge className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-heading font-black text-xs px-3.5 py-1.5 rounded-xl shadow-md gap-1.5 self-start sm:self-auto">
-            <ShieldCheck className="w-4 h-4" />
-            <span>صلاحية مدير النظام الكاملة ✓</span>
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {isSystemAdmin && (
+            <Badge className="bg-purple-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>صلاحية إدارة كاملة ✓</span>
+            </Badge>
+          )}
+        </div>
       </div>
 
-      {/* ─── MAIN TABS ─────────────────────────────────────────────────────── */}
-      <Tabs defaultValue={isSystemAdmin ? "rbac" : "company"} className="space-y-6">
-        <TabsList className="bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border flex flex-wrap gap-1.5 h-auto">
+      {/* ─── TAB 1: COMPANY & SUBSCRIPTION OVERVIEW (Identical to Ektefa Layout) */}
+      {activeTab === 'company' && (
+        <div className="space-y-6">
           
-          {/* RBAC TAB (Exclusive for System Admin / Owner) */}
-          {isSystemAdmin && (
-            <TabsTrigger
-              value="rbac"
-              className="rounded-xl text-xs font-bold gap-2 py-2 px-3.5 data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-            >
-              <Shield className="w-4 h-4" />
-              <span>الأدوار والصلاحيات (RBAC)</span>
-            </TabsTrigger>
-          )}
-
-          <TabsTrigger
-            value="company"
-            className="rounded-xl text-xs font-bold gap-2 py-2 px-3.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-          >
-            <Building2 className="w-4 h-4" />
-            <span>هوية المنشأة والشعار</span>
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="payroll"
-            className="rounded-xl text-xs font-bold gap-2 py-2 px-3.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-          >
-            <DollarSign className="w-4 h-4" />
-            <span>الرواتب والبدلات والخصومات</span>
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="gps"
-            className="rounded-xl text-xs font-bold gap-2 py-2 px-3.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-          >
-            <MapPin className="w-4 h-4" />
-            <span>الدوام وسياج الـ GPS</span>
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="appearance"
-            className="rounded-xl text-xs font-bold gap-2 py-2 px-3.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-          >
-            <Palette className="w-4 h-4" />
-            <span>المظهر والألوان</span>
-          </TabsTrigger>
-
-          {isSystemAdmin && (
-            <TabsTrigger
-              value="security"
-              className="rounded-xl text-xs font-bold gap-2 py-2 px-3.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-            >
-              <Lock className="w-4 h-4" />
-              <span>الأمان والنسخ الاحتياطي</span>
-            </TabsTrigger>
-          )}
-
-        </TabsList>
-
-        {/* ─── TAB 1: ADVANCED INTERACTIVE RBAC MATRIX ──────────────────────── */}
-        {isSystemAdmin && (
-          <TabsContent value="rbac" className="space-y-6">
+          {/* 1. Subscription Details Card (Ektefa Screenshot Exact Representation) */}
+          <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
             
-            {/* Mode & Target Selector */}
-            <Card className="rounded-3xl border border-border p-6 shadow-sm bg-card space-y-5">
-              
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
-                <div>
-                  <h3 className="font-heading font-black text-lg text-foreground flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-purple-600" />
-                    التحكم في مصفوفة الأدوار والصلاحيات
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    اختر الدور العام أو حدد موظفاً مخصصاً لضبط صلاحياته في كافة أنظمة البرنامج
-                  </p>
-                </div>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-foreground font-heading font-black text-base">
+                <Building2 className="w-5 h-5 text-emerald-600" />
+                <span>معلومات الاشتراك والترخيص</span>
+              </div>
+              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-xs px-3 py-1">
+                باقة مدفوعة (Enterprise Pro)
+              </Badge>
+            </div>
 
-                {/* Switch between Role Mode vs Specific Employee Mode */}
-                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-850 p-1 rounded-2xl border">
-                  <button
-                    onClick={() => setTargetMode('role')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${targetMode === 'role' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-foreground'}`}
-                  >
-                    صلاحيات الدور العام
-                  </button>
-                  <button
-                    onClick={() => setTargetMode('employee')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${targetMode === 'employee' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-foreground'}`}
-                  >
-                    تخصيص موظف محدد 🎯
-                  </button>
+            {/* Top 4 Metric Boxes Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              
+              {/* Box 1: Domain Name */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">اسم النطاق المستعار</div>
+                  <div className="font-mono font-black text-sm text-foreground">{subscriptionStats.domain}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-600 flex items-center justify-center font-bold">
+                  🌐
                 </div>
               </div>
 
-              {/* Target Selector Cards */}
-              {targetMode === 'role' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  
-                  {/* GM / Owner */}
-                  <button
-                    onClick={() => setSelectedRole('owner')}
-                    className={`p-4 rounded-2xl border text-right transition-all flex flex-col justify-between gap-2 ${selectedRole === 'owner' ? 'bg-amber-500/10 border-amber-500 shadow-md ring-2 ring-amber-500/30' : 'bg-slate-50 dark:bg-slate-900 border-border hover:border-slate-300'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Crown className="w-5 h-5 text-amber-600" />
-                      <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-black">فهد الجوعي</Badge>
-                    </div>
-                    <div>
-                      <div className="font-heading font-black text-sm text-foreground">المدير العام (Owner)</div>
-                      <div className="text-[11px] text-muted-foreground">صاحب العمل والإدارة العليا</div>
-                    </div>
-                  </button>
-
-                  {/* Accountant */}
-                  <button
-                    onClick={() => setSelectedRole('accountant')}
-                    className={`p-4 rounded-2xl border text-right transition-all flex flex-col justify-between gap-2 ${selectedRole === 'accountant' ? 'bg-sky-500/10 border-sky-500 shadow-md ring-2 ring-sky-500/30' : 'bg-slate-50 dark:bg-slate-900 border-border hover:border-slate-300'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Calculator className="w-5 h-5 text-sky-600" />
-                      <Badge className="bg-sky-100 text-sky-900 border-sky-300 text-[10px] font-black">هشام زغلول</Badge>
-                    </div>
-                    <div>
-                      <div className="font-heading font-black text-sm text-foreground">مدير الحسابات والمالية</div>
-                      <div className="text-[11px] text-muted-foreground">إدارة المسيرات والصرف</div>
-                    </div>
-                  </button>
-
-                  {/* HR Manager */}
-                  <button
-                    onClick={() => setSelectedRole('hr')}
-                    className={`p-4 rounded-2xl border text-right transition-all flex flex-col justify-between gap-2 ${selectedRole === 'hr' ? 'bg-emerald-500/10 border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'bg-slate-50 dark:bg-slate-900 border-border hover:border-slate-300'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <UserCheck className="w-5 h-5 text-emerald-600" />
-                      <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 text-[10px] font-black">يحيى باشا</Badge>
-                    </div>
-                    <div>
-                      <div className="font-heading font-black text-sm text-foreground">الموارد البشرية (HR)</div>
-                      <div className="text-[11px] text-muted-foreground">شؤون الموظفين والدوام</div>
-                    </div>
-                  </button>
-
-                  {/* General Employees */}
-                  <button
-                    onClick={() => setSelectedRole('employee')}
-                    className={`p-4 rounded-2xl border text-right transition-all flex flex-col justify-between gap-2 ${selectedRole === 'employee' ? 'bg-slate-200 dark:bg-slate-800 border-slate-400 shadow-md ring-2 ring-slate-400/30' : 'bg-slate-50 dark:bg-slate-900 border-border hover:border-slate-300'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Users className="w-5 h-5 text-slate-600" />
-                      <Badge className="bg-slate-100 text-slate-800 border-slate-300 text-[10px] font-black">عامة الفروع</Badge>
-                    </div>
-                    <div>
-                      <div className="font-heading font-black text-sm text-foreground">الموظفون (Employees)</div>
-                      <div className="text-[11px] text-muted-foreground">الخدمات الذاتية والبصمة</div>
-                    </div>
-                  </button>
-
+              {/* Box 2: Subscription Type */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">نوع الاشتراك</div>
+                  <div className="font-bold text-xs text-emerald-600">نشط - سحابي معتمد</div>
                 </div>
-              ) : (
-                /* Employee Specific Dropdown */
-                <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <Label className="font-bold text-xs text-foreground">اختر الموظف المراد تخصيص صلاحياته:</Label>
-                    <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                      <SelectTrigger className="w-full sm:w-80 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold">
-                        <SelectValue placeholder="اختر موظفاً..." />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {employeesList.map(emp => (
-                          <SelectItem key={emp.id || emp.employee_number} value={emp.id || emp.employee_number}>
-                            {emp.full_name} (#{emp.employee_number}) - {emp.job_title || 'موظف'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+                  🛡️
+                </div>
+              </div>
+
+              {/* Box 3: Start Date */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">تاريخ الاشتراك</div>
+                  <div className="font-mono font-bold text-xs text-foreground">{subscriptionStats.startDate}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                  📅
+                </div>
+              </div>
+
+              {/* Box 4: End Date */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">تاريخ الانتهاء</div>
+                  <div className="font-mono font-bold text-xs text-rose-600">{subscriptionStats.endDate}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center font-bold">
+                  ⏳
+                </div>
+              </div>
+
+            </div>
+
+            {/* Second 4 Metric Boxes Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              
+              {/* Max Quota */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">الحد الأقصى للموظفين</div>
+                  <div className="font-mono font-black text-lg text-purple-600">{subscriptionStats.maxQuota}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center font-bold">
+                  👥
+                </div>
+              </div>
+
+              {/* Active Employees */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">الموظفون النشطون</div>
+                  <div className="font-mono font-black text-lg text-emerald-600">{subscriptionStats.activeCount}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+                  ✓
+                </div>
+              </div>
+
+              {/* Inactive Employees */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">الموظفون غير النشطين</div>
+                  <div className="font-mono font-black text-lg text-slate-600">{subscriptionStats.inactiveCount}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-600 flex items-center justify-center font-bold">
+                  👤
+                </div>
+              </div>
+
+              {/* Remaining SMS */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-muted-foreground font-bold">الرسائل المتبقية</div>
+                  <div className="font-mono font-black text-lg text-amber-600">{subscriptionStats.smsRemaining}</div>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                  💬
+                </div>
+              </div>
+
+            </div>
+
+          </Card>
+
+          {/* 2. Charts Row (Donut for Employees + Bar for Branch Allocation) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            
+            {/* Donut Chart Card */}
+            <Card className="p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card flex flex-col justify-between">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="font-heading font-black text-sm text-foreground flex items-center gap-2">
+                  <span>📊 إحصائيات الموظفين</span>
+                </h3>
+                <span className="text-xs font-mono text-muted-foreground">Total: {subscriptionStats.activeCount}</span>
+              </div>
+
+              <div className="my-6 flex items-center justify-center gap-6">
+                <div className="relative w-28 h-28 flex items-center justify-center">
+                  <svg className="w-28 h-28 transform -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-slate-200 dark:text-slate-800"
+                      strokeWidth="4.5"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className="text-emerald-500"
+                      strokeDasharray="100, 100"
+                      strokeWidth="4.5"
+                      strokeLinecap="round"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <div className="absolute font-heading font-black text-base text-foreground">
+                    100%
                   </div>
                 </div>
-              )}
 
-              {/* Action Bar & Quick Presets */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border">
-                
-                {/* Search Bar */}
-                <div className="relative flex-1 max-w-md">
-                  <Search className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    placeholder="بحث عن صلاحية محددة (مثال: راتب، عقد، بصمة، إجازة)..."
-                    value={permissionSearch}
-                    onChange={(e) => setPermissionSearch(e.target.value)}
-                    className="pr-9 rounded-xl text-xs h-9 bg-slate-50 dark:bg-slate-900"
-                  />
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <span className="font-bold">كادر نشط على رأس العمل ({subscriptionStats.activeCount})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                    <span>في إجازة رسمية (0)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-slate-400"></span>
+                    <span>غير نشط (0)</span>
+                  </div>
                 </div>
-
-                {/* Preset Buttons */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleGrantAll}
-                    className="rounded-xl text-[11px] h-8 px-2.5 font-bold gap-1 text-emerald-700 dark:text-emerald-300 border-emerald-300"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>تفعيل الكل</span>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleResetRecommended}
-                    className="rounded-xl text-[11px] h-8 px-2.5 font-bold gap-1 text-purple-700 dark:text-purple-300 border-purple-300"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>الموصى به</span>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleRevokeAll}
-                    className="rounded-xl text-[11px] h-8 px-2.5 font-bold gap-1 text-rose-700 dark:text-rose-300 border-rose-300"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>تعطيل الكل</span>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={handleSavePermissions}
-                    className="bg-purple-600 hover:bg-purple-500 text-white font-heading font-black rounded-xl text-xs h-8 px-4 gap-1.5 shadow-md shadow-purple-600/20"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>حفظ وتطبيق فوراً 💾</span>
-                  </Button>
-                </div>
-
               </div>
 
+              <div className="pt-3 border-t text-[11px] text-muted-foreground text-center">
+                معدل الاستيعاب: {subscriptionStats.activeCount} من {subscriptionStats.maxQuota} مقاعد مستخدمة
+              </div>
             </Card>
 
-            {/* ─── PERMISSION MODULES LIST (9 COMPREHENSIVE CATEGORIES) ─────── */}
-            <div className="space-y-4">
-              {filteredModules.map(module => {
-                const totalInMod = module.permissions.length;
-                const grantedInMod = module.permissions.filter(p => activePermissions.has(p.id)).length;
-
-                return (
-                  <Card key={module.id} className="rounded-3xl border border-border/80 shadow-sm bg-card overflow-hidden">
-                    
-                    {/* Module Header Bar */}
-                    <div className="p-4 sm:p-5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-border flex items-center justify-between gap-4">
-                      <div>
-                        <h4 className="font-heading font-black text-sm sm:text-base text-foreground flex items-center gap-2">
-                          {module.title}
-                        </h4>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {module.description}
-                        </p>
-                      </div>
-
-                      <Badge className={`text-xs font-mono font-bold ${grantedInMod === totalInMod ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : (grantedInMod > 0 ? 'bg-purple-100 text-purple-900 border-purple-300' : 'bg-slate-100 text-slate-700')}`}>
-                        {grantedInMod} من {totalInMod} مفعلة
-                      </Badge>
-                    </div>
-
-                    {/* Permissions Grid */}
-                    <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                      {module.permissions.map(perm => {
-                        const isChecked = activePermissions.has(perm.id);
-
-                        return (
-                          <div
-                            key={perm.id}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleTogglePermission(perm.id);
-                            }}
-                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start justify-between gap-3 ${
-                              isChecked 
-                                ? 'bg-purple-50/60 dark:bg-purple-950/30 border-purple-400 dark:border-purple-700 shadow-sm' 
-                                : 'bg-slate-50/40 dark:bg-slate-900/40 border-border opacity-70 hover:opacity-100 hover:border-slate-300'
-                            }`}
-                          >
-                            <div className="space-y-1 flex-1 pointer-events-none">
-                              <div className="font-heading font-black text-xs text-foreground flex items-center gap-1.5">
-                                <span>{perm.label}</span>
-                                {isChecked && <CheckCircle2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
-                              </div>
-                              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                {perm.desc}
-                              </p>
-                              <span className="font-mono text-[9.5px] text-slate-400 block pt-0.5" dir="ltr">
-                                {perm.id}
-                              </span>
-                            </div>
-
-                            <Switch
-                              checked={isChecked}
-                              className="data-[state=checked]:bg-purple-600 mt-1 shrink-0 pointer-events-none"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                  </Card>
-                );
-              })}
-            </div>
-
-            {/* Bottom Save Float */}
-            <div className="sticky bottom-4 z-20 bg-slate-950/90 backdrop-blur-md text-white p-4 rounded-3xl border border-slate-800 shadow-2xl flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-xs">
-                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span>تم تجهيز <strong>{activePermissions.size}</strong> صلاحية للدور المحدد. اضغط حفظ لتطبيق التحديث فوراً.</span>
+            {/* Bar Chart Card */}
+            <Card className="p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card flex flex-col justify-between">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="font-heading font-black text-sm text-foreground flex items-center gap-2">
+                  <span>🏢 توزيع الكادر عبر الفروع</span>
+                </h3>
+                <span className="text-xs font-mono text-muted-foreground">3 فروع نشطة</span>
               </div>
 
-              <Button
-                onClick={handleSavePermissions}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-heading font-black text-xs h-9 px-6 rounded-xl gap-2 shadow-lg shadow-emerald-500/20 shrink-0"
-              >
-                <Save className="w-4 h-4" />
-                <span>حفظ وتطبيق التغييرات</span>
-              </Button>
-            </div>
+              <div className="my-4 space-y-3 text-xs">
+                <div className="space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>الفرع الرئيسي (بريدة)</span>
+                    <span className="font-mono text-sky-600">3 موظفين (50%)</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-sky-500 rounded-full" style={{ width: '50%' }} />
+                  </div>
+                </div>
 
-          </TabsContent>
-        )}
+                <div className="space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>فرع هيونداي</span>
+                    <span className="font-mono text-emerald-600">2 موظفين (33%)</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '33%' }} />
+                  </div>
+                </div>
 
-        {/* ─── TAB 2: COMPANY PROFILE & LOGO ────────────────────────────────── */}
-        <TabsContent value="company">
-          <Card className="rounded-3xl border border-border p-6 shadow-sm bg-card">
+                <div className="space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>فرع كيا (السليم)</span>
+                    <span className="font-mono text-purple-600">1 موظف (17%)</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-500 rounded-full" style={{ width: '17%' }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t text-[11px] text-muted-foreground text-center">
+                جميع الفروع مربوطة سحابياً بنظام الحضور الموحد
+              </div>
+            </Card>
+
+          </div>
+
+          {/* 3. Company Profile Form */}
+          <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card">
             <form onSubmit={handleSaveProfile} className="space-y-6">
-              
-              {/* Logo Section */}
-              <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex flex-col sm:flex-row items-center gap-6 shadow-md">
-                <div className="w-28 h-28 rounded-2xl bg-white flex items-center justify-center p-3 shadow-xl border-2 border-white/80 flex-shrink-0">
-                  {companyProfile.logo_url ? (
-                    <img 
-                      src={companyProfile.logo_url} 
-                      alt="Company Logo" 
-                      className="w-full h-full object-contain filter drop-shadow-sm" 
-                    />
-                  ) : (
-                    <Building2 className="w-12 h-12 text-slate-400" />
-                  )}
+              <div className="flex items-center justify-between border-b pb-4">
+                <div>
+                  <h3 className="text-base font-heading font-black text-foreground">
+                    هوية وبيانات المنشأة الرسمية (السجل التجاري والضريبي)
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    تظهر هذه البيانات تلقائياً في ترويسة العقود، كشوفات الرواتب، ونماذج الموارد البشرية
+                  </p>
                 </div>
-
-                <div className="space-y-2.5 text-center sm:text-right flex-1">
-                  <div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-[10px] font-bold text-amber-300">
-                      ✨ تصميم الشعار الفاخر
-                    </span>
-                    <h4 className="font-heading font-bold text-base mt-1 text-white">
-                      معاينة الشعار كما يظهر في القائمة والشاشات والتقارير
-                    </h4>
-                    <p className="text-xs text-slate-300">
-                      يتم عرض الشعار في شاشات النظام، قسائم الرواتب، وسندات السلف الرسمية A4.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start pt-1">
-                    <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-slate-900 font-bold text-xs shadow-lg hover:bg-slate-100 transition-all">
-                      <UploadCloud className="w-4 h-4 text-emerald-600" />
-                      <span>رفع شعار جديد (PNG/SVG)</span>
-                      <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Company Info Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1.5">
-                  <Label className="font-bold">اسم المنشأة في النظام *</Label>
-                  <Input 
-                    value={companyProfile.name} 
-                    onChange={(e) => setCompanyProfile(prev => ({ ...prev, name: e.target.value }))}
-                    className="font-bold rounded-xl text-xs h-10"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">الاسم التجاري الرسمي (Legal Name)</Label>
-                  <Input 
-                    value={companyProfile.legal_name} 
-                    onChange={(e) => setCompanyProfile(prev => ({ ...prev, legal_name: e.target.value }))}
-                    className="rounded-xl text-xs h-10"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">رقم السجل التجاري (CR Number)</Label>
-                  <Input 
-                    value={companyProfile.cr_number} 
-                    onChange={(e) => setCompanyProfile(prev => ({ ...prev, cr_number: e.target.value }))}
-                    className="font-mono rounded-xl text-xs font-bold h-10"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">الرقم الضريبي (VAT Number)</Label>
-                  <Input 
-                    value={companyProfile.tax_number} 
-                    onChange={(e) => setCompanyProfile(prev => ({ ...prev, tax_number: e.target.value }))}
-                    className="font-mono rounded-xl text-xs font-bold h-10"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">رقم التواصل والهاتف</Label>
-                  <Input 
-                    value={companyProfile.phone} 
-                    onChange={(e) => setCompanyProfile(prev => ({ ...prev, phone: e.target.value }))}
-                    className="font-mono rounded-xl text-xs h-10"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">العنوان والمقر الرئيسي</Label>
-                  <Input 
-                    value={companyProfile.address} 
-                    onChange={(e) => setCompanyProfile(prev => ({ ...prev, address: e.target.value }))}
-                    className="rounded-xl text-xs h-10"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-3 border-t border-border">
-                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 rounded-xl shadow-md gap-2 text-xs h-10">
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs gap-1.5 shadow-md">
                   <Save className="w-4 h-4" />
                   <span>حفظ بيانات المنشأة</span>
                 </Button>
               </div>
 
-            </form>
-          </Card>
-        </TabsContent>
-
-        {/* ─── TAB 3: PAYROLL & ALLOWANCES ──────────────────────────────────── */}
-        <TabsContent value="payroll">
-          <Card className="rounded-3xl border border-border p-6 shadow-sm bg-card space-y-6">
-            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
-              <DollarSign className="w-6 h-6 text-emerald-600 shrink-0" />
-              <div>
-                <h3 className="font-heading font-black text-sm text-foreground">قواعد الرواتب واحتساب البدلات</h3>
-                <p className="text-xs text-muted-foreground">تحديد المبالغ اليومية الثابتة لبدل الجمعة والإضافي ومعادلات الشهر</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSavePayrollSettings} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="font-bold">مبلغ بدل الجمعة الثابت (ريال / يوم):</Label>
-                  <Input
-                    type="number"
-                    value={payrollSettings.fridayDailyRate}
-                    onChange={(e) => setPayrollSettings(prev => ({ ...prev, fridayDailyRate: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">مبلغ بدل الإضافي الثابت (ريال / يوم):</Label>
-                  <Input
-                    type="number"
-                    value={payrollSettings.overtimeDailyRate}
-                    onChange={(e) => setPayrollSettings(prev => ({ ...prev, overtimeDailyRate: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">عدد أيام احتساب الشهر الأساسي:</Label>
-                  <Input
-                    type="number"
-                    value={payrollSettings.daysPerMonth}
-                    onChange={(e) => setPayrollSettings(prev => ({ ...prev, daysPerMonth: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">نسبة استقطاع التأمينات الاجتماعية (GOSI %):</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={payrollSettings.gosiSaudiRate}
-                    onChange={(e) => setPayrollSettings(prev => ({ ...prev, gosiSaudiRate: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-3 border-t border-border">
-                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 rounded-xl shadow-md gap-2 text-xs h-10">
-                  <Save className="w-4 h-4" />
-                  <span>حفظ إعدادات الرواتب</span>
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </TabsContent>
-
-        {/* ─── TAB 4: GPS & ATTENDANCE ──────────────────────────────────────── */}
-        <TabsContent value="gps">
-          <Card className="rounded-3xl border border-border p-6 shadow-sm bg-card space-y-6">
-            <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center gap-3">
-              <MapPin className="w-6 h-6 text-sky-600 shrink-0" />
-              <div>
-                <h3 className="font-heading font-black text-sm text-foreground">سياج الموقع الجغرافي وبصمة الدوام</h3>
-                <p className="text-xs text-muted-foreground">التحكم في نصف قطر البصمة وسماحية دقائق التأخير والتسجيل المبكر</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveGpsSettings} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-foreground">إلزامية البصمة داخل الفرع (GPS Geofence)</div>
-                    <div className="text-[11px] text-muted-foreground">رفض تسجيل الحضور إذا كان الموظف خارج النطاق</div>
+                {/* Legal Name */}
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">الاسم القانوني للمنشأة *</Label>
+                  <Input
+                    value={companyProfile.legal_name || companyProfile.name_ar || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, legal_name: e.target.value, name_ar: e.target.value })}
+                    className="rounded-xl h-10 font-bold"
+                    required
+                  />
+                </div>
+
+                {/* English Name */}
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">الاسم بالإنجليزية (Commercial Name EN)</Label>
+                  <Input
+                    value={companyProfile.name_en || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, name_en: e.target.value })}
+                    className="rounded-xl h-10 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+
+                {/* CR Number */}
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">رقم السجل التجاري (CR Number) *</Label>
+                  <Input
+                    value={companyProfile.cr_number || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, cr_number: e.target.value })}
+                    className="rounded-xl h-10 font-mono font-bold"
+                    required
+                  />
+                </div>
+
+                {/* Tax Number */}
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">الرقم الضريبي (VAT Number - 15 خانة) *</Label>
+                  <Input
+                    value={companyProfile.tax_number || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, tax_number: e.target.value })}
+                    className="rounded-xl h-10 font-mono font-bold"
+                    required
+                  />
+                </div>
+
+                {/* Phone */}
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">رقم الهاتف والتواصل المعتمد</Label>
+                  <Input
+                    value={companyProfile.phone || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, phone: e.target.value })}
+                    className="rounded-xl h-10 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+
+                {/* Address */}
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">العنوان الوطني والفرع الرئيسي</Label>
+                  <Input
+                    value={companyProfile.address || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, address: e.target.value })}
+                    className="rounded-xl h-10 font-bold"
+                  />
+                </div>
+
+              </div>
+
+              {/* Logo Upload Section */}
+              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-950 border p-2 shadow-sm flex items-center justify-center shrink-0">
+                    <img
+                      src={companyProfile.logo_url || "/company-logo.svg"}
+                      alt="Logo"
+                      className="w-full h-full object-contain filter drop-shadow"
+                    />
                   </div>
+                  <div>
+                    <h4 className="font-heading font-black text-xs text-foreground">شعار الشركة الرسمي (Company Logo)</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      يُفضل استخدام صورة عالية الدقة بصيغة PNG أو SVG ذات خلفية شفافة لطباعة العقود ونماذج A4
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="cursor-pointer">
+                    <div className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 font-bold text-xs shadow-sm flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      <span>رفع شعار جديد</span>
+                    </div>
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                  </Label>
+                </div>
+              </div>
+
+            </form>
+          </Card>
+
+        </div>
+      )}
+
+      {/* ─── TAB 2: RBAC PERMISSIONS MATRIX ─────────────────────────────────── */}
+      {activeTab === 'permissions' && (
+        <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+            <div>
+              <h2 className="text-lg font-heading font-black text-foreground flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-600" />
+                <span>مصفوفة الصلاحيات المتقدمة (RBAC Matrix)</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                تحديد دقيق لصلاحيات كل دور، مع إمكانية منح أو سحب صلاحيات فردية خاصة بموظف محدد
+              </p>
+            </div>
+
+            <Button
+              onClick={handleSavePermissions}
+              className="bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs gap-1.5 shadow-md self-start sm:self-auto"
+            >
+              <Save className="w-4 h-4" />
+              <span>حفظ وتطبيق فوراً 💾</span>
+            </Button>
+          </div>
+
+          {/* Mode Selector (Role vs Employee Overrides) */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border">
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">نطاق التخصيص:</span>
+              <div className="flex items-center bg-slate-200/70 dark:bg-slate-800 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setTargetMode('role')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    targetMode === 'role' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  صلاحيات الدور (Role)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetMode('employee')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    targetMode === 'employee' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  استثناء لموظف محدد (Custom Override)
+                </button>
+              </div>
+            </div>
+
+            {targetMode === 'role' ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground">اختر الدور:</span>
+                <Select value={selectedRole} onValueChange={setSelectedRole}>
+                  <SelectTrigger className="w-48 h-9 rounded-xl font-bold text-xs bg-white dark:bg-slate-950">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="font-sans">
+                    {Object.entries(ROLE_META).map(([rKey, meta]) => (
+                      <SelectItem key={rKey} value={rKey} className="text-xs font-bold">
+                        {meta.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground">اختر الموظف:</span>
+                <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                  <SelectTrigger className="w-64 h-9 rounded-xl font-bold text-xs bg-white dark:bg-slate-950">
+                    <SelectValue placeholder="اختر الموظف..." />
+                  </SelectTrigger>
+                  <SelectContent className="font-sans">
+                    {employeesList.map(e => (
+                      <SelectItem key={e.id || e.employee_number} value={String(e.id || e.employee_number)} className="text-xs font-bold">
+                        {e.full_name} ({e.job_title || 'موظف'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+          </div>
+
+          {/* Quick Action Presets & Search */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-muted-foreground absolute start-3 top-1/2 -translate-y-1/2" />
+              <Input
+                type="text"
+                placeholder="بحث في الصلاحيات..."
+                value={permissionSearch}
+                onChange={(e) => setPermissionSearch(e.target.value)}
+                className="ps-9 h-9 rounded-xl text-xs bg-white dark:bg-slate-950"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+              <Button size="sm" variant="outline" onClick={handleGrantAll} className="h-8 text-xs rounded-lg font-bold">
+                تفعيل الكل
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleResetRecommended} className="h-8 text-xs rounded-lg font-bold text-purple-600">
+                الموصى به
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleRevokeAll} className="h-8 text-xs rounded-lg font-bold text-rose-600">
+                تعطيل الكل
+              </Button>
+            </div>
+          </div>
+
+          {/* Permissions Modules Grid */}
+          <div className="space-y-4 pt-2">
+            {filteredModules.map(mod => (
+              <Card key={mod.id} className="p-4 rounded-2xl border bg-card/60 space-y-3">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="font-heading font-black text-xs text-foreground flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                    <span>{mod.label}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">{mod.permissions.length} صلاحيات</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {mod.permissions.map(perm => {
+                    const isChecked = activePermissions.has(perm.id);
+                    return (
+                      <div
+                        key={perm.id}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleTogglePermission(perm.id);
+                        }}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
+                          isChecked 
+                            ? 'bg-purple-50/60 dark:bg-purple-950/30 border-purple-400 dark:border-purple-700 shadow-sm' 
+                            : 'bg-slate-50/40 dark:bg-slate-900/40 border-border opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="space-y-0.5 flex-1 pointer-events-none">
+                          <div className="font-heading font-black text-xs text-foreground flex items-center gap-1.5">
+                            <span>{perm.label}</span>
+                            {isChecked && <CheckCircle2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                          </div>
+                          <p className="text-[10.5px] text-muted-foreground leading-relaxed">
+                            {perm.desc}
+                          </p>
+                          <span className="font-mono text-[9px] text-slate-400 block pt-0.5" dir="ltr">
+                            {perm.id}
+                          </span>
+                        </div>
+
+                        <Switch
+                          checked={isChecked}
+                          className="data-[state=checked]:bg-purple-600 mt-1 shrink-0 pointer-events-none"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+        </Card>
+      )}
+
+      {/* ─── TAB 3: BRANCHES & LOCATIONS ────────────────────────────────────── */}
+      {activeTab === 'branches' && (
+        <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div>
+              <h2 className="text-lg font-heading font-black text-foreground flex items-center gap-2">
+                <Building className="w-5 h-5 text-sky-600" />
+                <span>إدارة الفروع والمواقع الجغرافية</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                فروع شركة درة السيارة لقطع غيار السيارات ومواقع البصمات الجغرافية
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            {/* Branch 1 */}
+            <Card className="p-4 rounded-2xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold text-[10px]">الفرع الرئيسي 🏢</Badge>
+                <span className="text-[10.5px] font-mono text-muted-foreground">BR-01</span>
+              </div>
+              <h3 className="font-heading font-black text-sm text-foreground">فرع بريدة - المركز الرئيسي</h3>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>طريق الملك عبدالعزيز، بريدة، القصيم</span>
+              </p>
+              <div className="pt-2 border-t text-[11px] flex justify-between">
+                <span className="text-muted-foreground">الكادر النشط:</span>
+                <span className="font-bold text-emerald-600">3 موظفين</span>
+              </div>
+            </Card>
+
+            {/* Branch 2 */}
+            <Card className="p-4 rounded-2xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">فرع هيونداي 🚗</Badge>
+                <span className="text-[10.5px] font-mono text-muted-foreground">BR-02</span>
+              </div>
+              <h3 className="font-heading font-black text-sm text-foreground">فرع قطع غيار هيونداي</h3>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>حي الصناعية، بريدة، القصيم</span>
+              </p>
+              <div className="pt-2 border-t text-[11px] flex justify-between">
+                <span className="text-muted-foreground">الكادر النشط:</span>
+                <span className="font-bold text-emerald-600">2 موظفين</span>
+              </div>
+            </Card>
+
+            {/* Branch 3 */}
+            <Card className="p-4 rounded-2xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold text-[10px]">فرع كيا 🏎️</Badge>
+                <span className="text-[10.5px] font-mono text-muted-foreground">BR-03</span>
+              </div>
+              <h3 className="font-heading font-black text-sm text-foreground">فرع كيا (السليم)</h3>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                <span>شارع السليم، بريدة، القصيم</span>
+              </p>
+              <div className="pt-2 border-t text-[11px] flex justify-between">
+                <span className="text-muted-foreground">الكادر النشط:</span>
+                <span className="font-bold text-emerald-600">1 موظف</span>
+              </div>
+            </Card>
+
+          </div>
+        </Card>
+      )}
+
+      {/* ─── TAB 4: BANK ACCOUNTS ───────────────────────────────────────────── */}
+      {activeTab === 'bank_accounts' && (
+        <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div>
+              <h2 className="text-lg font-heading font-black text-foreground flex items-center gap-2">
+                <Landmark className="w-5 h-5 text-emerald-600" />
+                <span>الحسابات المصرفية ومسيرات حماية الأجور (WPS)</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                حسابات الشركة المعتمدة لصرف الرواتب الشهرية والتحويل لحسابات الموظفين
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <Card className="p-5 rounded-2xl border space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="flex items-center justify-between">
+                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">الحساب الرئيسي للرواتب</Badge>
+                <span className="font-bold text-xs text-slate-700 dark:text-slate-300">مصرف الراجحي (Al Rajhi)</span>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] text-muted-foreground font-mono">IBAN SAUDI ARABIA</div>
+                <div className="font-mono font-black text-sm text-foreground bg-white dark:bg-slate-950 p-2 rounded-xl border" dir="ltr">
+                  SA44 8000 0123 6080 1000 9999
+                </div>
+              </div>
+              <div className="text-[11px] text-emerald-600 font-bold">
+                ✓ متوافق مع نظام حماية الأجور (مدد • GOSI)
+              </div>
+            </Card>
+
+            <Card className="p-5 rounded-2xl border space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="flex items-center justify-between">
+                <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 font-bold text-[10px]">حساب المشتريات والموردين</Badge>
+                <span className="font-bold text-xs text-slate-700 dark:text-slate-300">بنك الإنماء (Alinma Bank)</span>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] text-muted-foreground font-mono">IBAN SAUDI ARABIA</div>
+                <div className="font-mono font-black text-sm text-foreground bg-white dark:bg-slate-950 p-2 rounded-xl border" dir="ltr">
+                  SA62 0500 0000 1234 5678 0001
+                </div>
+              </div>
+              <div className="text-[11px] text-blue-600 font-bold">
+                ✓ حساب تسويات مشتريات قطع الغيار
+              </div>
+            </Card>
+
+          </div>
+        </Card>
+      )}
+
+      {/* ─── TAB 5: FINANCIAL & PAYROLL SETTINGS ─────────────────────────────── */}
+      {(activeTab === 'salary_components' || activeTab === 'overtime_rules' || activeTab === 'deductions_rules' || activeTab === 'advances_rules') && (
+        <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
+          <form onSubmit={handleSavePayrollSettings} className="space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h2 className="text-lg font-heading font-black text-foreground flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-emerald-600" />
+                  <span>معادلات الرواتب والعمل الإضافي والجمعات</span>
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  معايير احتساب أيام الشهر، نسبة التأمينات (GOSI)، وبدل حضور الجمعات
+                </p>
+              </div>
+              <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs gap-1.5 shadow-md">
+                <Save className="w-4 h-4" />
+                <span>حفظ القواعد المالية</span>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+              
+              <div className="space-y-1.5">
+                <Label className="font-bold text-xs">بدل حضور يوم الجمعة (ريال / يوم) *</Label>
+                <Input
+                  type="number"
+                  value={payrollSettings.fridayDailyRate}
+                  onChange={(e) => setPayrollSettings({ ...payrollSettings, fridayDailyRate: Number(e.target.value) })}
+                  className="rounded-xl h-10 font-mono font-bold"
+                />
+                <span className="text-[10px] text-muted-foreground">يُصرف تلقائياً عند تسجيل بصمة دوام الجمعة</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-bold text-xs">بدل الإضافي اليومي لغير السعوديين (ريال / يوم) *</Label>
+                <Input
+                  type="number"
+                  value={payrollSettings.overtimeDailyRate}
+                  onChange={(e) => setPayrollSettings({ ...payrollSettings, overtimeDailyRate: Number(e.target.value) })}
+                  className="rounded-xl h-10 font-mono font-bold"
+                />
+                <span className="text-[10px] text-muted-foreground">بدل إضافي ثابت 100 ريال يومياً وفق الاتفاق المعتمد</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-bold text-xs">نسبة استقطاع التأمينات للسعوديين (%) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={payrollSettings.gosiSaudiRate}
+                  onChange={(e) => setPayrollSettings({ ...payrollSettings, gosiSaudiRate: Number(e.target.value) })}
+                  className="rounded-xl h-10 font-mono font-bold"
+                />
+                <span className="text-[10px] text-muted-foreground">النسبة المعتمدة لدى التأمينات الاجتماعية (GOSI)</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-bold text-xs">أقصى عدد أقساط لسداد السلف الشهرية *</Label>
+                <Input
+                  type="number"
+                  value={payrollSettings.maxAdvanceInstallments}
+                  onChange={(e) => setPayrollSettings({ ...payrollSettings, maxAdvanceInstallments: Number(e.target.value) })}
+                  className="rounded-xl h-10 font-mono font-bold"
+                />
+                <span className="text-[10px] text-muted-foreground">أقصى مدة لتقسيط سلفة الموظف على الرواتب</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-bold text-xs">أيام الشهر القياسية لحساب الأجر اليومي *</Label>
+                <Input
+                  type="number"
+                  value={payrollSettings.daysPerMonth}
+                  onChange={(e) => setPayrollSettings({ ...payrollSettings, daysPerMonth: Number(e.target.value) })}
+                  className="rounded-xl h-10 font-mono font-bold"
+                />
+                <span className="text-[10px] text-muted-foreground">30 يوماً وفق المادة (90) من نظام العمل السعودي</span>
+              </div>
+
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {/* ─── TAB 6: GPS & BIOMETRIC DEVICES ─────────────────────────────────── */}
+      {(activeTab === 'geofencing' || activeTab === 'biometric_devices') && (
+        <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
+          <form onSubmit={handleSaveGpsSettings} className="space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h2 className="text-lg font-heading font-black text-foreground flex items-center gap-2">
+                  <Fingerprint className="w-5 h-5 text-sky-600" />
+                  <span>معرف لوكيشن وسياج البصمة الذكية (Geofencing)</span>
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  إلزامية الوجود الجغرافي داخل الفرع المعتمد لتسجيل بصمة الجوال
+                </p>
+              </div>
+              <Button type="submit" className="bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl text-xs gap-1.5 shadow-md">
+                <Save className="w-4 h-4" />
+                <span>حفظ إعدادات السياج</span>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="font-bold text-xs">تفعيل السياج الجغرافي الإلزامي (Geofence)</Label>
                   <Switch
                     checked={gpsSettings.enforceGpsFence}
-                    onCheckedChange={(v) => setGpsSettings(prev => ({ ...prev, enforceGpsFence: v }))}
+                    onCheckedChange={(v) => setGpsSettings({ ...gpsSettings, enforceGpsFence: v })}
                     className="data-[state=checked]:bg-sky-600"
                   />
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">نصف قطر النطاق المسموح به (بالمتر):</Label>
-                  <Input
-                    type="number"
-                    value={gpsSettings.allowedRadiusMeters}
-                    onChange={(e) => setGpsSettings(prev => ({ ...prev, allowedRadiusMeters: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">فترة السماح قبل احتساب التأخير (دقائق):</Label>
-                  <Input
-                    type="number"
-                    value={gpsSettings.lateGraceMinutes}
-                    onChange={(e) => setGpsSettings(prev => ({ ...prev, lateGraceMinutes: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="font-bold">أقصى وقت للبصمة المبكرة قبل الوردية (دقائق):</Label>
-                  <Input
-                    type="number"
-                    value={gpsSettings.allowEarlyPunchMinutes}
-                    onChange={(e) => setGpsSettings(prev => ({ ...prev, allowEarlyPunchMinutes: Number(e.target.value) }))}
-                    className="rounded-xl h-10 font-bold"
-                  />
-                </div>
-
-              </div>
-
-              <div className="flex justify-end pt-3 border-t border-border">
-                <Button type="submit" className="bg-sky-600 hover:bg-sky-500 text-white font-bold px-6 rounded-xl shadow-md gap-2 text-xs h-10">
-                  <Save className="w-4 h-4" />
-                  <span>حفظ إعدادات الـ GPS</span>
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </TabsContent>
-
-        {/* ─── TAB 5: APPEARANCE & THEMES ───────────────────────────────────── */}
-        <TabsContent value="appearance">
-          <Card className="rounded-3xl border border-border p-6 shadow-sm bg-card space-y-6">
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border">
-              <div>
-                <h4 className="font-heading font-black text-sm text-foreground">الوضع الليلي / النهاري</h4>
-                <p className="text-xs text-muted-foreground">التبديل بين الثيم المظلم والفاتح المريح للعين</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleDarkMode}
-                className="rounded-xl text-xs font-bold gap-2 h-9"
-              >
-                {isDark ? 'تفعيل الوضع النهاري ☀️' : 'تفعيل الوضع الليلي 🌙'}
-              </Button>
-            </div>
-          </Card>
-        </TabsContent>
-
-        {/* ─── TAB 6: SECURITY & SYSTEM BACKUP ──────────────────────────────── */}
-        {isSystemAdmin && (
-          <TabsContent value="security">
-            <Card className="rounded-3xl border border-border p-6 shadow-sm bg-card space-y-6">
-              <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center gap-3">
-                <Lock className="w-6 h-6 text-purple-600 shrink-0" />
-                <div>
-                  <h3 className="font-heading font-black text-sm text-foreground">مركز الأمان والنسخ الاحتياطي للنظام</h3>
-                  <p className="text-xs text-muted-foreground">تصدير قاعدة البيانات، السجلات، وتوثيق العمليات</p>
-                </div>
-              </div>
-
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="font-heading font-black text-sm text-foreground">تصدير نسخة احتياطية كاملة (Full Backup)</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      تتضمن النسخة: بيانات الموظفين، مصفوفة الصلاحيات، العقود، السلف، وسجلات الدوام
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleExportSystemBackup}
-                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs h-10 px-5 gap-2 shadow-md shrink-0"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>تنزيل نسخة JSON 💾</span>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="p-5 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-3">
-                <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-heading font-black text-sm">
-                  <AlertTriangle className="w-5 h-5" />
-                  <span>إعادة تعيين مصفوفة الصلاحيات لضبط المصنع</span>
-                </div>
-                <p className="text-xs text-rose-600 dark:text-rose-400">
-                  سيؤدي هذا الإجراء إلى استعادة كافة الصلاحيات القياسية المعتمدة للأدوار وإلغاء أي تخصيصات يدوية.
+                <p className="text-[11px] text-muted-foreground">
+                  يمنع تسجيل البصمة من خارج نطاق الفرع المحدد لكل موظف
                 </p>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    if (window.confirm('هل أنت متأكد من رغبتك في إعادة ضبط مصفوفة الصلاحيات بالكامل؟')) {
-                      resetAllPermissionsToDefault();
-                      toast({ title: '✓ تم إعادة ضبط مصفوفة الصلاحيات بنجاح' });
-                    }
-                  }}
-                  className="rounded-xl text-xs font-bold h-9 px-4 gap-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>إعادة ضبط المصنع للصلاحيات</span>
-                </Button>
               </div>
 
-            </Card>
-          </TabsContent>
-        )}
+              <div className="space-y-1.5">
+                <Label className="font-bold text-xs">نصف قطر النطاق المسموح به (بالمتر) *</Label>
+                <Input
+                  type="number"
+                  value={gpsSettings.allowedRadiusMeters}
+                  onChange={(e) => setGpsSettings({ ...gpsSettings, allowedRadiusMeters: Number(e.target.value) })}
+                  className="rounded-xl h-10 font-mono font-bold"
+                />
+                <span className="text-[10px] text-muted-foreground">النطاق الافتراضي: 250 متراً حول إحداثيات الفرع</span>
+              </div>
+            </div>
+          </form>
+        </Card>
+      )}
 
-      </Tabs>
+      {/* ─── TAB 7: SYSTEM AUDIT LOGS & BACKUP ──────────────────────────────── */}
+      {(activeTab === 'audit_logs' || activeTab === 'api_integration') && (
+        <Card className="p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card space-y-6">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div>
+              <h2 className="text-lg font-heading font-black text-foreground flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-indigo-600" />
+                <span>سجلات النظام وتصدير النسخة الاحتياطية (Audit & Backup)</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                تنزيل نسخة احتياطية شاملة لكافة قواعد بيانات الموظفين، الرواتب، والعقود
+              </p>
+            </div>
+
+            <Button
+              onClick={handleExportSystemBackup}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs gap-1.5 shadow-md"
+            >
+              <Download className="w-4 h-4" />
+              <span>تنزيل نسخة احتياطية JSON</span>
+            </Button>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200 space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5">
+              <span>🔒 التوافق الأمني والنسخ المشفر:</span>
+            </div>
+            <p className="leading-relaxed">
+              تشتمل النسخة الاحتياطية على بيانات المنشأة، مصفوفة الصلاحيات، سجلات العقود، طلبات السلف، وبيانات الموظفين المحدثة بالكامل.
+            </p>
+          </div>
+        </Card>
+      )}
 
     </div>
   );
