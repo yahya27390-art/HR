@@ -153,11 +153,7 @@ export default function EmployeeDetail() {
     is_insured: true
   });
 
-  const [custodyList, setCustodyList] = useState([
-    { id: 'c1', name: 'سيارة تويوتا يارس موديل 2024 (لوحة: أ ب ج 1234)', type: 'car', serial_number: 'CAR-KSA-7782-B', delivery_date: '2026-01-15', value: 55000, status: 'active', notes: 'عهدة رسمية لتنقلات فرع كيا' },
-    { id: 'c2', name: 'جهاز لابتوب Dell Latitude Core i7 + حقيبة', type: 'laptop', serial_number: 'DELL-SN-998124', delivery_date: '2026-02-01', value: 4500, status: 'active', notes: 'جهاز العمل المكتبي ونظام الفواتير' },
-    { id: 'c3', name: 'هاتف ذكي Samsung Galaxy A54 + شريحة بيانات أعمال', type: 'phone', serial_number: 'IMEI-8891230192', delivery_date: '2026-02-01', value: 1400, status: 'active', notes: 'رقم التواصل المعتمد للعملاء' }
-  ]);
+  const [custodyList, setCustodyList] = useState([]);
 
   const [custodyForm, setCustodyForm] = useState({
     name: '',
@@ -285,7 +281,18 @@ export default function EmployeeDetail() {
         // Load custom lists from local storage if exists
         try {
           const cSaved = localStorage.getItem('hr_custody_' + found.id);
-          if (cSaved) setCustodyList(JSON.parse(cSaved));
+          if (cSaved) {
+            try {
+              const parsed = JSON.parse(cSaved);
+              const cleaned = Array.isArray(parsed) ? parsed.filter(item => item && !['c1', 'c2', 'c3'].includes(item.id)) : [];
+              setCustodyList(cleaned);
+              localStorage.setItem('hr_custody_' + found.id, JSON.stringify(cleaned));
+            } catch {
+              setCustodyList([]);
+            }
+          } else {
+            setCustodyList([]);
+          }
           const pSaved = localStorage.getItem('hr_penalties_' + found.id);
           if (pSaved) setPenaltiesList(JSON.parse(pSaved));
           const dSaved = localStorage.getItem('hr_dependents_' + found.id);
@@ -367,6 +374,14 @@ export default function EmployeeDetail() {
     setAddCustodyModal(false);
     setCustodyForm({ name: '', type: 'car', serial_number: '', delivery_date: new Date().toISOString().split('T')[0], value: 0, status: 'active', notes: '' });
     toast({ title: '✓ تم قيد العهدة الجديدة على الموظف بنجاح' });
+  };
+
+  // Delete / Return Custody Asset
+  const handleDeleteCustody = (id) => {
+    const updated = custodyList.filter(c => c.id !== id);
+    setCustodyList(updated);
+    if (employee) localStorage.setItem('hr_custody_' + employee.id, JSON.stringify(updated));
+    toast({ title: '✓ تم حذف / استرجاع العهدة بنجاح' });
   };
 
   // Add Penalty / Reward
@@ -1124,6 +1139,15 @@ export default function EmployeeDetail() {
                         <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-bold text-[10px]">
                           مسلمة ونشطة ✓
                         </Badge>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleDeleteCustody(c.id)}
+                          className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg"
+                          title="حذف / استرجاع العهدة"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
