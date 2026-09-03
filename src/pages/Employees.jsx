@@ -130,8 +130,9 @@ export default function Employees() {
   // Statistics calculation (Ektefa Exact KPI cards)
   const stats = useMemo(() => {
     const total = employees.length;
-    const active = employees.filter(e => e.status !== 'inactive').length;
-    const inactive = employees.filter(e => e.status === 'inactive').length;
+    const isInactiveStatus = (s) => s === 'inactive' || s === 'terminated' || s === 'suspended' || s === 'متوقف عن العمل' || s === 'غير نشط';
+    const inactive = employees.filter(e => isInactiveStatus(e.status)).length;
+    const active = total - inactive;
     const saudi = employees.filter(e => e.nationality === 'سعودي').length;
     const resident = total - saudi;
     const male = employees.filter(e => e.gender !== 'female').length;
@@ -142,6 +143,8 @@ export default function Employees() {
 
   // Filtered employees list
   const filteredEmployees = useMemo(() => {
+    const isInactiveStatus = (s) => s === 'inactive' || s === 'terminated' || s === 'suspended' || s === 'متوقف عن العمل' || s === 'غير نشط';
+
     return employees.filter(emp => {
       // 1. Search filter
       const q = search.toLowerCase();
@@ -155,12 +158,23 @@ export default function Employees() {
 
       // 2. Tab Filter
       let matchTab = true;
-      if (activeTabFilter === 'saudi') matchTab = emp.nationality === 'سعودي';
-      else if (activeTabFilter === 'resident') matchTab = emp.nationality !== 'سعودي';
-      else if (activeTabFilter === 'main') matchTab = (emp.branch_name || '').includes('الرئيسي');
-      else if (activeTabFilter === 'hyundai') matchTab = (emp.branch_name || '').includes('هونداي');
-      else if (activeTabFilter === 'kia') matchTab = (emp.branch_name || '').includes('كيا');
-      else if (activeTabFilter === 'mgmt') matchTab = (emp.branch_name || '').includes('الإدارة');
+      if (activeTabFilter === 'active') {
+        matchTab = !isInactiveStatus(emp.status);
+      } else if (activeTabFilter === 'inactive') {
+        matchTab = isInactiveStatus(emp.status);
+      } else if (activeTabFilter === 'saudi') {
+        matchTab = emp.nationality === 'سعودي';
+      } else if (activeTabFilter === 'resident') {
+        matchTab = emp.nationality !== 'سعودي';
+      } else if (activeTabFilter === 'main') {
+        matchTab = (emp.branch_name || '').includes('الرئيسي');
+      } else if (activeTabFilter === 'hyundai') {
+        matchTab = (emp.branch_name || '').includes('هونداي') || (emp.branch_name || '').includes('هيونداي');
+      } else if (activeTabFilter === 'kia') {
+        matchTab = (emp.branch_name || '').includes('كيا');
+      } else if (activeTabFilter === 'mgmt') {
+        matchTab = (emp.branch_name || '').includes('الإدارة');
+      }
 
       // 3. Branch filter dropdown
       const matchBranch = branchFilter === 'all' || (emp.branch_name || '') === branchFilter;
@@ -253,6 +267,28 @@ export default function Employees() {
     }
   };
 
+  // Toggle Employee Active / Inactive Status
+  const handleToggleStatus = async (emp) => {
+    const isCurrentlyInactive = ['inactive', 'terminated', 'suspended', 'متوقف عن العمل', 'غير نشط'].includes(emp.status);
+    const newStatus = isCurrentlyInactive ? 'active' : 'inactive';
+    const newLabel = isCurrentlyInactive ? 'نشط على رأس العمل ✓' : 'متوقف عن العمل (غير نشط) ⏸️';
+
+    try {
+      const empId = emp.id || ('emp_' + emp.employee_number);
+      await base44.entities.Employee.update(empId, {
+        ...emp,
+        status: newStatus
+      });
+      toast({
+        title: `✓ تم تحديث حالة الموظف (${emp.full_name})`,
+        description: `أصبحت الحالة الآن: ${newLabel}`
+      });
+      await loadData();
+    } catch (e) {
+      toast({ title: 'خطأ أثناء تعديل الحالة', description: e.message, variant: 'destructive' });
+    }
+  };
+
   // Export CSV
   const handleExportCSV = () => {
     if (filteredEmployees.length === 0) {
@@ -303,9 +339,9 @@ export default function Employees() {
           
           {/* Active */}
           <div 
-            onClick={() => setActiveTabFilter('all')}
+            onClick={() => setActiveTabFilter(activeTabFilter === 'active' ? 'all' : 'active')}
             className={`p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between cursor-pointer hover:scale-[1.02] transition-transform ${
-              activeTabFilter === 'all' ? 'ring-2 ring-sky-500 border-sky-500' : ''
+              activeTabFilter === 'active' ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20' : ''
             }`}
           >
             <div>
@@ -319,13 +355,16 @@ export default function Employees() {
 
           {/* Inactive */}
           <div 
-            className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between"
+            onClick={() => setActiveTabFilter(activeTabFilter === 'inactive' ? 'all' : 'inactive')}
+            className={`p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between cursor-pointer hover:scale-[1.02] transition-transform ${
+              activeTabFilter === 'inactive' ? 'ring-2 ring-rose-500 border-rose-500 bg-rose-50/20' : ''
+            }`}
           >
             <div>
               <div className="text-[11px] text-muted-foreground font-bold">غير نشط</div>
-              <div className="font-mono font-black text-2xl text-slate-400 mt-1">{stats.inactive}</div>
+              <div className="font-mono font-black text-2xl text-rose-600 dark:text-rose-400 mt-1">{stats.inactive}</div>
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
               <UserX className="w-5 h-5" />
             </div>
           </div>
@@ -534,13 +573,16 @@ export default function Employees() {
             </div>
           ) : (
             filteredEmployees.map((emp) => {
+              const isInactive = ['inactive', 'terminated', 'suspended', 'متوقف عن العمل', 'غير نشط'].includes(emp.status);
               const whatsappNumber = (emp.phone || '').replace(/[^0-9]/g, '');
               const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`مرحباً أخي ${emp.full_name}`)}`;
 
               return (
                 <Card
                   key={emp.id}
-                  className="p-5 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col justify-between group relative overflow-hidden"
+                  className={`p-5 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col justify-between group relative overflow-hidden ${
+                    isInactive ? 'opacity-90 border-rose-200/70 bg-rose-50/10' : ''
+                  }`}
                 >
                   {/* Top Header inside card */}
                   <div>
@@ -549,10 +591,21 @@ export default function Employees() {
                       {/* Avatar with Status Pulse */}
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 via-teal-500 to-emerald-500 text-white flex items-center justify-center font-heading font-black text-base shadow-md group-hover:scale-105 transition-transform">
+                          <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-heading font-black text-base shadow-md group-hover:scale-105 transition-transform ${
+                            isInactive 
+                              ? 'bg-gradient-to-tr from-slate-600 to-rose-600' 
+                              : 'bg-gradient-to-tr from-sky-600 via-teal-500 to-emerald-500'
+                          }`}>
                             {emp.full_name ? emp.full_name[0] : 'م'}
                           </div>
-                          <span className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white ring-1 ring-emerald-300"></span>
+                          <span 
+                            className={`absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                              isInactive 
+                                ? 'bg-rose-500 ring-1 ring-rose-300' 
+                                : 'bg-emerald-500 ring-1 ring-emerald-300'
+                            }`}
+                            title={isInactive ? 'متوقف عن العمل' : 'نشط على رأس العمل'}
+                          />
                         </div>
 
                         <div className="min-w-0">
@@ -568,10 +621,17 @@ export default function Employees() {
                         </div>
                       </div>
 
-                      {/* Employee # Badge */}
-                      <Badge className="bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 font-mono font-black text-xs px-2.5 py-1 rounded-xl shrink-0">
-                        #{emp.employee_number}
-                      </Badge>
+                      {/* Employee # and Status Badges */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isInactive && (
+                          <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
+                            متوقف عن العمل ⏸️
+                          </Badge>
+                        )}
+                        <Badge className="bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 font-mono font-black text-xs px-2.5 py-1 rounded-xl shrink-0">
+                          #{emp.employee_number}
+                        </Badge>
+                      </div>
                     </div>
 
                     {/* Meta Chips */}
@@ -609,6 +669,21 @@ export default function Employees() {
                     
                     {/* Direct Quick Tools */}
                     <div className="flex items-center gap-1.5">
+                      {/* Quick Toggle Status Button */}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleToggleStatus(emp)}
+                        className={`w-8 h-8 rounded-xl border transition-colors ${
+                          isInactive
+                            ? 'bg-rose-50 hover:bg-emerald-50 text-rose-600 hover:text-emerald-600 border-rose-200'
+                            : 'bg-emerald-50 hover:bg-rose-50 text-emerald-600 hover:text-rose-600 border-emerald-200'
+                        }`}
+                        title={isInactive ? 'إعادة تفعيل الموظف (نشط على رأس العمل)' : 'إيقاف الموظف وتحويله إلى متوقف عن العمل'}
+                      >
+                        {isInactive ? <UserCheck className="w-4 h-4 text-emerald-600" /> : <UserX className="w-4 h-4 text-rose-500" />}
+                      </Button>
+
                       {/* WhatsApp Button */}
                       {emp.phone && (
                         <a
@@ -852,6 +927,33 @@ export default function Employees() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Status Field */}
+            <div className="space-y-1 pt-2 border-t">
+              <Label className="font-bold text-xs flex items-center justify-between">
+                <span>حالة الموظف في المنظومة:</span>
+                <span className="text-[10.5px] text-muted-foreground font-normal">تتحكم في إمكانية الدخول للخدمة الذاتية ومسير الرواتب</span>
+              </Label>
+              <Select value={form.status || 'active'} onValueChange={(val) => setForm(prev => ({ ...prev, status: val }))}>
+                <SelectTrigger className="rounded-xl text-xs font-bold h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl shadow-xl">
+                  <SelectItem value="active" className="text-emerald-600 font-bold py-2.5">
+                    ✓ نشط على رأس العمل (Active)
+                  </SelectItem>
+                  <SelectItem value="inactive" className="text-rose-600 font-bold py-2.5">
+                    ⏸️ متوقف عن العمل / غير نشط (Inactive / Suspended)
+                  </SelectItem>
+                  <SelectItem value="terminated" className="text-slate-600 font-bold py-2.5">
+                    🚫 منتهي الخدمات / مستقيل (Terminated)
+                  </SelectItem>
+                  <SelectItem value="on_leave" className="text-amber-600 font-bold py-2.5">
+                    🌴 في إجازة رسمية (On Leave)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
