@@ -146,6 +146,9 @@ export default function Settings() {
         const next = new Set(prev);
         const willEnable = !next.has(permId);
 
+        if (willEnable) next.add(permId);
+        else next.delete(permId);
+
         setEmployeeOverrides(curr => {
           let granted = new Set(curr.granted || []);
           let revoked = new Set(curr.revoked || []);
@@ -161,8 +164,6 @@ export default function Settings() {
           return { granted: Array.from(granted), revoked: Array.from(revoked) };
         });
 
-        if (willEnable) next.add(permId);
-        else next.delete(permId);
         return next;
       });
     }
@@ -191,18 +192,36 @@ export default function Settings() {
   const handleGrantAll = () => {
     const all = Object.values(PERMISSIONS);
     setActivePermissions(new Set(all));
-    toast({ title: 'تم تحديد كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
+    if (targetMode === 'employee') {
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      const basePerms = new Set(getRolePermissions(targetEmp?.role || 'employee'));
+      const granted = all.filter(p => !basePerms.has(p));
+      setEmployeeOverrides({ granted, revoked: [] });
+    }
+    toast({ title: '✓ تم تفعيل كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
   };
 
   const handleRevokeAll = () => {
     setActivePermissions(new Set());
-    toast({ title: 'تم إلغاء تحديد كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
+    if (targetMode === 'employee') {
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      const basePerms = Array.from(getRolePermissions(targetEmp?.role || 'employee'));
+      setEmployeeOverrides({ granted: [], revoked: basePerms });
+    }
+    toast({ title: '✓ تم تعطيل كافة الصلاحيات', description: 'انقر على زر الحفظ لتثبيت التغيير.' });
   };
 
   const handleResetRecommended = () => {
-    const def = DEFAULT_ROLE_PERMISSIONS[selectedRole] || DEFAULT_ROLE_PERMISSIONS.employee;
-    setActivePermissions(new Set(def));
-    toast({ title: 'تمت استعادة الصلاحيات القياسية الموصى بها للدور.' });
+    if (targetMode === 'role') {
+      const def = DEFAULT_ROLE_PERMISSIONS[selectedRole] || DEFAULT_ROLE_PERMISSIONS.employee;
+      setActivePermissions(new Set(def));
+    } else {
+      const targetEmp = employeesList.find(e => String(e.id) === String(selectedEmployeeId) || String(e.employee_number) === String(selectedEmployeeId));
+      const baseRolePerms = getRolePermissions(targetEmp?.role || 'employee');
+      setActivePermissions(new Set(baseRolePerms));
+      setEmployeeOverrides({ granted: [], revoked: [] });
+    }
+    toast({ title: '✓ تمت استعادة الصلاحيات القياسية الموصى بها.' });
   };
 
   // ─── 2. COMPANY PROFILE STATE ─────────────────────────────────────────────
@@ -651,10 +670,17 @@ export default function Settings() {
                         return (
                           <div
                             key={perm.id}
-                            onClick={() => handleTogglePermission(perm.id)}
-                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 ${isChecked ? 'bg-purple-50/40 dark:bg-purple-950/20 border-purple-300 dark:border-purple-800' : 'bg-slate-50/40 dark:bg-slate-900/40 border-border opacity-70 hover:opacity-100'}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleTogglePermission(perm.id);
+                            }}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start justify-between gap-3 ${
+                              isChecked 
+                                ? 'bg-purple-50/60 dark:bg-purple-950/30 border-purple-400 dark:border-purple-700 shadow-sm' 
+                                : 'bg-slate-50/40 dark:bg-slate-900/40 border-border opacity-70 hover:opacity-100 hover:border-slate-300'
+                            }`}
                           >
-                            <div className="space-y-1">
+                            <div className="space-y-1 flex-1 pointer-events-none">
                               <div className="font-heading font-black text-xs text-foreground flex items-center gap-1.5">
                                 <span>{perm.label}</span>
                                 {isChecked && <CheckCircle2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
@@ -669,8 +695,7 @@ export default function Settings() {
 
                             <Switch
                               checked={isChecked}
-                              onCheckedChange={() => handleTogglePermission(perm.id)}
-                              className="data-[state=checked]:bg-purple-600 mt-1 shrink-0"
+                              className="data-[state=checked]:bg-purple-600 mt-1 shrink-0 pointer-events-none"
                             />
                           </div>
                         );
