@@ -112,21 +112,19 @@ export function generateContractHtml(contract, company = null) {
     }
 
     .logo-box {
-      width: 58px;
-      height: 58px;
-      border: 1.5px solid #047857;
-      border-radius: 12px;
+      width: 65px;
+      height: 65px;
       margin: 0 auto 4px auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f0fdf4;
-      overflow: hidden;
+      background: transparent;
+      border: none;
     }
 
     .logo-box img {
-      max-width: 48px;
-      max-height: 48px;
+      max-width: 65px;
+      max-height: 65px;
       object-fit: contain;
     }
 

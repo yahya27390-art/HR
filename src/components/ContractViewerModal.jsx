@@ -55,6 +55,7 @@ export default function ContractViewerModal({
 
   if (!contract) return null;
 
+  const company = getCompanyProfile();
   const isQiwa = contract.category === 'qiwa';
   const isSigned = Boolean(contract.signed_by_employee);
 
@@ -218,10 +219,15 @@ export default function ContractViewerModal({
             </div>
 
             <div className="text-left space-y-1">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto font-heading font-black text-xl shadow-inner">
-                DORAT
+              <div className="w-16 h-16 flex items-center justify-center mx-auto">
+                <img
+                  src={company.logo_url || "/company-logo.svg"}
+                  alt="شعار الشركة"
+                  className="max-w-16 max-h-16 object-contain"
+                  onError={(e) => { e.currentTarget.src = "/company-logo.svg"; }}
+                />
               </div>
-              <div className="text-[10px] text-slate-400 font-mono">HR-VERIFIED-2026</div>
+              <div className="text-[10px] text-slate-400 font-mono text-center">HR-VERIFIED-2026</div>
             </div>
           </div>
 
