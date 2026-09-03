@@ -56,8 +56,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 
+import { useNavigate } from 'react-router-dom';
+import { isSpecializedRole, getSpecializedRoleInfo } from '@/components/DashboardViewSwitcherBar';
+
 export default function EmployeePortal() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'attendance' | 'requests' | 'payroll' | 'performance' | 'documents' | 'account'
@@ -266,7 +270,21 @@ export default function EmployeePortal() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isSpecializedRole(user?.role) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (user?.id) localStorage.setItem('hr_dashboard_view_mode_' + user.id, 'specialized');
+                  navigate('/');
+                }}
+                className="bg-slate-900/90 hover:bg-slate-800 text-emerald-400 border-emerald-500/40 text-xs font-bold rounded-2xl h-11 px-4 gap-2 shadow-md"
+              >
+                <RotateCw className="w-4 h-4" />
+                <span>العودة إلى {getSpecializedRoleInfo(user?.role).shortTitle}</span>
+              </Button>
+            )}
+
             <Button
               onClick={() => setNewRequestModal(true)}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg shadow-emerald-500/20 shrink-0"

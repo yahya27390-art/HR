@@ -93,15 +93,45 @@ import EmployeeDashboard from './EmployeeDashboard';
 import EmployeePortal from './EmployeePortal';
 import { useAuth as _useAuthForRoute } from '@/lib/AuthContext';
 
+import DashboardViewSwitcherBar, { isSpecializedRole } from '@/components/DashboardViewSwitcherBar';
+
 function DashboardRouter() {
   const { user } = _useAuthForRoute();
   const role = user?.role || 'employee';
-  if (role === 'owner') return <OwnerDashboard />;
-  if (role === 'accountant') return <AccountantDashboard />;
-  if (role === 'hr') return <HRDashboard />;
-  if (role === 'employee') return <EmployeePortal />;
-  if (role === 'system_admin') return <AdminDashboard />;
-  return <AdminDashboard />;
+
+  const [viewMode, setViewMode] = useState(() => {
+    if (user?.id) {
+      return localStorage.getItem('hr_dashboard_view_mode_' + user.id) || 'specialized';
+    }
+    return 'specialized';
+  });
+
+  const handleToggleMode = (mode) => {
+    setViewMode(mode);
+    if (user?.id) {
+      localStorage.setItem('hr_dashboard_view_mode_' + user.id, mode);
+    }
+  };
+
+  // Regular employees never see switcher and always get personal portal
+  if (!isSpecializedRole(role)) {
+    return <EmployeePortal />;
+  }
+
+  // Render the role-specific specialized dashboard
+  const renderSpecializedDashboard = () => {
+    if (role === 'owner' || role === 'general_manager') return <OwnerDashboard />;
+    if (role === 'accountant') return <AccountantDashboard />;
+    if (role === 'hr') return <HRDashboard />;
+    return <AdminDashboard />;
+  };
+
+  return (
+    <div className="space-y-4">
+      <DashboardViewSwitcherBar viewMode={viewMode} onToggleMode={handleToggleMode} />
+      {viewMode === 'employee' ? <EmployeePortal /> : renderSpecializedDashboard()}
+    </div>
+  );
 }
 export default DashboardRouter;
 function Dashboard_Internal() {
