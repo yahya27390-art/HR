@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 
 // Unified Company Profile & Logo Helper for Green Arrow HR
 export const DEFAULT_COMPANY_PROFILE = {
-  name: 'Green Arrow HR',
+  name: 'درة السيارة',
   legal_name: 'شركة درة السيارة لقطع غيار السيارات',
   name_ar: 'شركة درة السيارة لقطع غيار السيارات',
   name_en: 'DORAT AL-SAYARAH TRADING CO.',
@@ -11,7 +11,7 @@ export const DEFAULT_COMPANY_PROFILE = {
   tax_number: '311861381500003',
   phone: '+966 54 169 7999',
   address: 'المملكة العربية السعودية',
-  logo_url: '/company-logo.svg'
+  logo_url: '/company-logo.png'
 };
 
 export function getCompanyProfile() {
@@ -19,9 +19,12 @@ export function getCompanyProfile() {
     const saved = localStorage.getItem('hr_flow_company_profile') || localStorage.getItem('company_profile');
     if (saved) {
       const parsed = JSON.parse(saved);
-      const logo = (!parsed.logo_url || parsed.logo_url === '/green-arrow-logo.png')
-        ? '/company-logo.svg'
-        : parsed.logo_url;
+      const isOldLogo = !parsed.logo_url || 
+        parsed.logo_url === '/green-arrow-logo.png' || 
+        parsed.logo_url === '/company-logo.svg' || 
+        parsed.logo_url === '/dorat-cars-logo.svg';
+
+      const logo = isOldLogo ? '/company-logo.png' : parsed.logo_url;
 
       return {
         ...DEFAULT_COMPANY_PROFILE,
