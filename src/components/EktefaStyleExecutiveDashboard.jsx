@@ -45,6 +45,7 @@ import {
 import { getUnifiedRequests } from '@/lib/requestsEngine';
 import { getStoredEvaluations } from '@/lib/evaluationsEngine';
 import { getCompanyProfile } from '@/lib/companyProfile';
+import { hasRealBiometricPunches, calcActualMinutes } from '@/lib/payrollEngine';
 
 export default function EktefaStyleExecutiveDashboard() {
   const { user } = useAuth();
@@ -53,6 +54,7 @@ export default function EktefaStyleExecutiveDashboard() {
 
   const [employees, setEmployees] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [unifiedRequests, setUnifiedRequests] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,7 @@ export default function EktefaStyleExecutiveDashboard() {
   // Circulars Carousel Index
   const [circularIndex, setCircularIndex] = useState(0);
 
-  // Today Date String
+  // Real Current Date
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const todayDateFormatted = useMemo(() => {
     return new Date().toLocaleDateString('ar-SA', {
@@ -74,8 +76,56 @@ export default function EktefaStyleExecutiveDashboard() {
     });
   }, []);
 
-  // Sample Corporate Circulars for Dorat Al-Sayarah
-  const circularsList = [
+  // Official Announcements
+  const [announcementsList, setAnnouncementsList] = useState([]);
+
+  // Load Real Data strictly from Base44 DB and unified stores
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const [emps, logs, shs] = await Promise.all([
+          base44.entities.Employee.list(),
+          base44.entities.AttendanceLog.list('-log_date', 5000),
+          base44.entities.Shift.list()
+        ]);
+        setEmployees(emps || []);
+        setAttendanceLogs(logs || []);
+        setShifts(shs || []);
+        setUnifiedRequests(getUnifiedRequests());
+        setEvaluations(getStoredEvaluations());
+
+        // Load announcements from storage
+        try {
+          const rawAnn = localStorage.getItem('hr_flow_announcements');
+          if (rawAnn) {
+            const parsed = JSON.parse(rawAnn);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAnnouncementsList(parsed);
+            }
+          }
+        } catch (e) {}
+
+      } catch (e) {
+        console.error('Error loading dashboard data:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+
+    const handleReqUpdate = () => setUnifiedRequests(getUnifiedRequests());
+    const handleEvalUpdate = () => setEvaluations(getStoredEvaluations());
+    window.addEventListener('hr_requests_updated', handleReqUpdate);
+    window.addEventListener('hr_evaluations_updated', handleEvalUpdate);
+    return () => {
+      window.removeEventListener('hr_requests_updated', handleReqUpdate);
+      window.removeEventListener('hr_evaluations_updated', handleEvalUpdate);
+    };
+  }, []);
+
+  // Default company circulars if none created in system
+  const defaultCirculars = [
     {
       id: 'c1',
       title: 'إجازة عيد الفطر المبارك الرسمية',
@@ -116,74 +166,107 @@ export default function EktefaStyleExecutiveDashboard() {
     }
   ];
 
-  // Load All Data
-  useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true);
-        const [emps, logs] = await Promise.all([
-          base44.entities.Employee.list(),
-          base44.entities.AttendanceLog.list('-log_date', 1000)
-        ]);
-        setEmployees(emps || []);
-        setAttendanceLogs(logs || []);
-        setUnifiedRequests(getUnifiedRequests());
-        setEvaluations(getStoredEvaluations());
-      } catch (e) {
-        console.error('Error loading dashboard data:', e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
+  const activeCirculars = announcementsList.length > 0 ? announcementsList : defaultCirculars;
+  const currentCircular = activeCirculars[circularIndex] || activeCirculars[0];
 
-    const handleReqUpdate = () => setUnifiedRequests(getUnifiedRequests());
-    const handleEvalUpdate = () => setEvaluations(getStoredEvaluations());
-    window.addEventListener('hr_requests_updated', handleReqUpdate);
-    window.addEventListener('hr_evaluations_updated', handleEvalUpdate);
-    return () => {
-      window.removeEventListener('hr_requests_updated', handleReqUpdate);
-      window.removeEventListener('hr_evaluations_updated', handleEvalUpdate);
-    };
-  }, []);
-
-  // Compute Metrics
+  // ─── 1. REAL METRICS CALCULATION STRICTLY FROM DB ────────────────────────
   const metrics = useMemo(() => {
     const today = new Date();
     const in30 = new Date(today.getTime() + 30 * 86400000);
     const active = employees.filter(e => e.status === 'active');
     const onLeave = employees.filter(e => e.status === 'on_leave');
 
-    // Today Biometrics
+    // Real Today Biometrics
     const todayLogs = attendanceLogs.filter(l => l.log_date === todayStr);
-    const presentToday = todayLogs.filter(l => l.status === 'present' || l.check_in).length;
-    const absentToday = Math.max(0, active.length - presentToday - onLeave.length);
+    const presentTodayCount = todayLogs.filter(l => hasRealBiometricPunches(l) || l.status === 'present').length;
+    const absentTodayCount = Math.max(0, active.length - presentTodayCount - onLeave.length);
 
-    // Expiring IDs / Documents
+    // Expiring IDs / Documents in real database
     const expiringDocs = active.filter(e => {
       if (!e.id_expiry_date) return false;
       const d = new Date(e.id_expiry_date);
       return d <= in30 && d >= today;
     });
 
-    // Pending Requests
+    // Real Unified Requests
     const pendingRequests = unifiedRequests.filter(r => r.status === 'pending' || r.status === 'under_review');
     const approvedRequests = unifiedRequests.filter(r => r.status === 'approved');
 
+    // Real Hours Calculation for Current Month
+    const currentMonthPrefix = todayStr.slice(0, 7); // e.g. "2026-09"
+    const monthLogs = attendanceLogs.filter(l => (l.log_date || '').startsWith(currentMonthPrefix));
+    
+    let monthTotalActualMins = 0;
+    let monthTotalRequiredMins = 0;
+    monthLogs.forEach(l => {
+      const act = calcActualMinutes(l);
+      monthTotalActualMins += act;
+      monthTotalRequiredMins += 9 * 60; // standard 9 hours shift
+    });
+
+    const monthActualHours = Math.round((monthTotalActualMins / 60) * 10) / 10;
+    const monthRequiredHours = Math.round((monthTotalRequiredMins / 60) * 10) / 10 || (active.length * 30 * 9);
+    const monthProgressPercent = monthRequiredHours > 0 
+      ? Math.min(100, Math.round((monthActualHours / monthRequiredHours) * 100)) 
+      : 0;
+
+    // Real Hours for Current Week (Last 7 Days)
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 86400000).toISOString().split('T')[0];
+    const weekLogs = attendanceLogs.filter(l => l.log_date >= sevenDaysAgo && l.log_date <= todayStr);
+    
+    let weekTotalActualMins = 0;
+    let weekTotalRequiredMins = (active.length * 6 * 9 * 60); // 6 working days * 9 hrs
+    weekLogs.forEach(l => {
+      weekTotalActualMins += calcActualMinutes(l);
+    });
+
+    const weekActualHours = Math.round((weekTotalActualMins / 60) * 10) / 10;
+    const weekRequiredHours = Math.round((weekTotalRequiredMins / 60) * 10) / 10;
+    const weekProgressPercent = weekRequiredHours > 0 
+      ? Math.min(100, Math.round((weekActualHours / weekRequiredHours) * 100)) 
+      : 0;
+
+    // Real Attendance Rate over the last 30 days
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 86400000).toISOString().split('T')[0];
+    const last30DaysLogs = attendanceLogs.filter(l => l.log_date >= thirtyDaysAgo && l.log_date <= todayStr);
+    const validPunchesIn30Days = last30DaysLogs.filter(l => hasRealBiometricPunches(l)).length;
+    const totalExpectedWorkingSlots = Math.max(1, active.length * 26); // 26 working days approx
+    const realAttendanceRate30Days = Math.min(100, Math.round((validPunchesIn30Days / totalExpectedWorkingSlots) * 100));
+
     return {
-      totalEmployees: employees.length || 6,
-      activeCount: active.length || 6,
-      onLeaveCount: onLeave.length || 0,
-      presentToday: presentToday || 5,
-      absentToday: absentToday || 1,
-      expiringDocsCount: expiringDocs.length || 2,
+      totalEmployees: employees.length,
+      activeCount: active.length,
+      onLeaveCount: onLeave.length,
+      presentToday: presentTodayCount,
+      absentToday: absentTodayCount,
+      expiringDocsCount: expiringDocs.length,
       pendingRequestsCount: pendingRequests.length,
       approvedRequestsCount: approvedRequests.length,
-      evaluationsCount: evaluations.length
+      evaluationsCount: evaluations.length,
+      monthActualHours,
+      monthRequiredHours,
+      monthProgressPercent,
+      weekActualHours,
+      weekRequiredHours,
+      weekProgressPercent,
+      realAttendanceRate30Days
     };
   }, [employees, attendanceLogs, unifiedRequests, evaluations, todayStr]);
 
-  const currentCircular = circularsList[circularIndex] || circularsList[0];
+  // ─── 2. REAL PUNCHES FOR LOGGED-IN USER TODAY ─────────────────────────────
+  const todayUserLog = useMemo(() => {
+    if (!user) return null;
+    const clean = (v) => String(v || '').replace('emp_', '').trim();
+    const userId = clean(user.id);
+    const userEmpNum = clean(user.employee_number || user.employee_id);
+
+    return attendanceLogs.find(l => {
+      if (l.log_date !== todayStr) return false;
+      const lId = clean(l.employee_id || l.user_id);
+      const lNum = clean(l.employee_number);
+      return (lId && (lId === userId || lId === userEmpNum)) || (lNum && (lNum === userEmpNum || lNum === userId));
+    }) || null;
+  }, [attendanceLogs, user, todayStr]);
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-16 font-sans select-none" dir="rtl">
@@ -217,14 +300,14 @@ export default function EktefaStyleExecutiveDashboard() {
           </div>
         </div>
 
-        {/* Left: Quick Actions Badge & Search */}
+        {/* Left: Quick Refresh & Employee Directory */}
         <div className="flex items-center gap-2 self-end sm:self-center">
           <Button
             size="sm"
             variant="outline"
             onClick={() => window.location.reload()}
             className="rounded-xl text-xs h-9 px-3 gap-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-            title="تحديث البيانات"
+            title="تحديث البيانات اللحظية من قاعدة البيانات"
           >
             <RotateCw className="w-3.5 h-3.5" />
             <span>تحديث</span>
@@ -354,15 +437,18 @@ export default function EktefaStyleExecutiveDashboard() {
       <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 pb-2">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
-            { id: 'overview', label: 'نظرة عامة' },
-            { id: 'team', label: 'فريقي والفروع' },
-            { id: 'attendance', label: 'الحضور والانصراف' },
-            { id: 'payroll', label: 'مسيرات الرواتب' },
-            { id: 'evaluations', label: 'تقييم الأداء (KPIs)' }
+            { id: 'overview', label: 'نظرة عامة', path: '/' },
+            { id: 'team', label: 'فريقي والفروع', path: '/employees' },
+            { id: 'attendance', label: 'الحضور والانصراف', path: '/attendance' },
+            { id: 'payroll', label: 'مسيرات الرواتب', path: '/payroll' },
+            { id: 'evaluations', label: 'تقييم الأداء (KPIs)', path: '/evaluations' }
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.path !== '/') navigate(tab.path);
+              }}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
                 activeTab === tab.id
                   ? 'bg-slate-900 text-white dark:bg-emerald-600 shadow-sm'
@@ -375,11 +461,11 @@ export default function EktefaStyleExecutiveDashboard() {
         </div>
 
         <Badge variant="outline" className="font-mono text-xs text-muted-foreground hidden sm:inline-flex">
-          {metrics.totalEmployees} موظفين مسجلين
+          {metrics.totalEmployees} موظفين مسجلين بقاعدة البيانات
         </Badge>
       </div>
 
-      {/* ─── 4. MAIN CENTRAL SECTION: 3-BOX ATTENDANCE HUB & CIRCULARS ───────── */}
+      {/* ─── 4. MAIN CENTRAL SECTION: 3-BOX REAL ATTENDANCE HUB & CIRCULARS ──── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
         {/* ─── CENTER/RIGHT: 3-BOX ATTENDANCE & BIOMETRICS DASHBOARD (8 COLS) ── */}
@@ -390,9 +476,9 @@ export default function EktefaStyleExecutiveDashboard() {
             {/* Header: Shift Title & Date */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <span className="text-[10px] text-muted-foreground font-bold">الوردية ومواعيد العمل المعتمدة</span>
+                <span className="text-[10px] text-muted-foreground font-bold">الوردية ومواعيد العمل الفعلية اليوم</span>
                 <h3 className="text-base font-heading font-black text-foreground">
-                  وردية كادر الفروع والمبيعات (فترتين صباحية ومسائية)
+                  {user?.shift || 'وردية كادر الفروع والمبيعات (فترتين)'}
                 </h3>
               </div>
 
@@ -403,85 +489,116 @@ export default function EktefaStyleExecutiveDashboard() {
               </div>
             </div>
 
-            {/* 3 Columns Sub-Grid */}
+            {/* 3 Columns Sub-Grid with Real Dynamic DB Data */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
               
-              {/* Box 1: 4 Today's Punch Boxes (4 Cols) */}
+              {/* Box 1: Real Today's Punch Boxes (5 Cols) */}
               <div className="md:col-span-5 space-y-2.5">
                 <div className="grid grid-cols-2 gap-2 text-center text-xs">
                   
                   {/* Period 1 Check-In */}
                   <div className="p-3 rounded-2xl bg-sky-50/80 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-800">
                     <div className="text-[10px] text-sky-800 dark:text-sky-300 font-bold">دخول صباحي</div>
-                    <div className="font-mono font-black text-base text-sky-600 mt-0.5">08:00 ص</div>
-                    <div className="text-[9px] text-slate-500 mt-0.5">في الموعد المحدد ✓</div>
+                    <div className="font-mono font-black text-base text-sky-600 mt-0.5">
+                      {todayUserLog?.period_1_in || (todayUserLog?.check_in ? (todayUserLog.check_in.includes('T') ? todayUserLog.check_in.slice(11, 16) : todayUserLog.check_in.slice(0, 5)) : '--:--')}
+                    </div>
+                    <div className="text-[9px] text-slate-500 mt-0.5">
+                      {todayUserLog?.period_1_in || todayUserLog?.check_in ? 'تم تسجيل البصمة ✓' : 'بانتظار البصمة'}
+                    </div>
                   </div>
 
                   {/* Period 1 Check-Out */}
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <div className="text-[10px] text-muted-foreground font-bold">خروج صباحي</div>
-                    <div className="font-mono font-black text-base text-slate-700 dark:text-slate-300 mt-0.5">12:00 م</div>
-                    <div className="text-[9px] text-slate-500 mt-0.5">نهاية الفترة 1</div>
+                    <div className="font-mono font-black text-base text-slate-700 dark:text-slate-300 mt-0.5">
+                      {todayUserLog?.period_1_out || '--:--'}
+                    </div>
+                    <div className="text-[9px] text-slate-500 mt-0.5">
+                      {todayUserLog?.period_1_out ? 'تم الخروج ✓' : 'الفترة الصباحية'}
+                    </div>
                   </div>
 
                   {/* Period 2 Check-In */}
                   <div className="p-3 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
                     <div className="text-[10px] text-emerald-800 dark:text-emerald-300 font-bold">دخول مسائي</div>
-                    <div className="font-mono font-black text-base text-emerald-600 mt-0.5">04:00 م</div>
-                    <div className="text-[9px] text-slate-500 mt-0.5">الفترة الرئيسية</div>
+                    <div className="font-mono font-black text-base text-emerald-600 mt-0.5">
+                      {todayUserLog?.period_2_in || '--:--'}
+                    </div>
+                    <div className="text-[9px] text-slate-500 mt-0.5">
+                      {todayUserLog?.period_2_in ? 'تم تسجيل البصمة ✓' : 'الفترة المسائية'}
+                    </div>
                   </div>
 
                   {/* Period 2 Check-Out */}
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <div className="text-[10px] text-muted-foreground font-bold">خروج مسائي</div>
-                    <div className="font-mono font-black text-base text-slate-700 dark:text-slate-300 mt-0.5">10:00 م</div>
-                    <div className="text-[9px] text-slate-500 mt-0.5">إغلاق الفرع</div>
+                    <div className="font-mono font-black text-base text-slate-700 dark:text-slate-300 mt-0.5">
+                      {todayUserLog?.period_2_out || (todayUserLog?.check_out ? (todayUserLog.check_out.includes('T') ? todayUserLog.check_out.slice(11, 16) : todayUserLog.check_out.slice(0, 5)) : '--:--')}
+                    </div>
+                    <div className="text-[9px] text-slate-500 mt-0.5">
+                      {todayUserLog?.period_2_out || todayUserLog?.check_out ? 'تم تسجيل الانصراف ✓' : 'نهاية الدوام'}
+                    </div>
                   </div>
 
                 </div>
 
                 <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-center text-[10.5px] font-bold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>مواقع الفروع: الفرع الرئيسي • فرع هيونداي • فرع كيا</span>
+                  <span>الفرع المعتمد: {user?.branch_name || user?.branch || 'الفرع الرئيسي (بريدة)'}</span>
                 </div>
               </div>
 
-              {/* Box 2: Working Hours Progress (4 Cols) */}
+              {/* Box 2: Real Working Hours Progress from Database (4 Cols) */}
               <div className="md:col-span-4 p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-4 text-xs">
-                <div className="font-heading font-black text-foreground text-xs border-b pb-1.5">
-                  📊 إحصائيات إنجاز الساعات
+                <div className="font-heading font-black text-foreground text-xs border-b pb-1.5 flex items-center justify-between">
+                  <span>📊 إنجاز ساعات العمل الموثقة</span>
+                  <Badge variant="outline" className="text-[9px] font-mono font-bold">من واقع البصمات</Badge>
                 </div>
 
                 {/* This Week */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-bold text-slate-700 dark:text-slate-300">هذا الأسبوع</span>
-                    <span className="font-mono text-sky-600 font-black">26:30 / 52:00 س</span>
+                    <span className="font-mono text-sky-600 font-black">
+                      {metrics.weekActualHours} / {metrics.weekRequiredHours} س
+                    </span>
                   </div>
                   <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-sky-500 rounded-full" style={{ width: '51%' }} />
+                    <div 
+                      className="h-full bg-sky-500 rounded-full transition-all duration-500" 
+                      style={{ width: `${metrics.weekProgressPercent}%` }} 
+                    />
                   </div>
-                  <div className="text-[9.5px] text-muted-foreground text-left font-mono">51.0% مكتمل</div>
+                  <div className="text-[9.5px] text-muted-foreground text-left font-mono">
+                    {metrics.weekProgressPercent}% منجز
+                  </div>
                 </div>
 
                 {/* This Month */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-slate-700 dark:text-slate-300">هذا الشهر</span>
-                    <span className="font-mono text-emerald-600 font-black">168:00 / 224:00 س</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">شهر ({todayStr.slice(0, 7)})</span>
+                    <span className="font-mono text-emerald-600 font-black">
+                      {metrics.monthActualHours} / {metrics.monthRequiredHours} س
+                    </span>
                   </div>
                   <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '75%' }} />
+                    <div 
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                      style={{ width: `${metrics.monthProgressPercent}%` }} 
+                    />
                   </div>
-                  <div className="text-[9.5px] text-muted-foreground text-left font-mono">75.0% مكتمل</div>
+                  <div className="text-[9.5px] text-muted-foreground text-left font-mono">
+                    {metrics.monthProgressPercent}% منجز
+                  </div>
                 </div>
               </div>
 
-              {/* Box 3: Attendance Donut Chart / Breakdown (3 Cols) */}
+              {/* Box 3: Real Attendance Donut Chart / Breakdown (3 Cols) */}
               <div className="md:col-span-3 p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex flex-col items-center justify-center text-center space-y-2">
-                <div className="text-[10px] text-muted-foreground font-bold">نسبة الحضور آخر 30 يوماً</div>
+                <div className="text-[10px] text-muted-foreground font-bold">نسبة الحضور الفعلي آخر 30 يوماً</div>
                 
-                {/* Visual SVG Donut Indicator */}
+                {/* Visual SVG Donut Indicator based on Real DB Data */}
                 <div className="relative w-20 h-20 flex items-center justify-center">
                   <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
                     <path
@@ -493,7 +610,7 @@ export default function EktefaStyleExecutiveDashboard() {
                     />
                     <path
                       className="text-emerald-500"
-                      strokeDasharray="88, 100"
+                      strokeDasharray={`${metrics.realAttendanceRate30Days}, 100`}
                       strokeWidth="4"
                       strokeLinecap="round"
                       stroke="currentColor"
@@ -502,12 +619,12 @@ export default function EktefaStyleExecutiveDashboard() {
                     />
                   </svg>
                   <div className="absolute font-heading font-black text-sm text-foreground">
-                    88%
+                    {metrics.realAttendanceRate30Days}%
                   </div>
                 </div>
 
                 <div className="text-[10px] text-emerald-600 font-bold">
-                  انضباط عالي المستوى ✓
+                  {metrics.realAttendanceRate30Days >= 80 ? 'انضباط ممتاز ✓' : (metrics.realAttendanceRate30Days > 0 ? 'متابعة دورية' : 'بانتظار تسجيل البصمات')}
                 </div>
               </div>
 
@@ -533,7 +650,7 @@ export default function EktefaStyleExecutiveDashboard() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => setCircularIndex(prev => (prev - 1 + circularsList.length) % circularsList.length)}
+                  onClick={() => setCircularIndex(prev => (prev - 1 + activeCirculars.length) % activeCirculars.length)}
                   className="w-7 h-7 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -541,7 +658,7 @@ export default function EktefaStyleExecutiveDashboard() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => setCircularIndex(prev => (prev + 1) % circularsList.length)}
+                  onClick={() => setCircularIndex(prev => (prev + 1) % activeCirculars.length)}
                   className="w-7 h-7 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -555,26 +672,30 @@ export default function EktefaStyleExecutiveDashboard() {
                 <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
                   تعميم رقم {circularIndex + 1}
                 </Badge>
-                <span className="text-[10.5px] font-mono text-muted-foreground">{currentCircular.date}</span>
+                <span className="text-[10.5px] font-mono text-muted-foreground">{currentCircular?.date || currentCircular?.created_at || todayStr}</span>
               </div>
 
               <h4 className="font-heading font-black text-sm text-foreground">
-                {currentCircular.title}
+                {currentCircular?.title || 'تعميم إداري'}
               </h4>
               <p className="text-[11px] text-muted-foreground font-medium">
-                {currentCircular.subtitle}
+                {currentCircular?.subtitle || currentCircular?.summary || ''}
               </p>
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
-                {currentCircular.content.map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-1.5">
-                    <span className="text-emerald-500 font-bold shrink-0">•</span>
-                    <span>{item}</span>
-                  </div>
-                ))}
+                {Array.isArray(currentCircular?.content) ? (
+                  currentCircular.content.map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-1.5">
+                      <span className="text-emerald-500 font-bold shrink-0">•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="leading-relaxed">{currentCircular?.content || currentCircular?.body || 'نص التعميم الإداري المعتمد.'}</p>
+                )}
               </div>
 
-              {currentCircular.note && (
+              {currentCircular?.note && (
                 <div className="text-[10.5px] text-amber-600 dark:text-amber-400 font-bold pt-1">
                   💡 {currentCircular.note}
                 </div>
@@ -592,7 +713,7 @@ export default function EktefaStyleExecutiveDashboard() {
                 عرض كافة التعاميم الإدارية ➔
               </Button>
               <span className="text-[10px] font-mono text-muted-foreground">
-                {circularIndex + 1} من {circularsList.length}
+                {circularIndex + 1} من {activeCirculars.length}
               </span>
             </div>
 
@@ -602,10 +723,10 @@ export default function EktefaStyleExecutiveDashboard() {
 
       </div>
 
-      {/* ─── 5. BOTTOM KPI COUNTERS ROW (Ektefa Bottom Bar Style) ────────────── */}
+      {/* ─── 5. BOTTOM KPI COUNTERS ROW (Real Database Counts) ────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         
-        {/* 1. Pending Requests */}
+        {/* 1. Pending Requests (Real DB Count) */}
         <Card 
           onClick={() => navigate('/approvals')}
           className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card shadow-sm hover:border-amber-500 transition-all cursor-pointer group flex items-center justify-between"
@@ -624,7 +745,7 @@ export default function EktefaStyleExecutiveDashboard() {
           </div>
         </Card>
 
-        {/* 2. Approved Requests */}
+        {/* 2. Approved Requests (Real DB Count) */}
         <Card 
           onClick={() => navigate('/approvals')}
           className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card shadow-sm hover:border-emerald-500 transition-all cursor-pointer group flex items-center justify-between"
@@ -643,26 +764,26 @@ export default function EktefaStyleExecutiveDashboard() {
           </div>
         </Card>
 
-        {/* 3. Internal Inbox */}
+        {/* 3. Today Present vs Absent (Real Attendance DB Count) */}
         <Card 
-          onClick={() => navigate('/announcements?tab=inbox')}
+          onClick={() => navigate('/attendance')}
           className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card shadow-sm hover:border-sky-500 transition-all cursor-pointer group flex items-center justify-between"
         >
           <div className="space-y-0.5">
-            <div className="text-[11px] text-muted-foreground font-bold">الصندوق الوارد الداخلي</div>
-            <div className="text-2xl font-black font-mono text-sky-600">
-              0
+            <div className="text-[11px] text-muted-foreground font-bold">حضور اليوم بالبصمة</div>
+            <div className="text-2xl font-black font-mono text-emerald-600">
+              {metrics.presentToday} <span className="text-xs text-muted-foreground font-normal font-sans">/ {metrics.activeCount}</span>
             </div>
             <div className="text-[10px] text-muted-foreground group-hover:text-sky-600 transition-colors">
-              الرسائل الإدارية
+              الغياب المسجل اليوم: {metrics.absentToday}
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-600 flex items-center justify-center font-bold">
-            <Mail className="w-5 h-5" />
+            <Clock className="w-5 h-5" />
           </div>
         </Card>
 
-        {/* 4. Expiring IDs & Alerts */}
+        {/* 4. Expiring IDs & Alerts (Real DB Count) */}
         <Card 
           onClick={() => navigate('/alerts')}
           className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card shadow-sm hover:border-rose-500 transition-all cursor-pointer group flex items-center justify-between"
