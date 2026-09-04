@@ -106,6 +106,16 @@ export default function Header({ onOpenMobileMenu }) {
           <span className="font-sans text-[11px]">{lang === 'ar' ? 'EN' : 'عربي'}</span>
         </Button>
 
+        {/* National Day Landing Link */}
+        <Link
+          to="/national-day"
+          target="_blank"
+          className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-bold transition shadow-sm"
+        >
+          <span>🇸🇦</span>
+          <span>صفحة اليوم الوطني</span>
+        </Link>
+
         {/* Privacy Mask Toggle */}
         <div className="hidden sm:block">
           <PrivacyMaskToggle />
