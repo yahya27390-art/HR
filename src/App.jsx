@@ -44,8 +44,6 @@ import ApprovalsCenter from '@/pages/ApprovalsCenter';
 import AlertsCenter from '@/pages/AlertsCenter';
 import MyRequests from '@/pages/MyRequests';
 
-import NationalDayLanding from '@/pages/NationalDayLanding';
-
 const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
 
@@ -63,12 +61,6 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
-      {/* Public Marketing & National Day Ad Campaign Landing Pages */}
-      <Route path="/national-day" element={<NationalDayLanding />} />
-      <Route path="/offers" element={<NationalDayLanding />} />
-      <Route path="/saudi-national-day" element={<NationalDayLanding />} />
-      <Route path="/landing" element={<NationalDayLanding />} />
-
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

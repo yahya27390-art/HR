@@ -311,22 +311,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* National Day Ad & Campaign Direct Link */}
-          <Link
-            to="/national-day"
-            className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border border-emerald-500/40 text-xs flex items-center justify-between gap-2 text-emerald-300 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-950/30 transition group"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-base">🇸🇦</span>
-              <span className="font-bold text-white group-hover:text-emerald-300 transition">
-                عروض اليوم الوطني الكبرى | درة السيارة
-              </span>
-            </div>
-            <span className="text-[10.5px] font-black px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-              صفحة الإعلانات ➔
-            </span>
-          </Link>
-
           {/* Session Inactivity Timeout Notice */}
           {isTimeout && (
             <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-sm animate-fade-in">
