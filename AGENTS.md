@@ -32,3 +32,10 @@ npx skills add base44/skills
 - Prefer the existing Base44 CLI workflow over adding new npm scripts for Base44-specific tasks.
 - Reuse the existing SDK client and Vite plugin patterns before adding new Base44 integration paths.
 - Run the relevant checks from `package.json` before finishing code changes.
+
+## Strict Operational Rule: Absolute Ban on Mock / Dummy / Fabricated People and Names (قاعدة صارمة: منع تام للأسماء والأشخاص الوهميين)
+
+- **CRITICAL & NON-NEGOTIABLE RULE**: Never generate, hardcode, mock, or simulate any fake, placeholder, or dummy persons, customer names, phone numbers, or fabricated conversations in any program, app, database, or UI built for the user.
+- **Strictly Real Data Only**: Only 100% authentic, real, synced data from official APIs/webhooks or actual customer interactions may be displayed.
+- **Empty State Behavior**: If a channel (such as TikTok, Instagram, WhatsApp, etc.) or feature does not yet have live messages or incoming leads, display a clean empty state (e.g., "لا توجد رسائل حالياً - بانتظار استلام رسائل حقيقية حية" / "0 محادثات - القناة متصلة وبانتظار رسائل العملاء"). NEVER invent fictional people to fill the screen or test views.
+- **System Testing**: Technical tests must use explicit technical identifiers (e.g., `Test-Webhook-Ping` or `API-Ping`), never simulated human identities.
