@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { cleanCell } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { Card } from '@/components/ui/card';
@@ -260,9 +261,10 @@ export default function Allowances() {
                 const basic = Number(e.salary) || 0;
                 return [
                   e.employee_number,
-                  `"${e.full_name}"`,
-                  `"${e.branch_name || ''}"`,
-                  `"${e.department_name || ''}"`,
+                  // [Security] cleanCell prevents formula injection on string fields.
+                  `"${cleanCell(e.full_name)}"`,
+                  `"${cleanCell(e.branch_name || '')}"`,
+                  `"${cleanCell(e.department_name || '')}"`,
                   basic,
                   h,
                   t,

@@ -57,6 +57,12 @@ import {
   unlockMonthlyPayroll,
   isMonthLocked
 } from '@/lib/payrollEngine';
+import {
+  validateWpsCompliance,
+  downloadWpsSif,
+  downloadPayrollCsvFile,
+  getBankFromIban
+} from '@/lib/wpsEngine';
 import PayslipPrint from '@/components/PayslipPrint';
 import AdvancePrintModal from '@/components/AdvancePrintModal';
 import BiometricsPrintModal from '@/components/BiometricsPrintModal';
@@ -237,6 +243,7 @@ export default function Payroll() {
   const [lockedArchives, setLockedArchives] = useState([]);
 
   // Modals & Dialogs
+  const [wpsModalOpen, setWpsModalOpen] = useState(false);
   const [selectedForPayslip, setSelectedForPayslip] = useState(null);
   const [selectedForBioPrint, setSelectedForBioPrint] = useState(null);
   const [editPunchModal, setEditPunchModal] = useState(null); // { log, emp }
@@ -417,6 +424,19 @@ export default function Payroll() {
       totalAdditions: 0, totalDeductions: 0, net: 0
     });
   }, [filteredPayrolls]);
+
+  // Company Profile for WPS and SAMA Banking
+  const companyProfile = useMemo(() => ({
+    cr_number: '7016475555',
+    legal_name: 'HR DORAT CARS',
+    name: 'درة السيارة لقطع غيار السيارات',
+    bank_code: 'RJHI'
+  }), []);
+
+  // Realtime WPS Compliance Analysis
+  const wpsAnalysis = useMemo(() => {
+    return validateWpsCompliance(allPayrolls, companyProfile);
+  }, [allPayrolls, companyProfile]);
 
   // ─── ACTION HANDLERS ────────────────────────────────────────────────────────
 
@@ -2155,6 +2175,72 @@ export default function Payroll() {
                   )}
                 </div>
               </div>
+              {/* WPS Compliance & Export Actions Bar */}
+              <div className="bg-card border-2 border-emerald-500/30 rounded-3xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-heading font-black text-sm text-foreground">
+                          جاهزية نظام حماية الأجور (WPS / منصة مدد)
+                        </h3>
+                        <Badge className={`${wpsAnalysis.isReady ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'} text-[10px] font-bold`}>
+                          {wpsAnalysis.complianceRate}% مطابق
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        فحص تدقيق أرقام الهويات والآيبان (IBAN) وسقف الاستقطاعات (المادة 92) لكافة الموظفين
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Export Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        try {
+                          const filename = downloadPayrollCsvFile(filteredPayrolls, monthPrefix);
+                          toast({ title: '✓ تم تصدير مسير الرواتب المعتمد', description: `تم حفظ الملف: ${filename} (محمي أمنياً ضد Formula Injection)` });
+                        } catch (e) {
+                          toast({ title: 'خطأ في التصدير', description: e.message, variant: 'destructive' });
+                        }
+                      }}
+                      className="rounded-2xl text-xs font-bold h-10 px-4 gap-2 border-emerald-300 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 shadow-sm"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>تصدير مسير الرواتب (Excel / CSV)</span>
+                    </Button>
+
+                    <Button
+                      onClick={() => setWpsModalOpen(true)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black h-10 px-4 gap-2 shadow-md shadow-emerald-600/20"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>تصدير ملف حماية الأجور (WPS SIF)</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Compliance Indicator Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border flex items-center justify-between">
+                    <span className="text-muted-foreground font-medium">إجمالي الموظفين بالمسير:</span>
+                    <span className="font-bold font-mono">{wpsAnalysis.totalEmployees} موظف</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 text-emerald-900 dark:text-emerald-200 flex items-center justify-between">
+                    <span className="font-medium">الموظفون المطابقون 100%:</span>
+                    <span className="font-black font-mono">{wpsAnalysis.compliantCount} موظف ✓</span>
+                  </div>
+                  <div className={`p-2.5 rounded-xl border flex items-center justify-between ${wpsAnalysis.nonCompliantCount > 0 ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 text-amber-900 dark:text-amber-200' : 'bg-slate-50 dark:bg-slate-900/60'}`}>
+                    <span className="font-medium">بحاجة لاستكمال بيانات:</span>
+                    <span className="font-black font-mono">{wpsAnalysis.nonCompliantCount} موظف {wpsAnalysis.nonCompliantCount > 0 && '⚠️'}</span>
+                  </div>
+                </div>
+              </div>
 
               {/* Quick Summary KPI Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2206,6 +2292,7 @@ export default function Payroll() {
                         <th className="py-3.5 px-3 text-emerald-300">الإضافي والمكافآت ↗</th>
                         <th className="py-3.5 px-3 text-rose-300">الاستقطاعات والخصم ↘</th>
                         <th className="py-3.5 px-3 text-center">التأمينات</th>
+                        <th className="py-3.5 px-3 text-center">مطابقة WPS</th>
                         <th className="py-3.5 px-4 text-center bg-emerald-950/80 text-emerald-300 text-sm">صافي المستحق</th>
                         <th className="py-3.5 px-4 text-center">الإجراءات</th>
                       </tr>
@@ -2222,6 +2309,21 @@ export default function Payroll() {
                           <td className="py-3 px-3 font-mono font-bold text-rose-600">-{fmtNum(pr.totalDeductions)}</td>
                           <td className="py-3 px-3 text-center">
                             {pr.isInsured ? <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">🛡️ مؤمن</Badge> : <span className="text-muted-foreground/60 text-[10px]">غير مسجل</span>}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {pr.isDeductionCeilingExceeded ? (
+                              <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold" title="الاستقطاعات تتجاوز 50% من الراتب الأساسي (المادة 92)">
+                                ⚠️ تجاوز 50%
+                              </Badge>
+                            ) : !pr.emp.iban ? (
+                              <Badge className="bg-rose-100 text-rose-800 border-rose-200 text-[10px] font-bold" title="لا يوجد آيبان مسجل">
+                                بلا آيبان
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-bold">
+                                مطابق ✓
+                              </Badge>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-center font-mono font-black text-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30 text-sm">
                             {fmtNum(pr.netSalary)}
@@ -3587,6 +3689,127 @@ function AdvancesManagementHub({ employees, advancesList, onRefresh, onOpenNewAd
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── WPS SIF EXPORT & PRE-SUBMISSION DIALOG ─────────────────────────── */}
+      <Dialog open={wpsModalOpen} onOpenChange={setWpsModalOpen}>
+        <DialogContent className="max-w-2xl rounded-3xl p-6" dir="rtl">
+          <DialogHeader className="border-b pb-3">
+            <DialogTitle className="flex items-center gap-2.5 text-base font-heading font-black text-foreground">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <span>تصدير ملف نظام حماية الأجور (WPS SIF / منصة مدد)</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 text-xs py-2">
+            {/* Header info cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border">
+                <span className="text-[11px] text-muted-foreground block">رقم المنشأة / السجل</span>
+                <span className="font-mono font-bold text-foreground text-xs">{companyProfile.cr_number}</span>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border">
+                <span className="text-[11px] text-muted-foreground block">البنك الرئيسي</span>
+                <span className="font-mono font-bold text-foreground text-xs">{companyProfile.bank_code} (الراجحي)</span>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border">
+                <span className="text-[11px] text-muted-foreground block">إجمالي الرواتب</span>
+                <span className="font-mono font-bold text-emerald-600 text-xs">{fmtNum(wpsAnalysis.totalSalaries)} ر.س</span>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border">
+                <span className="text-[11px] text-muted-foreground block">نسبة المطابقة</span>
+                <span className={`font-mono font-bold text-xs ${wpsAnalysis.isReady ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {wpsAnalysis.complianceRate}%
+                </span>
+              </div>
+            </div>
+
+            {/* Validation Feedback */}
+            {wpsAnalysis.issues.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span>تنبيهات وملاحظات قبل رفع الملف على منصة مدد ({wpsAnalysis.issues.length} موظف):</span>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 text-[11px]">
+                  {wpsAnalysis.issues.map((iss, i) => (
+                    <div key={i} className="flex flex-col border-b border-amber-200/50 pb-1.5 last:border-b-0 last:pb-0">
+                      <div className="font-bold text-foreground flex items-center justify-between">
+                        <span>{iss.employeeName} (#{iss.employeeNumber})</span>
+                        <span className="font-mono text-muted-foreground">{fmtNum(iss.netSalary)} ر.س</span>
+                      </div>
+                      <div className="space-y-0.5 mt-0.5 text-rose-700 dark:text-rose-400">
+                        {iss.errors.map((err, eIdx) => (
+                          <div key={eIdx}>• {err.message}</div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  * يفضل استكمال بيانات الآيبان وأرقام الهويات للموظفين عبر شاشة الموظفين لضمان قبول الملف 100% في منصة مدد والبنك.
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 text-emerald-900 dark:text-emerald-200 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <div>
+                  <div className="font-bold text-xs">كافة السجلات مطابقة 100% لمتطلبات منصة مدد!</div>
+                  <div className="text-[11px] text-emerald-800 dark:text-emerald-300">جميع الموظفين لديهم أرقام هويات سارية وآيبانات بنكية صحيحة واستقطاعات متوافقة مع المادة 92.</div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl border text-[11px] text-muted-foreground space-y-1">
+              <div className="font-bold text-foreground">💡 تفاصيل صيغة ملف SIF المتوافق:</div>
+              <div>• يتضمن سطر التحكم بالرواتب (SCR) برقم المنشأة وتاريخ الصرف بالعملة الرسمية SAR.</div>
+              <div>• يتضمن سجلات تفاصيل الموظفين (EDR) بالأجر الأساسي، بدل السكن، البدلات الأخرى، والاستقطاعات.</div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-start pt-3 border-t">
+            <Button
+              onClick={() => {
+                try {
+                  const filename = downloadWpsSif(allPayrolls, monthPrefix, companyProfile);
+                  toast({ title: '✓ تم تصدير ملف حماية الأجور', description: `تم حفظ الملف بصيغة SIF القياسية: ${filename}` });
+                  setWpsModalOpen(false);
+                } catch (e) {
+                  toast({ title: 'خطأ في تصدير الملف', description: e.message, variant: 'destructive' });
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black h-10 px-5 gap-2 shadow-md shadow-emerald-600/20"
+            >
+              <Download className="w-4 h-4" />
+              <span>تحميل ملف SIF القياسي المعتمد (.sif)</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                try {
+                  const filename = downloadPayrollCsvFile(allPayrolls, monthPrefix);
+                  toast({ title: '✓ تم تصدير كشف المسير CSV', description: `تم حفظ الملف: ${filename}` });
+                } catch (e) {
+                  toast({ title: 'خطأ في التصدير', description: e.message, variant: 'destructive' });
+                }
+              }}
+              className="rounded-2xl text-xs font-bold h-10 px-4 gap-2"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>تحميل كشف Excel / CSV</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setWpsModalOpen(false)}
+              className="rounded-2xl text-xs font-bold h-10"
+            >
+              إغلاق
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

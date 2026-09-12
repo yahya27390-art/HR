@@ -28,6 +28,12 @@ dist-ssr
 *.sw?
 
 .env
+
+# Standalone Independent Projects
+bi-platform/
+
 .vite
 base44/.app.jsonc
 dora-cars/
+scratch/
+

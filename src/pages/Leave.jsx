@@ -31,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
+import { sanitizeXlsxRows } from '@/lib/security';
 
 export default function Leave() {
   const { user } = useAuth();
@@ -213,7 +214,8 @@ export default function Leave() {
       'حالة الرصيد': item.isExceeded ? '⚠️ تجاوز الرصيد المسموح' : (item.isDepleted ? 'استنفد الرصيد بالكامل' : 'ضمن الرصيد المتاح ✓')
     }));
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    // [Security] Sanitize before writing to prevent Formula Injection in XLSX.
+    const ws = XLSX.utils.json_to_sheet(sanitizeXlsxRows(dataToExport));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'مراجعة الإجازات السنوية 2026');
     XLSX.writeFile(wb, `تقرير_أرصدة_الإجازات_والغياب_السنوي_${new Date().toISOString().split('T')[0]}.xlsx`);

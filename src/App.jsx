@@ -104,6 +104,7 @@ const AuthenticatedApp = () => {
           <Route path="/my-requests" element={<MyRequests />} />
         </Route>
       </Route>
+
       <Route path="*" element={<PageNotFound />} />
         </Routes>
   );

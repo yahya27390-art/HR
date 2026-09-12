@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { sanitizeCsvRow } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -274,17 +275,20 @@ export default function Attendance() {
       return;
     }
     const headers = ['الموظف', 'الرقم الوظيفي', 'الفرع', 'الإدارة', 'المصدر', 'الطابع الزمني', 'التاريخ المدرج'];
-    const rows = filteredPunches.map(p => [
-      p.employee_name,
-      p.employee_number,
-      p.branch_name,
-      p.department_name,
-      p.device_source,
-      p.timestamp_display,
-      p.inserted_at
-    ]);
+    const rows = filteredPunches.map(p =>
+      sanitizeCsvRow([
+        p.employee_name,
+        p.employee_number,
+        p.branch_name,
+        p.department_name,
+        p.device_source,
+        p.timestamp_display,
+        p.inserted_at
+      ])
+    );
 
-    const csvContent = 'data:text/csv;charset=utf-8,﻿' + [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+    // [Security] Formula-injection-safe: cleanCell prefixes formula triggers with a single-quote.
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');

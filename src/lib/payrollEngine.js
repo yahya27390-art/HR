@@ -1181,8 +1181,16 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     cashPayoutAmount = Math.max(0, netSalary - bankTransferAmount);
   }
 
+  // 5. SAUDI LABOR LAW ARTICLE 92: DEDUCTIONS CEILING (حماية سقف الاستقطاعات - حد أقصى 50% من الأجر الأساسي)
+  const maxAllowableDeduction = basicSalary > 0 ? Math.round(basicSalary * 0.5 * 100) / 100 : 0;
+  const isDeductionCeilingExceeded = basicSalary > 0 && totalDeductions > maxAllowableDeduction;
+  const deductionPercentage = basicSalary > 0 ? Math.round((totalDeductions / basicSalary) * 100) : 0;
+
   return {
     emp,
+    maxAllowableDeduction,
+    isDeductionCeilingExceeded,
+    deductionPercentage,
     shiftName,
     shift,
     shiftHours,

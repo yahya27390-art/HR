@@ -1,6 +1,7 @@
 import { MaskedSalary, PrivacyMaskToggle } from '@/lib/FinancialPrivacyContext';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { sanitizeCsvRow } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/rbac';
@@ -296,20 +297,23 @@ export default function Employees() {
       return;
     }
     const headers = ['الرقم الوظيفي', 'الاسم', 'المسمى الوظيفي', 'الفرع', 'الجنسية', 'الهوية', 'الجوال', 'الإيميل', 'الراتب', 'تاريخ الانضمام'];
-    const rows = filteredEmployees.map(e => [
-      e.employee_number,
-      e.full_name,
-      e.job_title,
-      e.branch_name,
-      e.nationality,
-      e.national_id,
-      e.phone,
-      e.email,
-      e.salary,
-      e.join_date
-    ]);
+    const rows = filteredEmployees.map(e =>
+      sanitizeCsvRow([
+        e.employee_number,
+        e.full_name,
+        e.job_title,
+        e.branch_name,
+        e.nationality,
+        e.national_id,
+        e.phone,
+        e.email,
+        e.salary,
+        e.join_date
+      ])
+    );
 
-    const csvContent = 'data:text/csv;charset=utf-8,﻿' + [headers.join(','), ...rows.map(r => r.map(c => `"${c || ''}"`).join(','))].join('\n');
+    // [Security] Formula-injection-safe: cleanCell prefixes formula triggers with a single-quote.
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);

@@ -4,6 +4,7 @@ import { getCompanyProfile } from '@/lib/companyProfile';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import { sanitizeXlsxRows } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -500,7 +501,8 @@ export default function Reports() {
   const handleExportExcel = () => {
     if (!generatedData || !generatedData.rows.length) return;
     try {
-      const ws = XLSX.utils.json_to_sheet(generatedData.rows);
+      // [Security] Sanitize before writing to prevent Formula Injection in XLSX.
+      const ws = XLSX.utils.json_to_sheet(sanitizeXlsxRows(generatedData.rows));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'التقرير');
       XLSX.writeFile(wb, generatedData.reportDef.title + '_' + generatedData.fromDate + '.xlsx');
