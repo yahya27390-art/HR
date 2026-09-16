@@ -1,0 +1,65 @@
+// Comprehensive ICAO & Saudi Visa Platforms Country and Nationality Dictionary
+const COUNTRIES_DB = {
+  "EGY": { code: "EGY", num: "818", nameAr: "مصر", nameEn: "Egypt", natAr: "مصري", natEn: "Egyptian" },
+  "SAU": { code: "SAU", num: "682", nameAr: "المملكة العربية السعودية", nameEn: "Saudi Arabia", natAr: "سعودي", natEn: "Saudi" },
+  "YEM": { code: "YEM", num: "887", nameAr: "اليمن", nameEn: "Yemen", natAr: "يمني", natEn: "Yemeni" },
+  "JOR": { code: "JOR", num: "400", nameAr: "الأردن", nameEn: "Jordan", natAr: "أردني", natEn: "Jordanian" },
+  "SDN": { code: "SDN", num: "729", nameAr: "السودان", nameEn: "Sudan", natAr: "سوداني", natEn: "Sudanese" },
+  "SYR": { code: "SYR", num: "760", nameAr: "سوريا", nameEn: "Syria", natAr: "سوري", natEn: "Syrian" },
+  "LBN": { code: "LBN", num: "422", nameAr: "لبنان", nameEn: "Lebanon", natAr: "لبناني", natEn: "Lebanese" },
+  "IRQ": { code: "IRQ", num: "368", nameAr: "العراق", nameEn: "Iraq", natAr: "عراقي", natEn: "Iraqi" },
+  "KWT": { code: "KWT", num: "414", nameAr: "الكويت", nameEn: "Kuwait", natAr: "كويتي", natEn: "Kuwaiti" },
+  "ARE": { code: "ARE", num: "784", nameAr: "الإمارات العربية المتحدة", nameEn: "United Arab Emirates", natAr: "إماراتي", natEn: "Emirati" },
+  "BHR": { code: "BHR", num: "048", nameAr: "البحرين", nameEn: "Bahrain", natAr: "بحريني", natEn: "Bahraini" },
+  "OMN": { code: "OMN", num: "512", nameAr: "سلطنة عمان", nameEn: "Oman", natAr: "عماني", natEn: "Omani" },
+  "QAT": { code: "QAT", num: "634", nameAr: "قطر", nameEn: "Qatar", natAr: "قطري", natEn: "Qatari" },
+  "MAR": { code: "MAR", num: "504", nameAr: "المغرب", nameEn: "Morocco", natAr: "مغربي", natEn: "Moroccan" },
+  "DZA": { code: "DZA", num: "012", nameAr: "الجزائر", nameEn: "Algeria", natAr: "جزائري", natEn: "Algerian" },
+  "TUN": { code: "TUN", num: "788", nameAr: "تونس", nameEn: "Tunisia", natAr: "تونسي", natEn: "Tunisian" },
+  "LBY": { code: "LBY", num: "434", nameAr: "ليبيا", nameEn: "Libya", natAr: "ليبي", natEn: "Libyan" },
+  "PSE": { code: "PSE", num: "275", nameAr: "فلسطين", nameEn: "Palestine", natAr: "فلسطيني", natEn: "Palestinian" },
+  "IND": { code: "IND", num: "356", nameAr: "الهند", nameEn: "India", natAr: "هندي", natEn: "Indian" },
+  "PAK": { code: "PAK", num: "586", nameAr: "باكستان", nameEn: "Pakistan", natAr: "باكستاني", natEn: "Pakistani" },
+  "BGD": { code: "BGD", num: "050", nameAr: "بنغلاديش", nameEn: "Bangladesh", natAr: "بنغلاديشي", natEn: "Bangladeshi" },
+  "PHL": { code: "PHL", num: "608", nameAr: "الفلبين", nameEn: "Philippines", natAr: "فلبيني", natEn: "Filipino" },
+  "IDN": { code: "IDN", num: "360", nameAr: "إندونيسيا", nameEn: "Indonesia", natAr: "إندونيسي", natEn: "Indonesian" },
+  "TUR": { code: "TUR", num: "792", nameAr: "تركيا", nameEn: "Turkey", natAr: "تركي", natEn: "Turkish" },
+  "LKA": { code: "LKA", num: "144", nameAr: "سريلانكا", nameEn: "Sri Lanka", natAr: "سريلانكي", natEn: "Sri Lankan" },
+  "NPL": { code: "NPL", num: "524", nameAr: "نيبال", nameEn: "Nepal", natAr: "نيبالي", natEn: "Nepalese" },
+  "ETH": { code: "ETH", num: "231", nameAr: "إثيوبيا", nameEn: "Ethiopia", natAr: "إثيوبي", natEn: "Ethiopian" },
+  "KEN": { code: "KEN", num: "404", nameAr: "كينيا", nameEn: "Kenya", natAr: "كيني", natEn: "Kenyan" },
+  "UGA": { code: "UGA", num: "800", nameAr: "أوغندا", nameEn: "Uganda", natAr: "أوغندي", natEn: "Ugandan" },
+  "NGA": { code: "NGA", num: "566", nameAr: "نيجيريا", nameEn: "Nigeria", natAr: "نيجيري", natEn: "Nigerian" },
+  "GHA": { code: "GHA", num: "288", nameAr: "غانا", nameEn: "Ghana", natAr: "غاني", natEn: "Ghanaian" },
+  "SOM": { code: "SOM", num: "706", nameAr: "الصومال", nameEn: "Somalia", natAr: "صومالي", natEn: "Somali" },
+  "DJI": { code: "DJI", num: "262", nameAr: "جيبوتي", nameEn: "Djibouti", natAr: "جيبوتي", natEn: "Djiboutian" },
+  "MRT": { code: "MRT", num: "478", nameAr: "موريتانيا", nameEn: "Mauritania", natAr: "موريتاني", natEn: "Mauritanian" },
+  "GBR": { code: "GBR", num: "826", nameAr: "المملكة المتحدة", nameEn: "United Kingdom", natAr: "بريطاني", natEn: "British" },
+  "USA": { code: "USA", num: "840", nameAr: "الولايات المتحدة الأمريكية", nameEn: "United States", natAr: "أمريكي", natEn: "American" },
+  "CAN": { code: "CAN", num: "124", nameAr: "كندا", nameEn: "Canada", natAr: "كندي", natEn: "Canadian" },
+  "AUS": { code: "AUS", num: "036", nameAr: "أستراليا", nameEn: "Australia", natAr: "أسترالي", natEn: "Australian" },
+  "DEU": { code: "DEU", num: "276", nameAr: "ألمانيا", nameEn: "Germany", natAr: "ألماني", natEn: "German" },
+  "FRA": { code: "FRA", num: "250", nameAr: "فرنسا", nameEn: "France", natAr: "فرنسي", natEn: "French" },
+  "ITA": { code: "ITA", num: "380", nameAr: "إيطاليا", nameEn: "Italy", natAr: "إيطالي", natEn: "Italian" },
+  "ESP": { code: "ESP", num: "724", nameAr: "إسبانيا", nameEn: "Spain", natAr: "إسباني", natEn: "Spanish" },
+  "RUS": { code: "RUS", num: "643", nameAr: "روسيا", nameEn: "Russia", natAr: "روسي", natEn: "Russian" },
+  "CHN": { code: "CHN", num: "156", nameAr: "الصين", nameEn: "China", natAr: "صيني", natEn: "Chinese" },
+  "MYS": { code: "MYS", num: "458", nameAr: "ماليزيا", nameEn: "Malaysia", natAr: "ماليزي", natEn: "Malaysian" },
+  "AFG": { code: "AFG", num: "004", nameAr: "أفغانستان", nameEn: "Afghanistan", natAr: "أفغاني", natEn: "Afghan" },
+  "UZB": { code: "UZB", num: "860", nameAr: "أوزبكستان", nameEn: "Uzbekistan", natAr: "أوزبكي", natEn: "Uzbek" },
+  "AZE": { code: "AZE", num: "031", nameAr: "أذربيجان", nameEn: "Azerbaijan", natAr: "أذربيجاني", natEn: "Azerbaijani" },
+  "KAZ": { code: "KAZ", num: "398", nameAr: "كازاخستان", nameEn: "Kazakhstan", natAr: "كازاخستاني", natEn: "Kazakh" }
+};
+
+function getCountryByCode(code) {
+  if (!code) return null;
+  const clean = code.trim().toUpperCase();
+  return COUNTRIES_DB[clean] || {
+    code: clean,
+    num: "000",
+    nameAr: clean,
+    nameEn: clean,
+    natAr: clean,
+    natEn: clean
+  };
+}

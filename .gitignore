@@ -35,5 +35,9 @@ bi-platform/
 .vite
 base44/.app.jsonc
 dora-cars/
+# Sensitive Credentials & Keys (Zero-Secrets Policy)
+ملفات تقارير الحملات/*.json
+*credentials*.json
+*service-account*.json
+*-analytics-*.json
 scratch/
-

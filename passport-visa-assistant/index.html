@@ -1,0 +1,2187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مساعد تفريغ بيانات طلب زيارة عائلية للمقيمين | منصة التأشيرات السعودية</title>
+  
+  <!-- Content Security Policy: 100% Offline Guarantee -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.gstatic.com;">
+
+  <!-- Fonts: Cairo & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900;1000&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+            mono: ['Outfit', 'monospace']
+          },
+          colors: {
+            brand: {
+              emerald: '#006C35',
+              navy: '#1E293B',
+              accent: '#2563EB',
+              sand: '#EAE5DF'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+    }
+    .field-card {
+      transition: all 0.2s ease-in-out;
+    }
+    .field-card:hover {
+      border-color: #2563EB;
+      box-shadow: 0 4px 14px -2px rgba(37, 99, 235, 0.12);
+    }
+    .seq-dock {
+      backdrop-filter: blur(16px);
+    }
+    .badge-chip {
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .badge-chip:hover {
+      transform: translateY(-1px);
+    }
+    .badge-chip:active {
+      transform: scale(0.96);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F1F5F9; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between pb-32">
+
+  <!-- ─── 1. TOP HEADER & BAR ──────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+      
+      <!-- Logo & Title -->
+      <div class="flex items-center gap-2.5 sm:gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white flex items-center justify-center text-xl shadow-md">
+          🏛️
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-base font-black text-slate-900 leading-tight">
+              مساعد تفريغ بيانات طلب زيارة عائلية للمقيمين
+            </h1>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[10px] sm:text-[11px] font-black">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+              <span>100% محلي أوفلاين</span>
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 font-medium">
+            مطابق تماماً لحقول نافذة إضافة الشخص لمنصة التأشيرات السعودية (وزارة الخارجية ksa.visa)
+          </p>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-2">
+        <!-- Date Format Toggle -->
+        <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+          <button
+            onclick="setDateFormat('YMD')"
+            id="btnYmd"
+            class="px-2.5 py-1 rounded-lg bg-white shadow-xs text-slate-900 font-black transition text-[11px]"
+            title="سنة/شهر/يوم (الصيغة المعتمدة في منصة التأشيرات)"
+          >
+            YYYY/MM/DD
+          </button>
+          <button
+            onclick="setDateFormat('DMY')"
+            id="btnDmy"
+            class="px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-900 font-medium transition text-[11px]"
+            title="يوم/شهر/سنة"
+          >
+            DD/MM/YYYY
+          </button>
+        </div>
+
+        <!-- Copy Full Summary -->
+        <button
+          onclick="copyFullSummaryText()"
+          class="hidden md:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-sm"
+          title="نسخ ملخص كامل للشخص المطلوب"
+        >
+          <span>📋</span>
+          <span>نسخ ملخص الشخص</span>
+        </button>
+
+        <!-- Add to Family Queue -->
+        <button
+          onclick="addCurrentToFamilyQueue()"
+          class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-sm"
+          title="إضافة هذا الشخص لقائمة المطلوبين للزيارة"
+        >
+          <span>➕</span>
+          <span>إضافة للقائمة</span>
+        </button>
+
+        <!-- Clear & Reset for New Passports -->
+        <button
+          onclick="resetCurrentPassportForm()"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition shadow-sm active:scale-95"
+          title="تفريغ الحقول الحالية وتجهيز النموذج لاستقبال جواز جديد"
+        >
+          <span>🧹</span>
+          <span>تفريغ لجواز جديد</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ─── PRIMARY TABS NAVIGATION BAR (تأشير vs إنجاز) ──────────────────────── -->
+  <nav class="sticky top-[57px] z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+      
+      <!-- Tabs Switcher Buttons -->
+      <div class="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-200 w-full sm:w-auto">
+        <!-- Tab 1: تأشير -->
+        <button
+          id="tabBtnTasheer"
+          onclick="switchTab('tasheer')"
+          class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl font-black text-xs sm:text-sm transition-all shadow-md bg-white text-slate-900 border border-slate-200"
+        >
+          <span class="text-base">🛂</span>
+          <span>منصة تأشير (تساهيل)</span>
+          <span class="px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">الزيارة العائلية</span>
+        </button>
+
+        <!-- Tab 2: إنجاز -->
+        <button
+          id="tabBtnEnjaz"
+          onclick="switchTab('enjaz')"
+          class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl font-black text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900"
+        >
+          <span class="text-base">🇸🇦</span>
+          <span>منصة إنجاز (تأشيرة دخول)</span>
+          <span class="px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-bold">الممثليات بالخارج</span>
+        </button>
+      </div>
+
+      <!-- Active Person Quick Status / Sequential Mode Indicator -->
+      <div class="flex items-center gap-1.5 text-xs">
+        <span class="text-slate-500 font-bold hidden md:inline">الشخص المختار:</span>
+        <button
+          onclick="prevFamilyMember()"
+          class="px-2 py-1 rounded-xl bg-slate-800 hover:bg-purple-900 text-white font-bold text-xs transition flex items-center gap-1 shadow-xs active:scale-95"
+          title="الشخص السابق (Alt + سهم يسار)"
+        >
+          <span>◀</span>
+        </button>
+        <span id="activePersonBadge" class="px-3 py-1 rounded-xl bg-slate-900 text-emerald-400 font-black font-mono flex items-center gap-1.5 shadow-xs">
+          <span>👤</span>
+          <span id="activePersonNameDisplay">(لم يتم تحديد شخص)</span>
+        </span>
+        <button
+          onclick="nextFamilyMember()"
+          class="px-2 py-1 rounded-xl bg-slate-800 hover:bg-purple-900 text-white font-bold text-xs transition flex items-center gap-1 shadow-xs active:scale-95"
+          title="الشخص التالي (Alt + سهم يمين)"
+        >
+          <span>▶</span>
+        </button>
+        <button
+          onclick="startSequentialCopy()"
+          class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition flex items-center gap-1 shadow-sm active:scale-95"
+          title="بدء النسخ المتسلسل للحقول المفتوحة (زر المسافة Space)"
+        >
+          <span>⚡ نسخ متسلسل</span>
+          <kbd class="hidden sm:inline-block text-[9px] bg-emerald-800 px-1.5 py-0.5 rounded font-mono">Space</kbd>
+        </button>
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- ─── MAIN CONTAINER ───────────────────────────────────────────────────── -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 py-5 flex-grow">
+
+    <!-- ═════════════════════════════════════════════════════════════════════════ -->
+    <!-- ─── TAB 1: منصة تأشير (تساهيل - طلب زيارة عائلية) ───────────────────── -->
+    <!-- ═════════════════════════════════════════════════════════════════════════ -->
+    <div id="tabContentTasheer" class="space-y-5">
+
+      <!-- ─── SECTION 0: REQUESTER & EMPLOYER DETAILS (طابق تماماً لسكرين شوت 1) ─── -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4">
+      
+      <!-- Top Title Bar -->
+      <div class="bg-[#EAE5DF] px-4 sm:px-6 py-2.5 flex items-center justify-between border-b border-[#DDD7CF]">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">👤</span>
+          <h2 class="text-xs sm:text-sm font-black text-slate-800">
+            طلب زيارة عائلية للمقيمين - بيانات صاحب الطلب وجهة العمل
+          </h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            onclick="copyAllRequesterData()"
+            class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold transition shadow-xs flex items-center gap-1"
+          >
+            <span>📋</span>
+            <span>نسخ كامل البيانات</span>
+          </button>
+          <button
+            id="btnToggleEditRequester"
+            onclick="toggleEditRequester()"
+            class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-bold transition"
+          >
+            ✏️ تعديل
+          </button>
+        </div>
+      </div>
+
+      <div class="px-4 sm:px-6 pb-5 space-y-4">
+        
+        <!-- 1. بيانات الطلب ومستند التأشيرة -->
+        <div>
+          <div class="bg-[#EAE5DF] rounded-t-xl px-4 py-1.5 text-xs font-black text-slate-700 mb-2 border border-[#DDD7CF] border-b-0 flex items-center justify-between">
+            <span>بيانات الطلب وصاحب الطلب (مستند التأشيرة الرسمية)</span>
+            <span class="text-[10px] text-slate-500 font-mono font-bold">الطلب صالح لتاريخ: 05/12/2026</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            
+            <!-- رقم المستند -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">رقم المستند</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_visaNumber" dir="ltr" value="7011172155" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-black text-indigo-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_visaNumber', 'رقم المستند')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- تاريخ المستند -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">تاريخ المستند</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_docDate" dir="ltr" value="1448/03/24" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_docDate', 'تاريخ المستند')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- اسم صاحب الطلب -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">اسم صاحب الطلب</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_name" value="السيد عبدالمنعم السيد بصار" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_name', 'اسم صاحب الطلب')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- رقم السجل -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">رقم السجل</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_crNumber" dir="ltr" value="2339665362" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-black text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_crNumber', 'رقم السجل')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- الجنسية -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">الجنسية</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_nationality" value="مصر" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_nationality', 'الجنسية')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- رقم الجوال -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">رقم الجوال</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_phone" dir="ltr" value="0582625697" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_phone', 'رقم الجوال')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- العنوان -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">العنوان</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_address" value="جده" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_address', 'العنوان')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- جهة القدوم -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">جهة القدوم</div>
+              <div class="flex items-center gap-1">
+                <input type="text" id="req_arrivalPort" value="الاسكندرية" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-sky-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_arrivalPort', 'جهة القدوم')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- البريد الإلكتروني (محفوظ لكافة الجوازات) -->
+            <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-[10px] font-bold text-slate-500 mb-0.5">البريد الإلكتروني</div>
+              <div class="flex items-center gap-1">
+                <input type="email" id="req_email" dir="ltr" value="sayedabdo8888@gmail.com" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none">
+                <button onclick="copyFieldVal('req_email', 'البريد الإلكتروني')" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ─── SECTION 1: TWO DEDICATED UPLOAD & EXTRACTION BOXES ────────────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      
+      <!-- ═══════════ 1. صندوق رفع وتفريغ مستند التأشيرة ═══════════ -->
+      <div class="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm p-4 sm:p-5 space-y-3 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-2 h-full bg-indigo-600"></div>
+        
+        <div>
+          <div class="flex items-center justify-between pb-2 border-b border-indigo-100 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center text-base font-black">
+                📄
+              </span>
+              <div>
+                <h3 class="text-xs sm:text-sm font-black text-slate-900">
+                  ١. رفع وتفريغ بيانات مستند التأشيرة
+                </h3>
+                <p class="text-[11px] text-slate-500 font-medium">
+                  مستند تأشيرة وزارة الخارجية / طلب الزيارة العائلية
+                </p>
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
+              تفريغ جهة العمل والزيارة
+            </span>
+          </div>
+
+          <!-- Visa File Drop Zone -->
+          <input type="file" id="visaFileInput" accept="image/*,.pdf" class="hidden">
+          <div
+            id="visaDropZone"
+            onclick="document.getElementById('visaFileInput').click()"
+            class="border-2 border-dashed border-indigo-200 hover:border-indigo-500 rounded-xl p-3 text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[95px] bg-indigo-50/40 hover:bg-indigo-50/70"
+          >
+            <div id="visaDropPlaceholder" class="space-y-1">
+              <div class="text-2xl">📥</div>
+              <div class="text-xs font-black text-indigo-950">اسحب صورة أو مستند التأشيرة هنا أو انقر للرفع</div>
+              <div class="text-[10px] text-slate-500">يدعم صور مستند التأشيرة (PNG, JPG) والملفات</div>
+            </div>
+            <img id="visaPreviewImg" src="" alt="مستند التأشيرة" class="max-h-24 rounded-lg object-contain hidden border border-indigo-200">
+          </div>
+
+          <!-- Visa Text/OCR Paste Area -->
+          <div class="mt-3 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label class="text-[11px] font-bold text-slate-700">أو الصق نص مستند التأشيرة / طلب إنجاز:</label>
+              <button onclick="loadSampleVisa()" class="text-[10px] text-indigo-600 hover:underline font-bold">
+                تجربة نموذج تأشيرة جاهز
+              </button>
+            </div>
+            <textarea
+              id="visaTextInput"
+              rows="2"
+              placeholder="مثال: رقم المستند: 7001234567 | السجل التجاري: 7016475555 | شركة درة السيارة | جهة القدوم: القاهرة | عدة سفرات 90 يوم..."
+              class="w-full p-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none transition leading-relaxed placeholder:text-slate-400"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Extract Visa Button & Result Preview -->
+        <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
+          <span id="visaStatusText" class="text-[11px] text-slate-500 font-bold truncate">
+            جاهز لاستلام مستند التأشيرة
+          </span>
+          <button
+            onclick="extractVisaDataAction()"
+            class="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm shrink-0 active:scale-95"
+          >
+            <span>⚡ تفريغ بيانات التأشيرة</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ═══════════ 2. صندوق رفع وتفريغ جوازات السفر ═══════════ -->
+      <div class="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm p-4 sm:p-5 space-y-3 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-2 h-full bg-emerald-600"></div>
+        
+        <div>
+          <div class="flex items-center justify-between pb-2 border-b border-emerald-100 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center text-base font-black">
+                🛂
+              </span>
+              <div>
+                <h3 class="text-xs sm:text-sm font-black text-slate-900">
+                  ٢. رفع وتفريغ جوازات السفر
+                </h3>
+                <p class="text-[11px] text-slate-500 font-medium">
+                  يدعم رفع عدة جوازات سفر معاً وتفريغها تلقائياً
+                </p>
+              </div>
+            </div>
+            <span id="uploadedPassportsCount" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+              0 جواز مرفوع
+            </span>
+          </div>
+
+          <!-- Passports Multi-File Drop Zone -->
+          <input type="file" id="passportFileInput" accept="image/*" multiple class="hidden">
+          <div
+            id="imageDropZone"
+            onclick="document.getElementById('passportFileInput').click()"
+            class="border-2 border-dashed border-emerald-200 hover:border-emerald-500 rounded-xl p-3 text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[95px] bg-emerald-50/40 hover:bg-emerald-50/70"
+          >
+            <div id="dropZonePlaceholder" class="space-y-1">
+              <div class="text-2xl">📸</div>
+              <div class="text-xs font-black text-emerald-950">اسحب صور الجوازات هنا أو انقر للرفع</div>
+              <div class="text-[10px] text-slate-500">يمكنك تحديد عدة صور جوازات سفر دفعة واحدة</div>
+            </div>
+            <!-- Thumbnails strip for multiple uploaded passports -->
+            <div id="passportsThumbnailsStrip" class="hidden flex-wrap items-center justify-center gap-2 w-full py-1">
+              <img id="passportPreviewImg" src="" alt="صورة الجواز" class="max-h-20 rounded-lg object-contain border border-emerald-300">
+            </div>
+          </div>
+
+          <!-- MRZ Code Area with Reset Buttons -->
+          <div class="mt-3 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-100/80 p-2 rounded-xl border border-slate-200">
+              <label class="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <span>📑</span>
+                <span>كود الجواز (MRZ) أو تفريغ النموذج:</span>
+              </label>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick="resetCurrentPassportForm()"
+                  class="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition flex items-center gap-1 shadow-2xs active:scale-95"
+                  title="تفريغ الحقول وتجهيز النموذج فوراً لاستقبال جواز جديد"
+                >
+                  <span>🧹</span>
+                  <span>تفريغ النموذج (جاهز لجواز جديد)</span>
+                </button>
+                <button
+                  type="button"
+                  onclick="resetAllFamilyAndForms()"
+                  class="px-2.5 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95"
+                  title="تفريغ كافة البيانات وقائمة الجوازات بالكامل للبدء مع عميل جديد"
+                >
+                  <span>✨</span>
+                  <span>تفريغ شامل (بدء عميل جديد)</span>
+                </button>
+              </div>
+            </div>
+            <textarea
+              id="mrzTextInput"
+              rows="2"
+              dir="ltr"
+              placeholder="P<EGYFATMA<<AHMED<MAHMOUD<<<<<<<<<<<<<<<<<<<<&#10;A112233445EGY9205142F3101015<<<<<<<<<<<<<<02"
+              class="w-full p-2 rounded-xl border border-slate-200 bg-slate-50 font-mono text-xs text-slate-800 focus:bg-white focus:border-emerald-500 focus:outline-none transition leading-relaxed tracking-wider placeholder:text-slate-400"
+            ></textarea>
+          </div>
+
+          <!-- Quick Samples Chips for Family Members -->
+          <div class="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+            <span class="text-slate-500 font-bold">تفريغ مباشر للجوازات:</span>
+            <button onclick="loadTestSample('wife_asmaa')" class="badge-chip px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 font-black text-[11px]">
+              👩 الزوجة (أسماء)
+            </button>
+            <button onclick="loadTestSample('daughter_kyan')" class="badge-chip px-2.5 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 font-black text-[11px]">
+              👧 كيان (ابنة)
+            </button>
+            <button onclick="loadTestSample('daughter_lyan')" class="badge-chip px-2.5 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-300 font-black text-[11px]">
+              👧 ليان (ابنة)
+            </button>
+            <button onclick="loadTestSample('daughter_myan')" class="badge-chip px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-black text-[11px]">
+              👧 ميان (ابنة)
+            </button>
+            <button onclick="loadBessarFamilyFullBatch()" class="badge-chip px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-black text-[11px] shadow-sm">
+              ⚡ تفريغ العائلة كاملة (4 أفراد)
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Extract Passport Button -->
+        <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
+          <span id="passportStatusText" class="text-[11px] text-slate-500 font-bold truncate">
+            جاهز لتفريغ بيانات الجواز
+          </span>
+          <button
+            onclick="addCurrentToFamilyQueue()"
+            class="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm shrink-0 active:scale-95"
+          >
+            <span>➕ تفريغ وإضافة للمطلوبين للزيارة</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ─── SECTION 2: TABLE OF PERSONS (المطلوبين للزيارة) ──────────────────── -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
+      
+      <!-- Section Header with MOFA-style Add Button matching Screenshot 1 -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-lg">👨‍👩‍👧‍👦</span>
+            <h2 class="text-sm sm:text-base font-black text-slate-900">
+              المطلوبين للزيارة:
+            </h2>
+            <span id="familyCountBadge" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-black border border-emerald-200">
+              0 شخص
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-0.5">
+            انقر على "إضافة" لفتح نموذج تعبئة بيانات الشخص المطلوب، أو استخدم النسخ المتسلسل لنقل البيانات لمنصة التأشيرات
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- MOFA-style Add Button matching Screenshot 1 -->
+          <button
+            onclick="scrollToFieldsSection()"
+            class="px-6 py-2 rounded-full bg-[#2E314D] hover:bg-[#202237] text-white text-xs sm:text-sm font-black transition flex items-center gap-2 shadow-md active:scale-95"
+            title="إضافة شخص مطلوب جديد للزيارة"
+          >
+            <span>➕</span>
+            <span>إضافة</span>
+          </button>
+
+          <button
+            onclick="startSequentialCopy()"
+            class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black transition flex items-center gap-1 shadow-sm active:scale-95"
+          >
+            <span>⚡</span>
+            <span>بدء النسخ المتسلسل (Space)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Table Matching Screenshot 1 Columns (11 Columns) -->
+      <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-right border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-[11px] font-black text-slate-700 bg-[#EAE5DF]">
+              <th class="py-2.5 px-3">رقم جواز السفر</th>
+              <th class="py-2.5 px-3">اسم المطلوب</th>
+              <th class="py-2.5 px-3">الجنسية</th>
+              <th class="py-2.5 px-3">الديانة</th>
+              <th class="py-2.5 px-3">صلة القرابة</th>
+              <th class="py-2.5 px-3">تاريخ الميلاد</th>
+              <th class="py-2.5 px-3">المهنة</th>
+              <th class="py-2.5 px-3">الغرض من الزيارة</th>
+              <th class="py-2.5 px-3">جهة القدوم</th>
+              <th class="py-2.5 px-3">الجنس</th>
+              <th class="py-2.5 px-3">عدد مرات الدخول</th>
+              <th class="py-2.5 px-3">مدة الإقامة باليوم</th>
+              <th class="py-2.5 px-3 text-left">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="familyTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── SECTION 3: MODAL FIELDS (الرجاء إضافة الشخص المطلوب للزيارة) ──────── -->
+    <div id="fieldsSection" class="bg-white rounded-2xl border-2 border-slate-300 shadow-md overflow-hidden">
+      
+      <!-- Modal Header Style Matching Screenshot 2 -->
+      <div class="bg-slate-800 text-white px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-emerald-400 font-black">☰</span>
+          <h3 class="text-xs sm:text-sm font-black">
+            الرجاء إضافة الشخص المطلوب للزيارة وتعبئة البيانات المطلوبة
+          </h3>
+        </div>
+        <span class="text-xs text-slate-400 font-medium">نموذج الإدخال المباشر</span>
+      </div>
+
+      <div class="p-4 sm:p-6 space-y-6">
+
+        <!-- ═══════════ 1. البيانات الشخصية ═══════════ -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <h4 class="text-sm font-black text-slate-900 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+              <span>البيانات الشخصية</span>
+            </h4>
+          </div>
+
+          <!-- 1.1 الجنسية -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+            <label class="sm:col-span-2 text-xs font-bold text-slate-700">الجنسية:</label>
+            <div class="sm:col-span-10 flex items-center gap-2">
+              <div class="relative w-full">
+                <input
+                  type="text"
+                  id="f_nationalityAr"
+                  placeholder="مصر / اليمن / الأردن"
+                  class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
+                >
+              </div>
+              <button onclick="copyFieldVal('f_nationalityAr', 'الجنسية')" class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">
+                نسخ
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Nationality Chips -->
+          <div class="flex flex-wrap items-center gap-1.5 pr-0 sm:pr-24 text-[11px]">
+            <span class="text-slate-400 font-bold">تحديد سريع:</span>
+            <span onclick="setNationalityFast('مصر', 'Egypt', 'EGY')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇪🇬 مصر</span>
+            <span onclick="setNationalityFast('اليمن', 'Yemen', 'YEM')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇾🇪 اليمن</span>
+            <span onclick="setNationalityFast('الأردن', 'Jordan', 'JOR')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇯🇴 الأردن</span>
+            <span onclick="setNationalityFast('السودان', 'Sudan', 'SDN')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇸🇩 السودان</span>
+            <span onclick="setNationalityFast('سوريا', 'Syria', 'SYR')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇸🇾 سوريا</span>
+            <span onclick="setNationalityFast('باكستان', 'Pakistan', 'PAK')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇵🇰 باكستان</span>
+            <span onclick="setNationalityFast('الهند', 'India', 'IND')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇮🇳 الهند</span>
+            <span onclick="setNationalityFast('المغرب', 'Morocco', 'MAR')" class="badge-chip px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-800 font-bold">🇲🇦 المغرب</span>
+          </div>
+
+          <!-- 1.2 الأسماء الرباعية (عربي) -->
+          <div class="space-y-1.5 pt-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-700">الاسم الكامل (عربي):</span>
+              <button onclick="copyFullArName()" class="text-xs text-blue-600 hover:underline font-bold">نسخ الاسم الكامل عربي</button>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <!-- الأول -->
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[11px] font-bold text-slate-500 mb-1">الاسم الأول</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_firstNameAr" placeholder="فاطمة" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_firstNameAr', 'الاسم الأول عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+              <!-- الأب -->
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[11px] font-bold text-slate-500 mb-1">الأب</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_fatherNameAr" placeholder="أحمد" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_fatherNameAr', 'الأب عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+              <!-- الجد -->
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[11px] font-bold text-slate-500 mb-1">الجد</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_grandFatherNameAr" placeholder="محمود" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_grandFatherNameAr', 'الجد عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+              <!-- العائلة -->
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[11px] font-bold text-slate-500 mb-1">العائلة</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_familyNameAr" placeholder="علي" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_familyNameAr', 'العائلة عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 1.3 الأسماء الرباعية (إنجليزي) -->
+          <div class="space-y-1.5 pt-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-700">الاسم الكامل (إنجليزي):</span>
+              <button onclick="copyFullEnName()" class="text-xs text-blue-600 hover:underline font-bold">نسخ الاسم الكامل إنجليزي</button>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[10px] font-mono font-bold text-slate-400 mb-1">First Name</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_firstNameEn" dir="ltr" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_firstNameEn', 'First Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[10px] font-mono font-bold text-slate-400 mb-1">Father Name</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_fatherNameEn" dir="ltr" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_fatherNameEn', 'Father Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[10px] font-mono font-bold text-slate-400 mb-1">Grandfather Name</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_grandFatherNameEn" dir="ltr" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_grandFatherNameEn', 'Grandfather Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+              <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div class="text-[10px] font-mono font-bold text-slate-400 mb-1">Family Name</div>
+                <div class="flex items-center gap-1">
+                  <input type="text" id="f_familyNameEn" dir="ltr" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <button onclick="copyFieldVal('f_familyNameEn', 'Family Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 1.4 تاريخ الميلاد ومحل الميلاد والديانة -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            
+            <!-- تاريخ الميلاد -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-700">تاريخ الميلاد</span>
+                <span class="text-[10px] text-slate-400">YYYY/MM/DD</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_dob" dir="ltr" placeholder="1992/05/14" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_dob', 'تاريخ الميلاد')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- محل الميلاد -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">محل الميلاد</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_pob" placeholder="مصر" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_pob', 'محل الميلاد')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- الديانة -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">الديانة</div>
+              <div class="flex items-center gap-1.5">
+                <select id="f_religion" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <option value="مسلم">مسلم</option>
+                  <option value="مسيحي">مسيحي</option>
+                  <option value="أخرى">أخرى</option>
+                </select>
+                <button onclick="copyFieldVal('f_religion', 'الديانة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 1.5 المهنة، الحالة المهنية، الجنس، صلة القرابة -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2">
+            
+            <!-- المهنة -->
+            <div class="sm:col-span-5 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-700">المهنة <span class="text-rose-500">*</span></span>
+                <span class="text-[11px] text-slate-500 flex items-center gap-1">
+                  <input type="checkbox" id="f_unemployedCheck" checked class="rounded">
+                  <span>لا يعمل</span>
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_profession" value="ربة منزل" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_profession', 'المهنة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+              <!-- Fast Profession Chips -->
+              <div class="flex items-center gap-1 mt-1.5 text-[10px] flex-wrap">
+                <span onclick="setField('f_profession', 'بكالوريوس علوم')" class="badge-chip px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">بكالوريوس علوم</span>
+                <span onclick="setField('f_profession', 'طفله')" class="badge-chip px-1.5 py-0.5 rounded bg-rose-100 text-rose-900 font-bold border border-rose-300">طفله</span>
+                <span onclick="setField('f_profession', 'طالبة')" class="badge-chip px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 font-bold border border-blue-300">طالبة</span>
+                <span onclick="setField('f_profession', 'ربة منزل')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">ربة منزل</span>
+                <span onclick="setField('f_profession', 'بدون عمل')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">بدون عمل</span>
+                <span onclick="setField('f_profession', 'طالب')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">طالب</span>
+                <span onclick="setField('f_profession', 'متقاعد')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">متقاعد</span>
+              </div>
+            </div>
+
+            <!-- الجنس -->
+            <div class="sm:col-span-3 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">الجنس</div>
+              <div class="flex items-center gap-1.5">
+                <select id="f_sex" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <option value="أنثى">أنثى (Female)</option>
+                  <option value="ذكر">ذكر (Male)</option>
+                </select>
+                <button onclick="copyFieldVal('f_sex', 'الجنس')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- صلة القرابة -->
+            <div class="sm:col-span-4 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">صلة القرابة</div>
+              <div class="flex items-center gap-1.5">
+                <select id="f_relation" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <option value="زوجة">زوجة</option>
+                  <option value="بنت">بنت</option>
+                  <option value="ابن">ابن</option>
+                  <option value="ابنة">ابنة</option>
+                  <option value="والدة">والدة</option>
+                  <option value="والد">والد</option>
+                  <option value="أخت">أخت</option>
+                  <option value="أخ">أخ</option>
+                  <option value="زوج">زوج</option>
+                  <option value="حماة">حماة</option>
+                  <option value="حمى">حمى</option>
+                </select>
+                <button onclick="copyFieldVal('f_relation', 'صلة القرابة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+              <!-- Fast Relation Chips -->
+              <div class="flex items-center gap-1 mt-1.5 text-[10px] flex-wrap">
+                <span onclick="setField('f_relation', 'زوجة')" class="badge-chip px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold">زوجة</span>
+                <span onclick="setField('f_relation', 'بنت')" class="badge-chip px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold">بنت</span>
+                <span onclick="setField('f_relation', 'ابن')" class="badge-chip px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">ابن</span>
+                <span onclick="setField('f_relation', 'والدة')" class="badge-chip px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">والدة</span>
+                <span onclick="setField('f_relation', 'والد')" class="badge-chip px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-bold">والد</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 1.6 رقم الجوال والبريد الالكتروني -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">رقم الجوال</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_phone" dir="ltr" value="0582625697" placeholder="05XXXXXXXX / +966..." class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_phone', 'رقم الجوال')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">البريد الالكتروني</div>
+              <div class="flex items-center gap-1.5">
+                <input type="email" id="f_email" dir="ltr" value="sayedabdo8888@gmail.com" placeholder="sayedabdo8888@gmail.com" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_email', 'البريد الالكتروني')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ═══════════ 2. بيانات جواز السفر ═══════════ -->
+        <div class="space-y-3 pt-4 border-t-2 border-slate-200">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <h4 class="text-sm font-black text-slate-900 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+              <span>بيانات جواز السفر</span>
+            </h4>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            
+            <!-- رقم جواز السفر -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">رقم جواز السفر</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_passportNumber" dir="ltr" placeholder="A11223344" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_passportNumber', 'رقم جواز السفر')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- نوع الجواز -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">نوع الجواز</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_docType" value="عادي" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_docType', 'نوع الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- مكان إصدار جواز السفر -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">مكان إصدار جواز السفر</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_placeOfIssue" placeholder="مصر / القاهرة / الجيزة" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_placeOfIssue', 'مكان إصدار الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+              <!-- Fast Place Chips -->
+              <div class="flex items-center gap-1 mt-1 text-[10px]">
+                <span onclick="setField('f_placeOfIssue', 'مصر')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">مصر</span>
+                <span onclick="setField('f_placeOfIssue', 'القاهرة')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">القاهرة</span>
+                <span onclick="setField('f_placeOfIssue', 'الإسكندرية')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">الإسكندرية</span>
+                <span onclick="setField('f_placeOfIssue', 'عمان')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">عمان</span>
+              </div>
+            </div>
+
+            <!-- تاريخ إصدار الجواز -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-700">تاريخ إصدار الجواز (البداية)</span>
+                <span class="text-[10px] text-slate-400">YYYY/MM/DD</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_doi" dir="ltr" value="2023/12/18" placeholder="2023/12/18" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_doi', 'تاريخ إصدار الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- تاريخ إنتهاء الجواز -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-700">تاريخ إنتهاء الجواز (النهاية)</span>
+                <span class="text-[10px] text-slate-400">YYYY/MM/DD</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_doe" dir="ltr" value="2030/12/17" placeholder="2030/12/17" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_doe', 'تاريخ إنتهاء الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ═══════════ 3. بيانات طلب الزيارة والتأشيرة ═══════════ -->
+        <div class="space-y-3 pt-4 border-t-2 border-slate-200">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <h4 class="text-sm font-black text-slate-900 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-purple-600"></span>
+              <span>بيانات الزيارة (جهة القدوم ومدة الإقامة)</span>
+            </h4>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            
+            <!-- جهة القدوم -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">جهة القدوم</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_arrivalPort" value="الاسكندرية" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_arrivalPort', 'جهة القدوم')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+              <!-- Fast Arrival Chips -->
+              <div class="flex items-center gap-1 mt-1 text-[10px] flex-wrap">
+                <span onclick="setField('f_arrivalPort', 'الاسكندرية')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">الاسكندرية</span>
+                <span onclick="setField('f_arrivalPort', 'القاهرة')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">القاهرة</span>
+                <span onclick="setField('f_arrivalPort', 'عمان')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">عمان</span>
+                <span onclick="setField('f_arrivalPort', 'صنعاء')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">صنعاء</span>
+                <span onclick="setField('f_arrivalPort', 'بيروت')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">بيروت</span>
+              </div>
+            </div>
+
+            <!-- الغرض من الزيارة -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">الغرض من الزيارة</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="f_visitPurpose" value="زيارة عائلية لـ السيد عبدالمنعم السيد بصار" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                <button onclick="copyFieldVal('f_visitPurpose', 'الغرض من الزيارة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+              <!-- Fast Purpose Chips -->
+              <div class="flex items-center gap-1 mt-1 text-[10px] flex-wrap">
+                <span onclick="setField('f_visitPurpose', 'زيارة عائلية لـ السيد عبدالمنعم السيد بصار')" class="badge-chip px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 font-bold border border-purple-200">لـ السيد عبدالمنعم</span>
+                <span onclick="setField('f_visitPurpose', 'زيارة عائلية')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">زيارة عائلية فقط</span>
+                <span onclick="setField('f_visitPurpose', 'زيارة شخصية')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">زيارة شخصية</span>
+                <span onclick="setField('f_visitPurpose', 'سياحة')" class="badge-chip px-1.5 py-0.5 rounded bg-slate-200 text-slate-800">سياحة</span>
+              </div>
+            </div>
+
+            <!-- عدد مرات الدخول -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">عدد مرات الدخول</div>
+              <div class="flex items-center gap-1.5">
+                <select id="f_entriesCount" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <option value="">(فارغ - غير محدد بالمستند)</option>
+                  <option value="عدة سفرات">عدة سفرات (سنة كاملة)</option>
+                  <option value="سفرة واحدة">سفرة واحدة (3 أشهر)</option>
+                </select>
+                <button onclick="copyFieldVal('f_entriesCount', 'عدد مرات الدخول')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+            <!-- مدة الإقامة باليوم -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="text-xs font-bold text-slate-700 mb-1">مدة الإقامة باليوم</div>
+              <div class="flex items-center gap-1.5">
+                <select id="f_stayDuration" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500">
+                  <option value="">(فارغ - غير محدد بالمستند)</option>
+                  <option value="90">90 يوم (الأكثر طلباً للزيارة المتعددة)</option>
+                  <option value="30">30 يوم (للسفرة الواحدة)</option>
+                </select>
+                <button onclick="copyFieldVal('f_stayDuration', 'مدة الإقامة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Submit to Queue Button -->
+        <div class="pt-2 flex justify-end">
+          <button
+            onclick="addCurrentToFamilyQueue()"
+            class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 shadow-md active:scale-95"
+          >
+            <span>💾 حفظ وإضافة هذا الشخص لقائمة المطلوبين للزيارة</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ─── SECTION 4: LOCAL VAULT (ARCHIVE) ─────────────────────────────────── -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-base">🗄️</span>
+          <h2 class="text-xs sm:text-sm font-black text-slate-900">سجل الجوازات المحفوظة محلياً على الجهاز</h2>
+          <span id="vaultCountBadge" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">0 جواز</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            id="vaultSearchInput"
+            placeholder="بحث برقم الجواز أو الاسم..."
+            oninput="renderVaultTable(this.value)"
+            class="px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-500 w-48 sm:w-64"
+          >
+          <button
+            onclick="exportVaultToJson()"
+            class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition shrink-0"
+            title="تصدير نسخة احتياطية"
+          >
+            تصدير JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-right border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-[11px] font-black text-slate-500 bg-slate-50">
+              <th class="py-2 px-3">رقم الجواز</th>
+              <th class="py-2 px-3">الاسم</th>
+              <th class="py-2 px-3">الجنسية والصلة</th>
+              <th class="py-2 px-3">الانتهاء</th>
+              <th class="py-2 px-3">جهة القدوم</th>
+              <th class="py-2 px-3">تاريخ الحفظ</th>
+              <th class="py-2 px-3 text-left">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="vaultTableBody">
+            <!-- Rendered by app.js -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+    </div> <!-- ─── END TAB 1: TASHEER ─── -->
+
+
+    <!-- ═════════════════════════════════════════════════════════════════════════ -->
+    <!-- ─── TAB 2: منصة إنجاز (تأشيرة دخول للمملكة من الممثليات بالخارج) ───── -->
+    <!-- ═════════════════════════════════════════════════════════════════════════ -->
+    <div id="tabContentEnjaz" class="hidden space-y-5">
+
+      <!-- ─── ENJAZ TOP TITLE & QUICK CONTROLS BAR ───────────────────────────── -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        
+        <!-- Official Enjaz Header matching Screenshot 1 -->
+        <div class="space-y-1">
+          <div class="flex items-center gap-3">
+            <span class="w-2.5 h-8 rounded-full bg-[#2E314D]"></span>
+            <div>
+              <h2 class="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                طلب تأشيرة
+              </h2>
+              <p class="text-xs sm:text-sm font-bold text-[#343152]">
+                تأشيرة دخول للمملكة من الممثليات السعودية بالخارج
+              </p>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-500 font-medium pr-5">
+            نموذج منصة إنجاز الرسمي لتأشيرة الدخول • متوافق 100% مع البوابة الإلكترونية
+          </p>
+        </div>
+
+        <!-- Top Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-end">
+          <button
+            onclick="copyEnjazFullSummary()"
+            class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95"
+            title="نسخ ملخص كامل لكافة بيانات طلب إنجاز"
+          >
+            <span>📋</span>
+            <span>نسخ ملخص إنجاز كامل</span>
+          </button>
+
+          <button
+            onclick="startSequentialCopy()"
+            class="px-4 py-2 rounded-xl bg-[#2E314D] hover:bg-[#202237] text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95"
+            title="بدء النسخ المتسلسل بترتيب حقول إنجاز (Space)"
+          >
+            <span>⚡</span>
+            <span>بدء النسخ المتسلسل (Space)</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ─── QUICK FAMILY MEMBER SWITCHER FOR ENJAZ (تنقل فوري بين الجوازات) ───── -->
+      <div id="enjazFamilySwitcherCard" class="bg-gradient-to-r from-purple-900/5 via-slate-50 to-indigo-900/5 rounded-2xl border-2 border-purple-300 shadow-sm p-4 space-y-3">
+        
+        <!-- Header row of the Switcher -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-purple-100">
+          <div class="flex items-center gap-2">
+            <span class="p-2 rounded-xl bg-[#2E314D] text-white text-base shadow-xs">👨‍👩‍👧‍👦</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-xs sm:text-sm font-black text-slate-900">
+                  التنقل الفوري بين جوازات المطلوبين للزيارة في إنجاز
+                </h3>
+                <span id="ej_memberCounterBadge" class="px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 text-[11px] font-black font-mono">
+                  1 من 4
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-500 font-medium">
+                انقر على أي شخص لتعبئة بياناته وصورته وجوازه فوراً في نموذج إنجاز أدناه دون الحاجة للرجوع لتأشير
+              </p>
+            </div>
+          </div>
+
+          <!-- Quick Prev / Next & Reset Buttons -->
+          <div class="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            <button
+              type="button"
+              onclick="triggerNewPassportUpload()"
+              class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95"
+              title="رفع صورة جواز جديد وإدراجه مباشرة في قائمة إنجاز وتأشير"
+            >
+              <span>➕</span>
+              <span>رفع جواز جديد</span>
+            </button>
+
+            <button
+              type="button"
+              onclick="resetCurrentPassportForm()"
+              class="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95"
+              title="تفريغ النموذج وتجهيزه لاستقبال جواز جديد مع الحفاظ على بيانات الطلب"
+            >
+              <span>🧹</span>
+              <span>تفريغ لجواز جديد</span>
+            </button>
+
+            <button
+              type="button"
+              onclick="prevFamilyMember()"
+              class="px-3.5 py-2 rounded-xl bg-white hover:bg-purple-50 text-purple-950 border border-purple-300 text-xs font-black transition flex items-center gap-1.5 shadow-xs active:scale-95"
+              title="الشخص السابق (اختصار Alt + سهم يسار)"
+            >
+              <span>◀</span>
+              <span>السابق</span>
+              <kbd class="text-[9px] bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono hidden md:inline">Alt+←</kbd>
+            </button>
+
+            <button
+              type="button"
+              onclick="nextFamilyMember()"
+              class="px-3.5 py-2 rounded-xl bg-[#2E314D] hover:bg-[#1f2135] text-white text-xs font-black transition flex items-center gap-1.5 shadow-md active:scale-95"
+              title="الشخص التالي (اختصار Alt + سهم يمين)"
+            >
+              <span>التالي</span>
+              <span>▶</span>
+              <kbd class="text-[9px] bg-purple-800 text-purple-200 px-1 py-0.5 rounded font-mono hidden md:inline">Alt+→</kbd>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Info Bar: الثوابت الإلزامية المشتركة (رقم المستند + الغرض + البريد) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2.5 rounded-xl bg-gradient-to-r from-[#2E314D] to-indigo-950 text-white shadow-inner text-xs">
+          <!-- رقم المستند -->
+          <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/10 border border-emerald-400/40">
+            <div class="min-w-0">
+              <div class="text-[10px] text-emerald-300 font-bold flex items-center gap-1">
+                <span>📄</span>
+                <span>رقم المستند (إلزامي):</span>
+              </div>
+              <div class="font-mono font-black text-emerald-300 text-sm tracking-wider">7011172155</div>
+            </div>
+            <button
+              type="button"
+              onclick="copyToClipboard('7011172155', 'رقم المستند')"
+              class="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition shrink-0 shadow active:scale-95 flex items-center gap-1"
+            >
+              <span>نسخ</span>
+              <span>📋</span>
+            </button>
+          </div>
+
+          <!-- الغرض من الزيارة -->
+          <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/10 border border-purple-300/30">
+            <div class="min-w-0">
+              <div class="text-[10px] text-purple-200 font-bold flex items-center gap-1">
+                <span>🎯</span>
+                <span>الغرض من الزيارة:</span>
+              </div>
+              <div class="font-bold text-white text-xs truncate" title="زيارة عائلية لـ السيد عبدالمنعم السيد بصار">زيارة عائلية لـ السيد عبدالمنعم...</div>
+            </div>
+            <button
+              type="button"
+              onclick="copyToClipboard('زيارة عائلية لـ السيد عبدالمنعم السيد بصار', 'الغرض من الزيارة')"
+              class="px-3 py-1.5 rounded-lg bg-purple-300 hover:bg-purple-200 text-slate-950 font-black text-xs transition shrink-0 shadow active:scale-95 flex items-center gap-1"
+            >
+              <span>نسخ</span>
+              <span>📋</span>
+            </button>
+          </div>
+
+          <!-- البريد الإلكتروني الموحد -->
+          <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/10 border border-blue-300/30">
+            <div class="min-w-0">
+              <div class="text-[10px] text-blue-200 font-bold flex items-center gap-1">
+                <span>📧</span>
+                <span>البريد الإلكتروني الموحد:</span>
+              </div>
+              <div class="font-mono font-bold text-blue-100 text-xs truncate" title="sayedabdo8888@gmail.com">sayedabdo8888@gmail.com</div>
+            </div>
+            <button
+              type="button"
+              onclick="copyToClipboard('sayedabdo8888@gmail.com', 'البريد الإلكتروني')"
+              class="px-3 py-1.5 rounded-lg bg-blue-300 hover:bg-blue-200 text-slate-950 font-black text-xs transition shrink-0 shadow active:scale-95 flex items-center gap-1"
+            >
+              <span>نسخ</span>
+              <span>📋</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Grid of Family Members Cards (rendered by renderEnjazFamilySwitcher()) -->
+        <div id="ej_familyGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+          <!-- Rendered dynamically by app.js -->
+        </div>
+
+      </div>
+
+      <!-- ─── CARD 1: بيانات التأشيرة (مطابق لسكرين شوت 1) ────────────────────── -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+        
+        <!-- Section Header with legend line matching Screenshot 1 -->
+        <div class="relative flex items-center justify-center my-1">
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+          <div class="relative bg-white px-4 text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
+            <span>بيانات التأشيرة</span>
+          </div>
+        </div>
+
+        <div class="space-y-3 pt-1">
+          
+          <!-- رقم المستند بارز جداً في أعلى كارت بيانات التأشيرة -->
+          <div class="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 border-2 border-emerald-500 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shadow-xs shrink-0">
+                📄
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs sm:text-sm font-black text-emerald-950">رقم المستند (طلب التأشيرة المعتمد)</span>
+                  <span class="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 text-[10px] font-black">إلزامي لمنصة إنجاز</span>
+                </div>
+                <p class="text-[11px] text-emerald-800 font-medium mt-0.5">
+                  رقم المستند المعتمد الخاص بطلب الزيارة العائلية المطلوب تعبئته في إنجاز
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="text"
+                id="ej_docNumber"
+                dir="ltr"
+                value="7011172155"
+                placeholder="7011172155"
+                class="w-full sm:w-44 bg-white border-2 border-emerald-500 rounded-xl px-3 py-2 text-sm sm:text-base font-mono font-black text-emerald-950 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-400 shadow-inner"
+              >
+              <button
+                type="button"
+                onclick="copyFieldVal('ej_docNumber', 'رقم المستند')"
+                class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-black shrink-0 shadow-md transition active:scale-95 flex items-center gap-1.5"
+              >
+                <span>نسخ</span>
+                <span>📋</span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Row 1: نوع التأشيرة | الجنسية الحالية -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- نوع التأشيرة -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <span>نوع التأشيرة</span>
+                  <span class="text-rose-500">*</span>
+                  <span class="text-[10px] text-slate-400" title="اختر نوع التأشيرة الممنوحة">❓</span>
+                </label>
+                <div class="flex items-center gap-1">
+                  <span onclick="setField('ej_visaType', 'زيارة عائلية')" class="badge-chip px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">عائلية</span>
+                  <span onclick="setField('ej_visaType', 'زيارة شخصية')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">شخصية</span>
+                  <span onclick="setField('ej_visaType', 'زيارة عمل')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">عمل</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <select id="ej_visaType" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                  <option value="زيارة عائلية">زيارة عائلية</option>
+                  <option value="زيارة شخصية">زيارة شخصية</option>
+                  <option value="زيارة عمل">زيارة عمل</option>
+                  <option value="سياحة">سياحة</option>
+                  <option value="علاج">علاج</option>
+                  <option value="إقامة">إقامة</option>
+                  <option value="تمديد عودة">تمديد عودة</option>
+                  <option value="مرور">مرور</option>
+                  <option value="دبلوماسية">دبلوماسية</option>
+                </select>
+                <button onclick="copyFieldVal('ej_visaType', 'نوع التأشيرة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- الجنسية الحالية -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <span>الجنسية الحالية</span>
+                  <span class="text-rose-500">*</span>
+                </label>
+                <div class="flex items-center gap-1">
+                  <span onclick="setField('ej_currentNationality', 'مصر')" class="badge-chip px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">🇪🇬 مصر</span>
+                  <span onclick="setField('ej_currentNationality', 'اليمن')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">🇾🇪 اليمن</span>
+                  <span onclick="setField('ej_currentNationality', 'الأردن')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">🇯🇴 الأردن</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <select id="ej_currentNationality" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                  <option value="مصر">مصر</option>
+                  <option value="اليمن">اليمن</option>
+                  <option value="الأردن">الأردن</option>
+                  <option value="السودان">السودان</option>
+                  <option value="سوريا">سوريا</option>
+                  <option value="لبنان">لبنان</option>
+                  <option value="المغرب">المغرب</option>
+                  <option value="باكستان">باكستان</option>
+                  <option value="الهند">الهند</option>
+                  <option value="بنغلاديش">بنغلاديش</option>
+                  <option value="الفلبين">الفلبين</option>
+                </select>
+                <button onclick="copyFieldVal('ej_currentNationality', 'الجنسية الحالية')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Row 2: بلد الإقامة | أقرب ممثلية -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- بلد الإقامة -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <span>بلد الإقامة</span>
+                  <span class="text-rose-500">*</span>
+                </label>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <select id="ej_residenceCountry" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                  <option value="مصر">مصر</option>
+                  <option value="المملكة العربية السعودية">المملكة العربية السعودية</option>
+                  <option value="اليمن">اليمن</option>
+                  <option value="الأردن">الأردن</option>
+                  <option value="السودان">السودان</option>
+                  <option value="الإمارات">الإمارات</option>
+                  <option value="الكويت">الكويت</option>
+                </select>
+                <button onclick="copyFieldVal('ej_residenceCountry', 'بلد الإقامة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+            <!-- أقرب ممثلية -->
+            <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <span>أقرب ممثلية</span>
+                  <span class="text-rose-500">*</span>
+                  <span class="text-[10px] text-slate-400" title="الممثلية السعودية المعنية بإصدار التأشيرة">❓</span>
+                </label>
+                <div class="flex items-center gap-1">
+                  <span onclick="setField('ej_closestMission', 'الاسكندرية')" class="badge-chip px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 text-[10px] font-bold">الاسكندرية</span>
+                  <span onclick="setField('ej_closestMission', 'القاهرة')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">القاهرة</span>
+                  <span onclick="setField('ej_closestMission', 'السويس')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">السويس</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <select id="ej_closestMission" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                  <option value="الاسكندرية">الاسكندرية</option>
+                  <option value="القاهرة">القاهرة</option>
+                  <option value="السويس">السويس</option>
+                  <option value="عمان">عمان</option>
+                  <option value="صنعاء">صنعاء</option>
+                  <option value="بيروت">بيروت</option>
+                  <option value="دبي">دبي</option>
+                  <option value="الخرطوم">الخرطوم</option>
+                  <option value="كراتشي">كراتشي</option>
+                </select>
+                <button onclick="copyFieldVal('ej_closestMission', 'أقرب ممثلية')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Official MOFA Red Notice matching Screenshot 1 -->
+          <div class="text-center py-2.5 px-4 rounded-xl bg-rose-50/70 border border-rose-200">
+            <p class="text-rose-600 font-bold text-xs sm:text-xs">
+              سيتم تحديد صلاحية التأشيرة وعدد السفرات ومدة الإقامة عند معالجة طلب التأشيرة لدى ممثلية المملكة المعنية
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ─── CARD 2: البيانات الشخصية والأسماء والصورة (مطابق لسكرين شوت 1) ─── -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-5">
+        
+        <!-- Section Header with legend line matching Screenshot 1 -->
+        <div class="relative flex items-center justify-center my-1">
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+          <div class="relative bg-white px-4 text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
+            <span>البيانات الشخصية</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          
+          <!-- Photo Box (Left Column matching Screenshot 1) -->
+          <div class="lg:col-span-3 flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-2.5 text-center">
+            
+            <!-- Photo Preview or Avatar Silhouette -->
+            <div class="w-28 h-28 rounded-2xl border-2 border-slate-300 bg-white flex items-center justify-center overflow-hidden shadow-inner relative group">
+              <div id="ej_photoPlaceholder" class="flex flex-col items-center justify-center text-slate-400 space-y-1">
+                <span class="text-4xl">👤</span>
+                <span class="text-[10px] font-bold">200 × 200</span>
+              </div>
+              <img id="ej_photoImg" src="" alt="صورة إنجاز" class="w-full h-full object-cover hidden">
+            </div>
+
+            <!-- Upload input and button -->
+            <input type="file" id="ej_photoFileInput" accept="image/*" class="hidden" onchange="handleEnjazPhotoUpload(this)">
+            
+            <div class="space-y-1.5 w-full">
+              <button
+                type="button"
+                onclick="document.getElementById('ej_photoFileInput').click()"
+                class="w-full px-4 py-2 rounded-xl bg-[#2E314D] hover:bg-[#202237] text-white text-xs font-black transition shadow-sm active:scale-95"
+              >
+                اختر الصورة
+              </button>
+
+              <button
+                type="button"
+                onclick="downloadEnjazPhoto()"
+                class="w-full px-3 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-[11px] font-bold transition"
+              >
+                💾 تنزيل 200×200 جاهزة
+              </button>
+            </div>
+
+            <p class="text-[10px] text-rose-600 font-bold leading-tight">
+              * يجب أن تكون الصورة لها خلفية بيضاء وبالزي الرسمي
+            </p>
+          </div>
+
+          <!-- Quadruple Names Grid (Right Columns matching Screenshot 1) -->
+          <div class="lg:col-span-9 space-y-4">
+            
+            <!-- Arabic Names -->
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-black text-slate-800">الاسم باللغة العربية:</label>
+                <button onclick="copyEnjazArFullName()" class="text-xs text-purple-700 hover:underline font-bold">نسخ الاسم الكامل عربي</button>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                
+                <!-- الاسم الأول -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-bold text-slate-500 mb-1">الاسم الأول</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_firstNameAr" placeholder="أسماء" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_firstNameAr', 'الاسم الأول عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+                <!-- الأب -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-bold text-slate-500 mb-1">الأب</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_fatherNameAr" placeholder="محمد" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_fatherNameAr', 'الأب عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+                <!-- الجد -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-bold text-slate-500 mb-1">الجد</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_grandFatherNameAr" placeholder="عبد الغفار" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_grandFatherNameAr', 'الجد عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+                <!-- العائلة -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-bold text-slate-500 mb-1">العائلة</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_familyNameAr" placeholder="ابراهيم" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_familyNameAr', 'العائلة عربي')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- English Names matching Screenshot 1 exact headers -->
+            <div class="space-y-1.5 pt-1">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-black text-slate-800 font-mono">الاسم بالإنجليزية (Name in English):</label>
+                <button onclick="copyEnjazEnFullName()" class="text-xs text-purple-700 hover:underline font-bold">نسخ الاسم الكامل إنجليزي</button>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                
+                <!-- First Name * -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-mono font-bold text-slate-500 mb-1">First Name *</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_firstNameEn" dir="ltr" placeholder="ASMAA" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_firstNameEn', 'First Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+                <!-- Second/Father Name -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-mono font-bold text-slate-500 mb-1">Second/Father Name</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_fatherNameEn" dir="ltr" placeholder="MOHAMED" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_fatherNameEn', 'Second Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+                <!-- Other/G.Father Name -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-mono font-bold text-slate-500 mb-1">Other/G.Father Name</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_grandFatherNameEn" dir="ltr" placeholder="ABDELGHAFAR" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_grandFatherNameEn', 'Other/G.Father Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+                <!-- Last/Family Name * -->
+                <div class="field-card p-2 rounded-xl border border-slate-200 bg-slate-50/70">
+                  <div class="text-[10px] font-mono font-bold text-slate-500 mb-1">Last/Family Name *</div>
+                  <div class="flex items-center gap-1">
+                    <input type="text" id="ej_familyNameEn" dir="ltr" placeholder="IBRAHIM" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                    <button onclick="copyFieldVal('ej_familyNameEn', 'Last/Family Name')" class="px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ─── CARD 3: تفاصيل الجواز والهوية والمهنة والعنوان (مطابق لسكرين شوت 2) ─ -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-5">
+        
+        <!-- سؤال: هل لديك جنسية سابقة؟ (مطابق لأعلى سكرين شوت 2) -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+          <div class="flex items-center gap-4">
+            <span class="text-xs font-black text-slate-800">هل لديك جنسية سابقة؟</span>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700">
+              <input type="radio" name="ej_prevNatRadio" id="ej_prevNatYes" value="نعم" onchange="togglePrevNatField(true)" class="text-purple-600">
+              <span>نعم</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700">
+              <input type="radio" name="ej_prevNatRadio" id="ej_prevNatNo" value="لا" checked onchange="togglePrevNatField(false)" class="text-purple-600">
+              <span>لا</span>
+            </label>
+          </div>
+
+          <div id="ej_prevNatContainer" class="hidden flex items-center gap-2">
+            <span class="text-xs text-slate-500 font-bold">حدد الجنسية السابقة:</span>
+            <input type="text" id="ej_previousNationality" placeholder="الجنسية السابقة..." class="px-2 py-1 border border-slate-300 rounded-lg text-xs">
+          </div>
+        </div>
+
+        <!-- 2-Column Fields Grid matching Screenshot 2 exactly -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- الصف 1: رقم الجواز * | نوع الجواز * -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">رقم الجواز <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_passportNumber" dir="ltr" placeholder="A36049088" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_passportNumber', 'رقم الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">نوع الجواز <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_docType" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="عادي">عادي</option>
+                <option value="خاص">خاص</option>
+                <option value="دبلوماسي">دبلوماسي</option>
+                <option value="وثيقة سفر">وثيقة سفر</option>
+              </select>
+              <button onclick="copyFieldVal('ej_docType', 'نوع الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 2: دولة الاصدار * | تاريخ الاصدار * -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">دولة الاصدار <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_countryOfIssue" value="مصر" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_countryOfIssue', 'دولة الاصدار')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <div class="field-card p-2.5 rounded-xl border-2 border-purple-200 bg-purple-50/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-black text-purple-950 flex items-center gap-1">
+                <span>تاريخ الإصدار (بداية الجواز)</span>
+                <span class="text-rose-500">*</span>
+              </span>
+              <span class="text-[10px] text-purple-700 font-mono font-bold">📅 YYYY/MM/DD</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="text"
+                id="ej_doi"
+                dir="ltr"
+                value="2023/12/18"
+                placeholder="2023/12/18"
+                class="w-full bg-white border border-purple-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-purple-600 shadow-2xs"
+              >
+              <button onclick="copyFieldVal('ej_doi', 'تاريخ إصدار الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 shadow-xs transition active:scale-95">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 3: تاريخ الانتهاء * | مكان الميلاد * -->
+          <div class="field-card p-2.5 rounded-xl border-2 border-purple-200 bg-purple-50/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-black text-purple-950 flex items-center gap-1">
+                <span>تاريخ الانتهاء (نهاية الجواز)</span>
+                <span class="text-rose-500">*</span>
+              </span>
+              <span class="text-[10px] text-purple-700 font-mono font-bold">📅 YYYY/MM/DD</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="text"
+                id="ej_doe"
+                dir="ltr"
+                value="2030/12/17"
+                placeholder="2030/12/17"
+                class="w-full bg-white border border-purple-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-purple-600 shadow-2xs"
+              >
+              <button onclick="copyFieldVal('ej_doe', 'تاريخ انتهاء الجواز')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 shadow-xs transition active:scale-95">نسخ</button>
+            </div>
+          </div>
+
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">مكان الميلاد <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_pob" placeholder="مصر / المنوفية" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_pob', 'مكان الميلاد')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 4: تاريخ الميلاد * | رقم الهوية -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">تاريخ الميلاد <span class="text-rose-500">*</span></span>
+              <span class="text-[10px] text-slate-400 font-mono">📅 YYYY/MM/DD</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_dob" dir="ltr" placeholder="1992/12/10" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_dob', 'تاريخ الميلاد')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">رقم الهوية (الرقم القومي إن وجد)</div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_nationalId" dir="ltr" placeholder="الرقم القومي / الهوية الوطنية..." class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_nationalId', 'رقم الهوية')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 5: الديانة * | الحالة الاجتماعية * -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">الديانة <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_religion" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="مسلم">مسلم</option>
+                <option value="مسيحي">مسيحي</option>
+                <option value="أخرى">أخرى</option>
+              </select>
+              <button onclick="copyFieldVal('ej_religion', 'الديانة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">الحالة الاجتماعية <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_maritalStatus" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="متزوج">متزوج</option>
+                <option value="أعزب">أعزب</option>
+                <option value="مطلق">مطلق</option>
+                <option value="أرمل">أرمل</option>
+              </select>
+              <button onclick="copyFieldVal('ej_maritalStatus', 'الحالة الاجتماعية')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 6: الجنس * | الحالة المهنية * مع checkbox لا يعمل -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">الجنس <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_sex" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="أنثى">أنثى (Female)</option>
+                <option value="ذكر">ذكر (Male)</option>
+              </select>
+              <button onclick="copyFieldVal('ej_sex', 'الجنس')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">الحالة المهنية <span class="text-rose-500">*</span></span>
+              <label class="text-[11px] text-slate-600 font-bold flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="ej_unemployedCheck"
+                  checked
+                  onchange="if(this.checked){ setVal('ej_employmentStatus','لا يعمل'); } else { setVal('ej_employmentStatus','موظف قطاع خاص'); }"
+                  class="rounded text-purple-600"
+                >
+                <span>لا يعمل</span>
+              </label>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_employmentStatus" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="لا يعمل">لا يعمل</option>
+                <option value="موظف قطاع خاص">موظف قطاع خاص</option>
+                <option value="موظف حكومي">موظف حكومي</option>
+                <option value="طالب">طالب</option>
+                <option value="متقاعد">متقاعد</option>
+              </select>
+              <button onclick="copyFieldVal('ej_employmentStatus', 'الحالة المهنية')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 7: المهنة * (كامل العرض) -->
+          <div class="md:col-span-2 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">المهنة <span class="text-rose-500">*</span></span>
+              <div class="flex items-center gap-1 text-[10px] flex-wrap">
+                <span onclick="setField('ej_profession', 'بكالوريوس علوم')" class="badge-chip px-1.5 py-0.2 rounded bg-purple-100 text-purple-900 font-bold border border-purple-200">بكالوريوس علوم</span>
+                <span onclick="setField('ej_profession', 'ربة منزل')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-800">ربة منزل</span>
+                <span onclick="setField('ej_profession', 'طفله')" class="badge-chip px-1.5 py-0.2 rounded bg-rose-100 text-rose-900 font-bold border border-rose-200">طفله</span>
+                <span onclick="setField('ej_profession', 'طالبة')" class="badge-chip px-1.5 py-0.2 rounded bg-blue-100 text-blue-900 font-bold border border-blue-200">طالبة</span>
+                <span onclick="setField('ej_profession', 'بدون عمل')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-800">بدون عمل</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_profession" value="ربة منزل" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_profession', 'المهنة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 8: عنوان السكن داخل السعودية * (كامل العرض) -->
+          <div class="md:col-span-2 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">عنوان السكن داخل السعودية <span class="text-rose-500">*</span></span>
+              <div class="flex items-center gap-1 text-[10px]">
+                <span onclick="setField('ej_saudiAddress', 'جده')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-800">جده</span>
+                <span onclick="setField('ej_saudiAddress', 'الرياض')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-800">الرياض</span>
+                <span onclick="setField('ej_saudiAddress', 'مكة المكرمة')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-800">مكة المكرمة</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_saudiAddress" value="جده" placeholder="مثال: جده - حي السلامة" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_saudiAddress', 'عنوان السكن داخل السعودية')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الصف 9: صلة القرابة * | رقم الجوال * مع زر ارسال رمز التحقق -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">صلة القرابة <span class="text-rose-500">*</span></span>
+              <div class="flex items-center gap-1 text-[10px]">
+                <span onclick="setField('ej_relation', 'زوجة')" class="badge-chip px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-bold">زوجة</span>
+                <span onclick="setField('ej_relation', 'بنت')" class="badge-chip px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-bold">بنت</span>
+                <span onclick="setField('ej_relation', 'ابن')" class="badge-chip px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold">ابن</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_relation" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="زوجة">زوجة</option>
+                <option value="بنت">بنت</option>
+                <option value="ابن">ابن</option>
+                <option value="ابنة">ابنة</option>
+                <option value="والدة">والدة</option>
+                <option value="والد">والد</option>
+                <option value="أخت">أخت</option>
+                <option value="أخ">أخ</option>
+                <option value="زوج">زوج</option>
+                <option value="حماة">حماة</option>
+                <option value="حمى">حمى</option>
+              </select>
+              <button onclick="copyFieldVal('ej_relation', 'صلة القرابة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+          <!-- رقم الجوال + زر ارسال رمز التحقق -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">رقم الجوال <span class="text-rose-500">*</span></div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_phoneCountryCode" class="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-800 shrink-0">
+                <option value="+966">+966 🇸🇦</option>
+                <option value="+20">+20 🇪🇬</option>
+                <option value="+967">+967 🇾🇪</option>
+                <option value="+962">+962 🇯🇴</option>
+              </select>
+              <input type="text" id="ej_phone" dir="ltr" value="0582625697" placeholder="05XXXXXXXX" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_phone', 'رقم الجوال')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+              <!-- زر إرسال رمز التحقق البنفسجي المطابق تماماً لسكرين شوت 2 -->
+              <button
+                type="button"
+                onclick="simulateSendOtp()"
+                class="px-3 py-1.5 rounded-xl bg-[#595775] hover:bg-[#474563] text-white text-xs font-bold shrink-0 transition shadow-sm active:scale-95"
+                title="إرسال ونسخ رمز التحقق للجوال"
+              >
+                ارسال رمز التحقق
+              </button>
+            </div>
+          </div>
+
+          <!-- البريد الإلكتروني (المعتمد والمحفوظ لكافة الجوازات) -->
+          <div class="md:col-span-2 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">البريد الإلكتروني (المعتمد والمحفوظ لكافة الجوازات)</span>
+              <span class="text-[10px] text-emerald-700 font-bold bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-200">مشترك ومحفوظ تلقائياً لجميع الجوازات ✓</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input type="email" id="ej_email" dir="ltr" value="sayedabdo8888@gmail.com" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_email', 'البريد الإلكتروني')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold shrink-0">نسخ</button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ─── CARD 4: بيانات النقل والوصول (مطابق لأسفل سكرين شوت 2) ──────────── -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+        
+        <div class="relative flex items-center justify-center my-1">
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+          <div class="relative bg-white px-4 text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
+            <span>بيانات النقل والوصول</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- الناقل (مطابق تماماً لخيار "جوا" في سكرين شوت منصة إنجاز) -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <span>الناقل</span>
+                <span class="text-[10px] text-slate-400" title="وسيلة السفر الناقلة">❓</span>
+              </div>
+              <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-1.5 py-0.2 rounded">مطابق للمنصة</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <select id="ej_carrier" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+                <option value="جوا" selected>جوا</option>
+                <option value="جوي">جوي (طيران)</option>
+                <option value="بحري">بحري</option>
+                <option value="بري">بري</option>
+                <option value="الخطوط الجوية العربية السعودية">الخطوط الجوية العربية السعودية</option>
+                <option value="مصر للطيران">مصر للطيران</option>
+                <option value="طيران ناس">طيران ناس</option>
+                <option value="طيران أديل">طيران أديل</option>
+              </select>
+              <button onclick="copyFieldVal('ej_carrier', 'الناقل')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+            </div>
+          </div>
+
+          <!-- جهة الوصول (مطابق لسكرين شوت إنجاز) -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-xs font-bold text-slate-700">جهة الوصول</div>
+              <div class="flex items-center gap-1">
+                <span onclick="setField('ej_arrivalPort', 'مطار الأمير نائف بن عبدالعزيز الدولي بالقصيم')" class="badge-chip px-1.5 py-0.2 rounded bg-purple-100 text-purple-900 text-[10px] font-bold">مطار الأمير نائف بالقصيم</span>
+                <span onclick="setField('ej_arrivalPort', 'مطار الملك عبد العزيز بجدة')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">جدة</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="text"
+                id="ej_arrivalPort"
+                value="مطار الأمير نائف بن عبدالعزيز الدولي بالقصيم"
+                placeholder="مطار الأمير نائف بن عبدالعزيز الدولي بالقصيم"
+                class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600"
+              >
+              <button onclick="copyFieldVal('ej_arrivalPort', 'جهة الوصول')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+            </div>
+          </div>
+
+          <!-- التاريخ المتوقع لدخولك المملكة * (مطابق لسكرين شوت: 2026/09/30) -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-700">التاريخ المتوقع لدخولك المملكة <span class="text-rose-500">*</span></span>
+              <span class="text-[10px] text-slate-400 font-mono">📅 YYYY/MM/DD</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="text"
+                id="ej_expectedArrivalDate"
+                dir="ltr"
+                value="2026/09/30"
+                placeholder="2026/09/30"
+                class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600"
+              >
+              <button onclick="copyFieldVal('ej_expectedArrivalDate', 'التاريخ المتوقع لدخول المملكة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+            </div>
+          </div>
+
+          <!-- الغرض (مطابق تماماً لسكرين شوت المستخدم: زيارة عائلية لـ السيد عبدالمنعم السيد بصار) -->
+          <div class="field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-xs font-bold text-slate-700">الغرض <span class="text-rose-500">*</span></div>
+              <div class="flex items-center gap-1">
+                <span onclick="setField('ej_visitPurpose', 'زيارة عائلية لـ السيد عبدالمنعم السيد بصار')" class="badge-chip px-1.5 py-0.2 rounded bg-purple-100 text-purple-900 text-[10px] font-bold">لـ السيد عبدالمنعم</span>
+                <span onclick="setField('ej_visitPurpose', 'زيارة عائلية')" class="badge-chip px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 text-[10px]">عائلية فقط</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="text"
+                id="ej_visitPurpose"
+                value="زيارة عائلية لـ السيد عبدالمنعم السيد بصار"
+                class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-600"
+              >
+              <button onclick="copyFieldVal('ej_visitPurpose', 'الغرض')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+            </div>
+          </div>
+
+          <!-- رقم الرحلة -->
+          <div class="md:col-span-2 field-card p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+            <div class="text-xs font-bold text-slate-700 mb-1">رقم الرحلة (اختياري)</div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="ej_flightNumber" dir="ltr" placeholder="SV-1234 / MS-678 (اختياري)" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+              <button onclick="copyFieldVal('ej_flightNumber', 'رقم الرحلة')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition">نسخ</button>
+            </div>
+          </div>
+
+          <!-- العمرة (مطابق تماماً لمنصة إنجاز وسكرين شوت المستخدم الأخير) -->
+          <div class="md:col-span-2 pt-3 border-t border-dashed border-slate-200 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-slate-800">هل ترغب في اداء مناسك العمرة؟</span>
+                <span class="text-xs text-slate-400" title="اختيار الرغبة بأداء مناسك العمرة لتسهيل الخدمات">❓</span>
+              </div>
+              <div class="flex items-center gap-4">
+                <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700">
+                  <input type="radio" name="ej_umrah" id="ej_umrahYes" value="نعم" class="text-purple-600 focus:ring-purple-500">
+                  <span>نعم</span>
+                </label>
+                <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700">
+                  <input type="radio" name="ej_umrah" id="ej_umrahNo" value="لا" checked class="text-purple-600 focus:ring-purple-500">
+                  <span>لا (الافتراضي)</span>
+                </label>
+              </div>
+            </div>
+            <!-- نص إشعار العمرة الرسمي من سكرين شوت المستخدم -->
+            <div class="p-3 rounded-xl bg-purple-50/70 border border-purple-200 text-[11px] text-purple-950 font-medium leading-relaxed">
+              اختيار الرغبة بأداء مناسك العمرة هي لتسهيل الخدمات المقدمة لك ولا يترتب عليها أي متطلبات إضافية ولا تؤثر سلباً على نتيجة الطلب، وتمكنك من تأدية العمرة خلال العام عدا موسم الحج
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Submit & Quick Buttons inside Enjaz -->
+        <div class="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
+          <button
+            onclick="copyEnjazFullSummary()"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-black transition flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span>📋 نسخ ملخص إنجاز كامل</span>
+          </button>
+
+          <button
+            onclick="addCurrentToFamilyQueue()"
+            class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black transition flex items-center justify-center gap-2 shadow-md active:scale-95"
+          >
+            <span>💾 حفظ وتحديث هذا الشخص في قائمة الزيارة</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div> <!-- ─── END TAB 2: ENJAZ ─── -->
+
+  </main>
+
+  <!-- ─── FLOATING SEQUENTIAL AUTO-COPY DOCK ─────────────────────────────────── -->
+  <aside id="seqDockContainer" class="fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-6 sm:w-[500px] z-50 seq-dock bg-slate-900/95 border border-slate-700 rounded-2xl p-3 shadow-2xl text-white">
+    <!-- Progress Bar -->
+    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-2">
+      <div id="seqProgressBar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+      <!-- Current Step Info -->
+      <div class="min-w-0">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-sky-400 font-bold" id="seqStepCounter">
+            1 من 25
+          </span>
+          <span class="text-xs font-black text-slate-200 truncate" id="seqStepLabel">
+            الجنسية
+          </span>
+        </div>
+        <div class="text-sm font-black text-emerald-400 truncate mt-0.5 font-mono" id="seqStepValue">
+          (انقر لبدء النسخ)
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button
+          onclick="prevSequentialStep()"
+          class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition active:scale-95"
+          title="الحقل السابق"
+        >
+          ◀
+        </button>
+        <button
+          onclick="nextSequentialStep()"
+          class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition flex items-center gap-1.5 shadow-lg active:scale-95"
+          title="نسخ الحقل والانتقال للتالي (زر المسافة Space أو Alt+C)"
+        >
+          <span>نسخ التالي</span>
+          <kbd class="hidden sm:inline-block text-[9px] bg-emerald-800 px-1.5 py-0.5 rounded font-mono">Space</kbd>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── TOAST NOTIFICATION CONTAINER ──────────────────────────────────────── -->
+  <div id="toastContainer" class="fixed top-14 left-4 sm:left-6 z-50 space-y-2 pointer-events-none"></div>
+
+  <!-- Scripts -->
+  <script src="countries.js"></script>
+  <script src="mrzParser.js"></script>
+  <script src="visaParser.js"></script>
+  <script src="tesseract.min.js"></script>
+  <script src="ocrEngine.js"></script>
+  <script src="app.js"></script>
+  
+  <script>
+    // Inline Helpers
+    function copyFieldVal(id, label) {
+      const el = document.getElementById(id);
+      if (el) copyToClipboard(el.value, label);
+    }
+
+    function setField(id, val) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.value = val;
+        copyToClipboard(val, el.previousElementSibling ? el.previousElementSibling.textContent : '');
+      }
+    }
+
+    function setNationalityFast(ar, en, code) {
+      setVal('f_nationalityAr', ar);
+      copyToClipboard(ar, 'الجنسية: ' + ar);
+    }
+
+    function copyFullArName() {
+      const first = document.getElementById('f_firstNameAr').value.trim();
+      const father = document.getElementById('f_fatherNameAr').value.trim();
+      const grand = document.getElementById('f_grandFatherNameAr').value.trim();
+      const family = document.getElementById('f_familyNameAr').value.trim();
+      const full = [first, father, grand, family].filter(Boolean).join(' ');
+      copyToClipboard(full, 'الاسم الكامل عربي');
+    }
+
+    function copyFullEnName() {
+      const first = document.getElementById('f_firstNameEn').value.trim();
+      const father = document.getElementById('f_fatherNameEn').value.trim();
+      const grand = document.getElementById('f_grandFatherNameEn').value.trim();
+      const family = document.getElementById('f_familyNameEn').value.trim();
+      const full = [first, father, grand, family].filter(Boolean).join(' ');
+      copyToClipboard(full, 'الاسم الكامل إنجليزي');
+    }
+
+    function setDateFormat(fmt) {
+      state.dateFormat = fmt;
+      const bDmy = document.getElementById('btnDmy');
+      const bYmd = document.getElementById('btnYmd');
+      if (fmt === 'YMD') {
+        bYmd.className = 'px-2.5 py-1 rounded-lg bg-white shadow-xs text-slate-900 font-black transition text-[11px]';
+        bDmy.className = 'px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-900 font-medium transition text-[11px]';
+      } else {
+        bDmy.className = 'px-2.5 py-1 rounded-lg bg-white shadow-xs text-slate-900 font-black transition text-[11px]';
+        bYmd.className = 'px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-900 font-medium transition text-[11px]';
+      }
+      populateUIFromRecord();
+      showToast(`تم ضبط صيغة التاريخ على: ${fmt === 'YMD' ? 'YYYY/MM/DD' : 'DD/MM/YYYY'}`, 'info');
+    }
+
+    function clearCurrentForm() {
+      resetCurrentPassportForm();
+    }
+
+    function exportVaultToJson() {
+      if (!state.vaultRecords.length) {
+        showToast('لا توجد بيانات لتصديرها حالياً', 'info');
+        return;
+      }
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state.vaultRecords, null, 2));
+      const a = document.createElement('a');
+      a.setAttribute('href', dataStr);
+      a.setAttribute('download', `passports_vault_backup_${new Date().toISOString().slice(0, 10)}.json`);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showToast('تم تصدير النسخة الاحتياطية بنجاح ✓', 'success');
+    }
+  </script>
+</body>
+</html>
