@@ -31,10 +31,8 @@ dist-ssr
 
 # Standalone Independent Projects
 bi-platform/
-
-.vite
-base44/.app.jsonc
 dora-cars/
+riviera-event-flow/
 # Sensitive Credentials & Keys (Zero-Secrets Policy)
 ملفات تقارير الحملات/*.json
 *credentials*.json
