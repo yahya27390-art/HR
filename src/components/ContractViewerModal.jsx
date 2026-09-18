@@ -43,7 +43,8 @@ export default function ContractViewerModal({
   const { toast } = useToast();
   
   // Signing Mode: 'internal' | 'qiwa_upload'
-  const [signingMode, setSigningMode] = useState('internal');
+  const isQiwa = contract?.category === 'qiwa';
+  const [signingMode, setSigningMode] = useState(isQiwa ? 'qiwa_upload' : 'internal');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [agreedToPenalty, setAgreedToPenalty] = useState(false);
   const [signing, setSigning] = useState(false);
@@ -53,11 +54,23 @@ export default function ContractViewerModal({
   const [qiwaFile, setQiwaFile] = useState(null);
   const [qiwaFileDataUrl, setQiwaFileDataUrl] = useState('');
 
+  // Synchronize state when selected contract changes
+  React.useEffect(() => {
+    if (contract) {
+      const qiwa = contract.category === 'qiwa';
+      setSigningMode(qiwa ? 'qiwa_upload' : 'internal');
+      setQiwaNumber(contract.qiwa_contract_number || (qiwa ? `QW-${contract.employee_number}` : ''));
+      setAgreedToTerms(Boolean(contract.terms_accepted));
+      setAgreedToPenalty(Boolean(contract.penalty_clause_acknowledged));
+      setQiwaFile(null);
+      setQiwaFileDataUrl(contract.qiwa_document_url || '');
+    }
+  }, [contract]);
+
   if (!contract) return null;
 
   const company = getCompanyProfile();
-  const isQiwa = contract.category === 'qiwa';
-  const isSigned = Boolean(contract.signed_by_employee);
+  const isSigned = Boolean(contract.signed_by_employee || contract.qiwa_document_url);
 
   // Handle Qiwa File Selection
   const handleQiwaFileChange = (e) => {
@@ -391,109 +404,98 @@ export default function ContractViewerModal({
 
         </div>
 
-        {/* ─── MODAL FOOTER (Interactive Action for Employee) ───────────── */}
+        {/* ─── MODAL FOOTER (Interactive Action for Employee & HR) ───────────── */}
         <div className="bg-slate-900 p-6 border-t border-slate-800 sticky bottom-0 z-20 no-print space-y-4">
           
-          {/* If Employee is viewing and hasn't signed yet */}
-          {isEmployeeView && !isSigned && (
-            <div className="space-y-4">
-              
-              {/* Selector between Internal Signature vs Qiwa Upload */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setSigningMode('internal')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    signingMode === 'internal'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>توقيع العقد الداخلي الموحد</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSigningMode('qiwa_upload')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    signingMode === 'qiwa_upload'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
+          {/* QIWA CONTRACT MODE: Dedicated Upload & Management for both Employee & HR */}
+          {isQiwa && (
+            <div className="space-y-3 p-4 rounded-2xl bg-slate-950 border border-emerald-800/60">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                   <Upload className="w-4 h-4" />
-                  <span>لدي عقد على منصة قوى (رفع العقد)</span>
-                </button>
+                  <span>{isSigned ? 'تحديث أو استبدال ملف عقد قوى:' : 'رفع وتوثيق عقد منصة قوى الرسمي:'}</span>
+                </div>
+                {contract.qiwa_contract_number && (
+                  <Badge variant="outline" className="font-mono text-[10px] text-emerald-300 border-emerald-500/40">
+                    رقم العقد: {contract.qiwa_contract_number}
+                  </Badge>
+                )}
               </div>
 
-              {/* Mode 1: Internal Contract Signature Acknowledgements */}
-              {signingMode === 'internal' && (
-                <div className="space-y-3 p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60">
-                  <div className="flex items-start gap-2.5">
-                    <Checkbox
-                      id="agree-terms"
-                      checked={agreedToTerms}
-                      onCheckedChange={setAgreedToTerms}
-                      className="mt-0.5"
-                    />
-                    <label htmlFor="agree-terms" className="text-xs text-slate-200 font-semibold cursor-pointer select-none">
-                      أقر بأنني اطلعت على كافة بنود هذا العقد ولائحة العمل الخاصة بالشركة وأوافق عليها موافقة تامة ونهائية.
-                    </label>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-slate-300 font-bold">رقم عقد قوى</Label>
+                  <Input
+                    value={qiwaNumber}
+                    onChange={(e) => setQiwaNumber(e.target.value)}
+                    placeholder="مثال: QW-KSA-2026-..."
+                    className="bg-slate-900 border-slate-700 text-xs h-9 font-mono text-white"
+                  />
+                </div>
 
-                  <div className="flex items-start gap-2.5">
-                    <Checkbox
-                      id="agree-penalty"
-                      checked={agreedToPenalty}
-                      onCheckedChange={setAgreedToPenalty}
-                      className="mt-0.5"
-                    />
-                    <label htmlFor="agree-penalty" className="text-xs text-rose-300 font-bold cursor-pointer select-none">
-                      أقر بالالتزام بمهلة الإشعار (شهر على الأقل قبل ترك العمل) وأوافق على الشرط الجزائي والتعويضي في حال الإخلال بذلك.
-                    </label>
-                  </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-slate-300 font-bold">ملف العقد المحمل من قوى (PDF أو صورة) *</Label>
+                  <Input
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={handleQiwaFileChange}
+                    className="bg-slate-900 border-slate-700 text-xs h-9 cursor-pointer file:text-emerald-400"
+                  />
+                </div>
+              </div>
+
+              {qiwaFile && (
+                <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>تم اختيار الملف: {qiwaFile.name} ({(qiwaFile.size / 1024).toFixed(1)} KB)</span>
                 </div>
               )}
 
-              {/* Mode 2: Qiwa Document Upload Form */}
-              {signingMode === 'qiwa_upload' && (
-                <div className="space-y-3 p-4 rounded-2xl bg-slate-950 border border-slate-800">
-                  <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <Upload className="w-4 h-4" />
-                    <span>رفع وتوثيق عقد منصة قوى الرسمي:</span>
-                  </div>
+              <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                <p className="text-[11px] text-slate-400">
+                  {isEmployeeView 
+                    ? 'قم بالدخول على منصة قوى وحمل نسخة العقد الموثقة بصيغة PDF ثم اضغط على زر الاعتماد أدناه.'
+                    : 'يمكن للإدارة أو مسؤول الموارد البشرية رفع نسخة عقد قوى نيابة عن الموظف.'}
+                </p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-slate-300 font-bold">رقم عقد قوى (اختياري)</Label>
-                      <Input
-                        value={qiwaNumber}
-                        onChange={(e) => setQiwaNumber(e.target.value)}
-                        placeholder="مثال: QW-KSA-2026-..."
-                        className="bg-slate-900 border-slate-700 text-xs h-9 font-mono"
-                      />
-                    </div>
+                <Button
+                  onClick={handleUploadQiwa}
+                  disabled={(!qiwaFileDataUrl && !qiwaNumber) || signing}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-9 px-5 rounded-xl gap-2 shadow-md"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{signing ? 'جاري الحفظ...' : (isSigned ? 'تحديث ملف العقد' : 'توثيق واعتماد عقد قوى 📤')}</span>
+                </Button>
+              </div>
+            </div>
+          )}
 
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-slate-300 font-bold">ملف العقد (PDF أو صورة) *</Label>
-                      <Input
-                        type="file"
-                        accept=".pdf,image/*"
-                        onChange={handleQiwaFileChange}
-                        className="bg-slate-900 border-slate-700 text-xs h-9 cursor-pointer file:text-emerald-400"
-                      />
-                    </div>
-                  </div>
+          {/* INTERNAL CONTRACT MODE: Sign by Employee */}
+          {!isQiwa && isEmployeeView && !isSigned && (
+            <div className="space-y-3 p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60">
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id="agree-terms"
+                  checked={agreedToTerms}
+                  onCheckedChange={setAgreedToTerms}
+                  className="mt-0.5"
+                />
+                <label htmlFor="agree-terms" className="text-xs text-slate-200 font-semibold cursor-pointer select-none">
+                  أقر بأنني اطلعت على كافة بنود هذا العقد الموحد (13 مادة) ولائحة تنظيم العمل بالشركة وأوافق عليها موافقة تامة ونهائية.
+                </label>
+              </div>
 
-                  {qiwaFile && (
-                    <div className="text-[11px] text-emerald-400 font-mono">
-                      ✓ تم اختيار الملف: {qiwaFile.name} ({(qiwaFile.size / 1024).toFixed(1)} KB)
-                    </div>
-                  )}
-                </div>
-              )}
-
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id="agree-penalty"
+                  checked={agreedToPenalty}
+                  onCheckedChange={setAgreedToPenalty}
+                  className="mt-0.5"
+                />
+                <label htmlFor="agree-penalty" className="text-xs text-rose-300 font-bold cursor-pointer select-none">
+                  أقر بالالتزام بمهلة الإشعار (شهر على الأقل قبل ترك العمل) وأوافق على الشرط الجزائي والتعويضي في حال الإخلال بذلك وفق نظام العمل.
+                </label>
+              </div>
             </div>
           )}
 
@@ -507,26 +509,15 @@ export default function ContractViewerModal({
             </Button>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              {isEmployeeView && !isSigned && (
-                signingMode === 'internal' ? (
-                  <Button
-                    onClick={handleSignInternal}
-                    disabled={!agreedToTerms || !agreedToPenalty || signing}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-6 rounded-2xl gap-2 shadow-lg shadow-emerald-500/20 flex-1 sm:flex-initial"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>{signing ? 'جاري توثيق التوقيع...' : 'أوافق وأوقع العقد الداخلي إلكترونياً ✍️'}</span>
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleUploadQiwa}
-                    disabled={(!qiwaFileDataUrl && !qiwaNumber) || signing}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-6 rounded-2xl gap-2 shadow-lg shadow-emerald-500/20 flex-1 sm:flex-initial"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>{signing ? 'جاري رفع العقد...' : 'توثيق واعتماد عقد قوى الرسمي 📤'}</span>
-                  </Button>
-                )
+              {!isQiwa && isEmployeeView && !isSigned && (
+                <Button
+                  onClick={handleSignInternal}
+                  disabled={!agreedToTerms || !agreedToPenalty || signing}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-6 rounded-2xl gap-2 shadow-lg shadow-emerald-500/20 flex-1 sm:flex-initial"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{signing ? 'جاري توثيق التوقيع...' : 'أوافق وأوقع العقد الداخلي إلكترونياً ✍️'}</span>
+                </Button>
               )}
 
               {isSigned && (

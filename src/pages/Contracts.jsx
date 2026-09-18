@@ -410,51 +410,103 @@ export default function Contracts() {
                           <div className="text-muted-foreground">➔ {c.end_date || 'تجديد تلقائي'}</div>
                         </TableCell>
 
-                        {/* Signature Status */}
+                        {/* Signature / Qiwa Status */}
                         <TableCell className="text-center">
-                          {isSigned ? (
-                            <div className="inline-flex flex-col items-center">
-                              <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] gap-1">
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>معتمد وموقع رقمياً</span>
+                          {isQiwa ? (
+                            c.qiwa_document_url ? (
+                              <div className="inline-flex flex-col items-center">
+                                <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] gap-1 font-bold">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>عقد قوى موثق ومرفوع ✓</span>
+                                </Badge>
+                                {c.qiwa_contract_number && (
+                                  <span className="text-[9px] text-muted-foreground font-mono mt-0.5">
+                                    {c.qiwa_contract_number}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] gap-1 font-bold">
+                                <Clock className="w-3 h-3" />
+                                <span>بانتظار رفع عقد قوى ⏳</span>
                               </Badge>
-                              {c.signed_at && (
-                                <span className="text-[9px] text-muted-foreground font-mono mt-0.5">
-                                  {new Date(c.signed_at).toLocaleDateString('ar-SA')}
-                                </span>
-                              )}
-                            </div>
+                            )
                           ) : (
-                            <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] gap-1">
-                              <Clock className="w-3 h-3" />
-                              <span>بانتظار توقيع الموظف</span>
-                            </Badge>
+                            isSigned ? (
+                              <div className="inline-flex flex-col items-center">
+                                <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] gap-1 font-bold">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>معتمد وموقع رقمياً ✓</span>
+                                </Badge>
+                                {c.signed_at && (
+                                  <span className="text-[9px] text-muted-foreground font-mono mt-0.5">
+                                    {new Date(c.signed_at).toLocaleDateString('ar-SA')}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <Badge className="bg-blue-500/20 text-blue-300 border border-blue-500/40 text-[10px] gap-1 font-bold">
+                                <Clock className="w-3 h-3" />
+                                <span>بانتظار توقيع الموظف ✍️</span>
+                              </Badge>
+                            )
                           )}
                         </TableCell>
 
                         {/* Actions */}
                         <TableCell className="text-left">
                           <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => printContractDocument(c, getCompanyProfile())}
-                              className="h-8 px-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 gap-1"
-                              title="طباعة العقد مباشرة A4"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                              <span>طباعة A4</span>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setViewingContract(c)}
-                              className="h-8 px-2.5 rounded-xl text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 gap-1"
-                              title="عرض وقراءة العقد الرسمي"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>عرض العقد</span>
-                            </Button>
+                            {isQiwa ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setViewingContract(c)}
+                                  className="h-8 px-2.5 rounded-xl text-xs font-bold text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 gap-1"
+                                  title={c.qiwa_document_url ? "معاينة أو استبدال ملف عقد قوى" : "رفع ملف عقد قوى لهذا الموظف"}
+                                >
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{c.qiwa_document_url ? 'ملف قوى' : 'رفع عقد قوى'}</span>
+                                </Button>
+                                {c.qiwa_document_url && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      const w = window.open();
+                                      w.document.write(`<iframe src="${c.qiwa_document_url}" style="width:100%;height:100%;border:none;"></iframe>`);
+                                    }}
+                                    className="h-8 px-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    title="فتح ملف العقد المرفوع"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => printContractDocument(c, getCompanyProfile())}
+                                  className="h-8 px-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 gap-1"
+                                  title="طباعة العقد الموحد مباشرة A4"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                  <span>طباعة A4</span>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setViewingContract(c)}
+                                  className="h-8 px-2.5 rounded-xl text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 gap-1"
+                                  title="عرض وقراءة العقد الموحد"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>عرض العقد</span>
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
 

@@ -863,12 +863,20 @@ export default function EmployeePortal() {
                         <span className="font-heading font-black text-base text-white">
                           {empContract.category === 'qiwa' ? 'عقد عمل منصة قوى الرسمي' : 'عقد العمل الداخلي الموحد (نظام العمل)'}
                         </span>
-                        <Badge className={empContract.signed_by_employee ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}>
-                          {empContract.signed_by_employee ? '✓ معتمد وموقع رقمياً' : '⏳ بانتظار توقيعك الإلكتروني'}
+                        <Badge className={
+                          empContract.category === 'qiwa'
+                            ? (empContract.qiwa_document_url ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold')
+                            : (empContract.signed_by_employee ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' : 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold')
+                        }>
+                          {empContract.category === 'qiwa'
+                            ? (empContract.qiwa_document_url ? '✓ عقد قوى موثق ومرفوع' : '⏳ مطلوب رفع عقد قوى (PDF)')
+                            : (empContract.signed_by_employee ? '✓ معتمد وموقع رقمياً' : '✍️ بانتظار توقيعك الإلكتروني')}
                         </Badge>
                       </div>
                       <div className="text-xs text-slate-400 font-mono mt-0.5">
-                        رقم العقد: {empContract.contract_number} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات
+                        {empContract.category === 'qiwa'
+                          ? `رقم العقد في قوى: ${empContract.qiwa_contract_number || 'مسجل في قوى'} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات`
+                          : `رقم العقد: ${empContract.contract_number} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات`}
                       </div>
                     </div>
                   </div>
@@ -879,7 +887,11 @@ export default function EmployeePortal() {
                       className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-10 px-5 rounded-xl gap-2 shadow-lg"
                     >
                       <Eye className="w-4 h-4" />
-                      <span>{empContract.signed_by_employee ? 'عرض وطباعة العقد A4' : 'قراءة وتوقيع العقد الآن'}</span>
+                      <span>
+                        {empContract.category === 'qiwa'
+                          ? (empContract.qiwa_document_url ? 'استعراض أو تحديث عقد قوى' : 'رفع عقد منصة قوى الآن (PDF) 📤')
+                          : (empContract.signed_by_employee ? 'عرض وطباعة العقد A4' : 'قراءة وتوقيع العقد الآن ✍️')}
+                      </span>
                     </Button>
 
                     <Button
