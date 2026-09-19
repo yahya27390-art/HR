@@ -63,7 +63,10 @@ export default function Header({ onOpenMobileMenu }) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsStartMenuOpen(true)}
+            onClick={() => {
+              if (onOpenMobileMenu) onOpenMobileMenu();
+              else setIsStartMenuOpen(prev => !prev);
+            }}
             className="lg:hidden w-9 h-9 rounded-2xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/20 shadow-sm"
             aria-label="قائمة ابدأ"
             title="قائمة ابدأ (Windows 11 Start)"
@@ -95,7 +98,10 @@ export default function Header({ onOpenMobileMenu }) {
           {/* Desktop Windows 11 Start Button */}
           <button
             type="button"
-            onClick={() => setIsStartMenuOpen(true)}
+            onClick={() => {
+              if (onOpenMobileMenu) onOpenMobileMenu();
+              else setIsStartMenuOpen(prev => !prev);
+            }}
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-gradient-to-r from-sky-500/10 via-emerald-500/10 to-purple-500/10 hover:from-sky-500/20 hover:via-emerald-500/20 hover:to-purple-500/20 border border-slate-200/80 dark:border-slate-800 transition-all duration-200 shadow-xs group active:scale-95 ms-1"
             title="قائمة ابدأ (Windows 11 Start)"
           >

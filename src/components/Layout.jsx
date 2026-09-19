@@ -44,7 +44,7 @@ export default function Layout() {
       {/* 3. Main Content Area with EXPLICIT right padding */}
       <div className={`${desktopRightPadding} flex flex-col min-h-screen transition-all duration-200`}>
         <div className="no-print print:hidden">
-          <Header onOpenMobileMenu={() => setMobileMenuOpen(true)} />
+          <Header onOpenMobileMenu={() => setMobileMenuOpen(prev => !prev)} />
         </div>
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 pb-28 lg:pb-12 max-w-[1650px] w-full mx-auto space-y-4 sm:space-y-5">
           <div className="no-print print:hidden">
@@ -117,14 +117,18 @@ export default function Layout() {
             <span className="text-[10.5px] font-bold tracking-tight">ملفي 360°</span>
           </Link>
 
-          {/* Windows 11 Start Menu Dock Button */}
+          {/* Windows 11 Start Menu Dock Button (Toggles Open/Close) */}
           <button
             type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            className="flex flex-col items-center justify-center gap-1 py-1 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-slate-900 active:scale-95 transition-all group"
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            className={`flex flex-col items-center justify-center gap-1 py-1 rounded-2xl transition-all group ${
+              mobileMenuOpen 
+                ? 'text-sky-600 dark:text-sky-400 font-black scale-105' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 active:scale-95'
+            }`}
             title="قائمة ابدأ (Windows 11 Start)"
           >
-            <div className="p-1 rounded-xl group-hover:scale-110 transition-transform">
+            <div className={`p-1 rounded-xl transition-all ${mobileMenuOpen ? 'bg-sky-500/15 shadow-xs' : 'group-hover:scale-110'}`}>
               <div className="grid grid-cols-2 gap-0.5 w-4 h-4 drop-shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00adef]" />
                 <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00a859]" />

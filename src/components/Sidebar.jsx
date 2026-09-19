@@ -133,10 +133,10 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
           <img src={profile.logo_url || "/company-logo.png"} alt="شعار درة السيارة" className="w-10 h-10 object-contain drop-shadow-sm group-hover:rotate-6 transition-transform" />
         </Link>
 
-        {/* Windows 11 Start Tile Launcher */}
+        {/* Windows 11 Start Tile Launcher (Toggles Open/Close) */}
         <button
           type="button"
-          onClick={() => setIsStartMenuOpen(true)}
+          onClick={() => setIsStartMenuOpen(prev => !prev)}
           className="w-12 h-12 rounded-2xl flex flex-col items-center justify-center mb-3 hover:scale-105 active:scale-95 transition-all duration-200 shrink-0 bg-gradient-to-tr from-sky-500/15 via-emerald-500/15 to-purple-500/15 hover:from-sky-500/25 hover:via-emerald-500/25 hover:to-purple-500/25 border border-slate-200/80 dark:border-slate-800 shadow-sm group"
           title="قائمة ابدأ (Windows 11 Start)"
         >
