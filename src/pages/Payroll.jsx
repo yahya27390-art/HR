@@ -224,7 +224,7 @@ export default function Payroll() {
     navigate(`/payroll?stage=${stepNum}`);
   }, [navigate]);
   
-  const [monthPrefix, setMonthPrefix] = useState('2026-08');
+  const [monthPrefix, setMonthPrefix] = useState(() => new Date().toISOString().slice(0, 7));
   const [employees, setEmployees] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [shifts, setShifts] = useState([]);
