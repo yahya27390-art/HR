@@ -232,10 +232,12 @@ export function getVisibleModules(user) {
 
 export function getNavGroups(user) {
   const visibleMods = getVisibleModules(user);
-  return visibleMods.map(mod => ({
-    ...mod,
-    items: mod.items.filter(it => !it.permission || hasPermission(user, it.permission))
-  }));
+  return visibleMods
+    .map(mod => ({
+      ...mod,
+      items: mod.items.filter(it => !it.permission || hasPermission(user, it.permission))
+    }))
+    .filter(mod => mod.items.length > 0);
 }
 
 export function getNavItems(user) {

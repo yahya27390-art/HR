@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { useTheme } from '@/lib/theme';
-import { getRoleMeta } from '@/lib/rbac';
+import { getRoleMeta, hasPermission } from '@/lib/rbac';
 import { getCompanyProfile } from '@/lib/companyProfile';
 import { getNavGroups } from '@/lib/nav';
 import {
@@ -98,29 +98,62 @@ export default function WindowsStartMenu({ isOpen, onClose }) {
   const userEmpNum = user?.employee_number || '1022';
   const userJob = user?.job_title || 'مدير النظام';
 
-  // Windows 11 Fluent App Tiles
-  const pinnedTiles = [
-    { to: '/', label: 'الرئيسية', icon: LayoutDashboard, gradient: 'from-sky-500 to-blue-600', shadow: 'rgba(2, 132, 199, 0.35)' },
-    { to: '/employees', label: 'الموظفين', icon: Users, gradient: 'from-emerald-500 to-teal-600', shadow: 'rgba(16, 185, 129, 0.35)' },
-    { to: '/contracts', label: 'العقود', icon: FileText, gradient: 'from-teal-500 to-cyan-600', shadow: 'rgba(13, 148, 136, 0.35)' },
-    { to: '/attendance', label: 'البصمات', icon: Clock, gradient: 'from-amber-500 to-orange-600', shadow: 'rgba(245, 158, 11, 0.35)' },
-    { to: '/devices', label: 'الأجهزة', icon: Fingerprint, gradient: 'from-orange-500 to-rose-600', shadow: 'rgba(249, 115, 22, 0.35)' },
-    { to: '/leave', label: 'الإجازات', icon: CalendarDays, gradient: 'from-indigo-500 to-violet-600', shadow: 'rgba(99, 102, 241, 0.35)' },
-    { to: '/payroll', label: 'الرواتب', icon: Wallet, gradient: 'from-purple-500 to-indigo-700', shadow: 'rgba(139, 92, 246, 0.35)' },
-    { to: '/payroll?tab=advances', label: 'السلف', icon: CreditCard, gradient: 'from-violet-500 to-purple-600', shadow: 'rgba(139, 92, 246, 0.35)' },
-    { to: '/reports', label: 'التقارير', icon: FileSpreadsheet, gradient: 'from-teal-500 to-cyan-700', shadow: 'rgba(13, 148, 136, 0.35)' },
-    { to: '/announcements', label: 'التعاميم', icon: Megaphone, gradient: 'from-pink-500 to-rose-600', shadow: 'rgba(236, 72, 153, 0.35)' },
-    { to: '/branches', label: 'الفروع', icon: GitBranch, gradient: 'from-emerald-600 to-teal-700', shadow: 'rgba(5, 150, 105, 0.35)' },
-    { to: '/settings', label: 'الإعدادات', icon: Settings, gradient: 'from-slate-600 to-slate-800', shadow: 'rgba(71, 85, 105, 0.35)' },
-  ];
+  const isEmployeeOnly = user?.role === 'employee' || !hasPermission(user, 'employees.view');
 
-  // Quick Recommended Actions
-  const recommendedActions = [
-    { to: '/my-requests', label: 'طلباتي والاعتمادات', icon: ClipboardList, color: '#0284c7' },
-    { to: '/leave', label: 'تقديم إجازة', icon: CalendarDays, color: '#6366f1' },
-    { to: '/payroll', label: 'مسير الرواتب', icon: Wallet, color: '#8b5cf6' },
-    { to: '/reports', label: 'كشوفات وطباعة', icon: FileSpreadsheet, color: '#0d9488' },
-  ];
+  // Dynamic Pinned Tiles matching user role & authorized permissions
+  const pinnedTiles = useMemo(() => {
+    if (isEmployeeOnly) {
+      return [
+        { to: '/portal', label: 'الرئيسية', icon: LayoutDashboard, gradient: 'from-sky-500 to-blue-600', shadow: 'rgba(2, 132, 199, 0.35)' },
+        { to: '/my-requests', label: 'طلباتي', icon: ClipboardList, gradient: 'from-blue-500 to-indigo-600', shadow: 'rgba(59, 130, 246, 0.35)' },
+        { to: '/attendance', label: 'دوامي وبصماتي', icon: Clock, gradient: 'from-amber-500 to-orange-600', shadow: 'rgba(245, 158, 11, 0.35)' },
+        { to: '/leave', label: 'إجازاتي', icon: CalendarDays, gradient: 'from-indigo-500 to-violet-600', shadow: 'rgba(99, 102, 241, 0.35)' },
+        { to: '/contracts', label: 'عقدي الوظيفي', icon: FileText, gradient: 'from-teal-500 to-cyan-600', shadow: 'rgba(13, 148, 136, 0.35)' },
+        { to: '/employee-profile', label: 'ملفي 360°', icon: Users, gradient: 'from-emerald-500 to-teal-600', shadow: 'rgba(16, 185, 129, 0.35)' },
+        { to: '/documents-print', label: 'النماذج والخطابات', icon: FileSpreadsheet, gradient: 'from-rose-500 to-pink-600', shadow: 'rgba(244, 63, 94, 0.35)' },
+        { to: '/announcements', label: 'التعاميم الرسمية', icon: Megaphone, gradient: 'from-purple-500 to-indigo-600', shadow: 'rgba(168, 85, 247, 0.35)' },
+      ];
+    }
+
+    // Manager / Admin / HR Pinned Tiles
+    const adminTiles = [
+      { to: '/', label: 'الرئيسية', icon: LayoutDashboard, gradient: 'from-sky-500 to-blue-600', shadow: 'rgba(2, 132, 199, 0.35)' },
+      { to: '/employees', label: 'الموظفين', icon: Users, gradient: 'from-emerald-500 to-teal-600', shadow: 'rgba(16, 185, 129, 0.35)', permission: 'employees.view' },
+      { to: '/contracts', label: 'العقود', icon: FileText, gradient: 'from-teal-500 to-cyan-600', shadow: 'rgba(13, 148, 136, 0.35)', permission: 'employees.edit' },
+      { to: '/attendance', label: 'البصمات', icon: Clock, gradient: 'from-amber-500 to-orange-600', shadow: 'rgba(245, 158, 11, 0.35)', permission: 'attendance.view' },
+      { to: '/devices', label: 'الأجهزة', icon: Fingerprint, gradient: 'from-orange-500 to-rose-600', shadow: 'rgba(249, 115, 22, 0.35)', permission: 'shifts.manage' },
+      { to: '/leave', label: 'الإجازات', icon: CalendarDays, gradient: 'from-indigo-500 to-violet-600', shadow: 'rgba(99, 102, 241, 0.35)', permission: 'leave.view' },
+      { to: '/payroll', label: 'الرواتب', icon: Wallet, gradient: 'from-purple-500 to-indigo-700', shadow: 'rgba(139, 92, 246, 0.35)', permission: 'payroll.view' },
+      { to: '/payroll?tab=advances', label: 'السلف', icon: CreditCard, gradient: 'from-violet-500 to-purple-600', shadow: 'rgba(139, 92, 246, 0.35)', permission: 'loans.view' },
+      { to: '/reports', label: 'التقارير', icon: FileSpreadsheet, gradient: 'from-teal-500 to-cyan-700', shadow: 'rgba(13, 148, 136, 0.35)', permission: 'reports.view' },
+      { to: '/announcements', label: 'التعاميم', icon: Megaphone, gradient: 'from-pink-500 to-rose-600', shadow: 'rgba(236, 72, 153, 0.35)', permission: 'announcements.send' },
+      { to: '/branches', label: 'الفروع', icon: GitBranch, gradient: 'from-emerald-600 to-teal-700', shadow: 'rgba(5, 150, 105, 0.35)', permission: 'branches.manage' },
+      { to: '/settings', label: 'الإعدادات', icon: Settings, gradient: 'from-slate-600 to-slate-800', shadow: 'rgba(71, 85, 105, 0.35)', permission: 'settings.view' },
+    ];
+
+    return adminTiles.filter(t => !t.permission || hasPermission(user, t.permission));
+  }, [user, isEmployeeOnly]);
+
+  // Dynamic Recommended Actions matching user role & permissions
+  const recommendedActions = useMemo(() => {
+    if (isEmployeeOnly) {
+      return [
+        { to: '/leave', label: 'تقديم طلب إجازة', icon: CalendarDays, color: '#6366f1' },
+        { to: '/my-requests', label: 'تقديم طلب سلفة', icon: CreditCard, color: '#8b5cf6' },
+        { to: '/attendance', label: 'سجل بصمات دوامي', icon: Clock, color: '#f59e0b' },
+        { to: '/contracts', label: 'عقد العمل الموحد', icon: FileText, color: '#0d9488' },
+      ];
+    }
+
+    const adminActions = [
+      { to: '/approvals', label: 'مركز الاعتمادات والطلبات', icon: CheckCircle2, color: '#0284c7', permission: 'approvals.manage' },
+      { to: '/payroll', label: 'تدقيق مسير الرواتب', icon: Wallet, color: '#8b5cf6', permission: 'payroll.view' },
+      { to: '/reports', label: 'التقارير والكشوفات', icon: FileSpreadsheet, color: '#0d9488', permission: 'reports.view' },
+      { to: '/leave', label: 'إدارة طلبات الإجازات', icon: CalendarDays, color: '#6366f1', permission: 'leave.view' },
+    ];
+
+    return adminActions.filter(a => !a.permission || hasPermission(user, a.permission));
+  }, [user, isEmployeeOnly]);
 
   const allItemsFlat = [];
   groups.forEach(grp => {
@@ -242,7 +275,7 @@ export default function WindowsStartMenu({ isOpen, onClose }) {
                     <Sparkles className="w-3.5 h-3.5 text-sky-500" />
                     <span>البرامج والأقسام الرئيسية</span>
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">12 تطبيق</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{pinnedTiles.length} تطبيق</span>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2.5">
