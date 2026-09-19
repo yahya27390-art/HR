@@ -247,85 +247,73 @@ export default function EmployeePortal() {
   const isContractPendingSignature = empContract && !empContract.signed_by_employee;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-24 text-right" dir="rtl">
+    <div className="space-y-4 max-w-4xl mx-auto pb-24 text-right" dir="rtl">
       
-      {/* ─── 1. TOP GREETING HEADER CARD ────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-slate-700/60 relative overflow-hidden">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center font-heading font-black text-2xl shadow-inner">
+      {/* ─── 1. TOP PROFILE CARD (MATCHING REFERENCE MOCKUP) ────────────────── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-4 sm:p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          {/* User Info */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 text-white flex items-center justify-center font-heading font-black text-lg sm:text-xl shadow-md shadow-teal-500/20 shrink-0">
               {currentEmp.full_name?.slice(0, 2) || 'مو'}
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-700/50">
-                  بوابة الخدمة الذاتية للموظف
-                </span>
-                <span className="text-xs text-slate-400 font-mono">#{currentEmp.employee_number}</span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-heading font-black text-white">
-                مرحباً، {currentEmp.full_name}
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
+                {currentEmp.full_name}
               </h1>
-              <p className="text-xs text-slate-300 flex items-center gap-2 flex-wrap">
+              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
                 <span>{currentEmp.job_title || 'موظف'}</span>
                 <span>•</span>
-                <span className="text-emerald-300 font-bold">{currentEmp.branch_name || currentEmp.branch || 'الفرع الرئيسي'}</span>
-                <span>•</span>
-                <span className="text-slate-400 font-mono">{currentEmp.shift || 'شفت قياسي'}</span>
-              </p>
+                <span className="text-teal-600 dark:text-teal-400 font-bold">{currentEmp.branch_name || currentEmp.branch || 'الفرع الرئيسي'}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Quick Actions */}
+          <div className="flex items-center gap-2 shrink-0">
             {isSpecializedRole(user?.role) && (
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => {
                   if (user?.id) localStorage.setItem('hr_dashboard_view_mode_' + user.id, 'specialized');
                   navigate('/');
                 }}
-                className="bg-slate-900/90 hover:bg-slate-800 text-emerald-400 border-emerald-500/40 text-xs font-bold rounded-2xl h-11 px-4 gap-2 shadow-md"
+                className="hidden sm:flex text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800 text-xs font-bold rounded-xl h-9 px-3 gap-1.5"
               >
-                <RotateCw className="w-4 h-4" />
-                <span>العودة إلى {getSpecializedRoleInfo(user?.role).shortTitle}</span>
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>لوحة القيادة</span>
               </Button>
             )}
-
             <Button
+              size="sm"
               onClick={() => setNewRequestModal(true)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg shadow-emerald-500/20 shrink-0"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 sm:h-10 px-3 sm:px-4 rounded-xl gap-1.5 shadow-sm"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>تقديم طلب جديد</span>
+              <span>طلب جديد</span>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* ─── URGENT CONTRACT SIGNING ALERT BANNER (If Pending) ─────────────── */}
+      {/* ─── URGENT CONTRACT SIGNING ALERT (1-LINE SLEEK BANNER) ─────────────── */}
       {isContractPendingSignature && (
-        <div className="p-5 rounded-3xl bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border-2 border-amber-500/60 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shrink-0">
-              <Scale className="w-6 h-6" />
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <Scale className="w-4 h-4" />
             </div>
-            <div className="space-y-0.5">
-              <div className="font-heading font-black text-sm text-amber-300 flex items-center gap-2">
-                <span>عقد العمل الداخلي الموحد بانتظار توقيعك وموافقتك الإلكترونية</span>
-                <Badge className="bg-amber-500 text-slate-950 font-black text-[10px]">مطلوب إلزامي</Badge>
-              </div>
-              <p className="text-xs text-slate-300">
-                يرجى قراءة بنود العقد واللائحة الداخلية المنظمة والشروط الجزائية والمصادقة عليها لتوثيق ملفك.
-              </p>
-            </div>
+            <span className="text-xs font-bold text-amber-900 dark:text-amber-200 truncate">
+              عقد العمل بانتظار توقيعك
+            </span>
           </div>
-
           <Button
+            size="sm"
             onClick={() => setContractModalOpen(true)}
-            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs h-10 px-5 rounded-xl gap-2 shadow-lg shrink-0"
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl h-8 px-3 shrink-0 shadow-xs"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>قراءة وتوقيع العقد الآن ➔</span>
+            توقيع الآن ➔
           </Button>
         </div>
       )}
@@ -365,144 +353,230 @@ export default function EmployeePortal() {
         })}
       </div>
 
-      {/* ─── 3. TAB 1: HOME (DASHBOARD OVERVIEW) ─────────────────────────────── */}
+      {/* ─── 3. TAB 1: HOME (MATCHING REFERENCE MOCKUP) ────────────────────── */}
       {activeTab === 'home' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           
-          {/* Today's Punch Live Status Card */}
-          <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-4">
-            <div className="flex items-center justify-between border-b pb-4">
+          {/* Quick Services Grid - Direct Match to 2-Column Mobile App Mockup */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+            {[
+              {
+                label: 'طلب إجازة',
+                icon: Palmtree,
+                iconClass: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40',
+                onClick: () => {
+                  setSelectedRequestType('annual_leave');
+                  setNewRequestModal(true);
+                }
+              },
+              {
+                label: 'طلب استئذان',
+                icon: Clock4,
+                iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40',
+                onClick: () => {
+                  setSelectedRequestType('permission');
+                  setNewRequestModal(true);
+                }
+              },
+              {
+                label: 'سجل الحضور',
+                icon: Clock,
+                iconClass: 'bg-teal-50 text-teal-600 dark:bg-teal-950/40',
+                onClick: () => setActiveTab('attendance')
+              },
+              {
+                label: 'قسيمة الراتب',
+                icon: Wallet,
+                iconClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40',
+                onClick: () => setActiveTab('payroll')
+              },
+              {
+                label: 'طلب سلفة',
+                icon: CreditCard,
+                iconClass: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40',
+                onClick: () => {
+                  setSelectedRequestType('loan');
+                  setNewRequestModal(true);
+                }
+              },
+              {
+                label: 'عقد العمل',
+                icon: Scale,
+                iconClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40',
+                onClick: () => setContractModalOpen(true)
+              },
+              {
+                label: 'مركز طلباتي',
+                icon: FileText,
+                iconClass: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40',
+                count: requestsList.length,
+                onClick: () => setActiveTab('requests')
+              },
+              {
+                label: 'تقييم الأداء',
+                icon: Award,
+                iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40',
+                onClick: () => setActiveTab('performance')
+              }
+            ].map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={idx}
+                  onClick={item.onClick}
+                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-teal-500/60 hover:shadow-md rounded-2xl p-3 sm:p-3.5 flex items-center justify-between text-right transition-all group active:scale-98 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${item.iconClass}`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 group-hover:text-teal-600 transition-colors block truncate">
+                        {item.label}
+                      </span>
+                    </div>
+                  </div>
+                  {item.count !== undefined && item.count > 0 ? (
+                    <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                      {item.count}
+                    </span>
+                  ) : (
+                    <ChevronLeft className="w-4 h-4 text-slate-300 group-hover:text-teal-500 group-hover:-translate-x-0.5 transition-all shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Today's Punch Live Status Card (Ultra Clean & Minimal Words) */}
+          <Card className="p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-emerald-600" />
-                <h2 className="font-heading font-black text-base text-foreground">حضور ودوام اليوم ({todayStr})</h2>
+                <Clock className="w-4 h-4 text-teal-600" />
+                <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                  دوام اليوم <span className="font-mono text-slate-400 font-normal text-xs">({todayStr})</span>
+                </h2>
               </div>
-              <Badge className={todayLog?.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>
-                {todayLog?.status === 'present' ? '✓ تم تسجيل الحضور' : 'قيد الانتظار'}
+              <Badge className={todayLog?.status === 'present' ? 'bg-emerald-100 text-emerald-800 text-[10px]' : 'bg-slate-100 text-slate-600 text-[10px]'}>
+                {todayLog?.status === 'present' ? 'حاضر ✓' : 'قيد الانتظار'}
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border">
-                <div className="text-xs text-muted-foreground">وقت الدخول:</div>
-                <div className="text-base font-bold font-mono text-emerald-600 mt-1">
-                  {todayLog?.period_1_in || (todayLog?.check_in ? todayLog.check_in.slice(11, 16) : '--:--')}
+            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="text-[10.5px] text-slate-400 font-medium">الدخول</div>
+                <div className="text-sm sm:text-base font-bold font-mono text-emerald-600 mt-0.5">
+                  {todayLog?.period_1_in || (todayLog?.check_in ? (todayLog.check_in.includes('T') ? todayLog.check_in.slice(11, 16) : todayLog.check_in.slice(0, 5)) : '--:--')}
                 </div>
               </div>
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border">
-                <div className="text-xs text-muted-foreground">وقت الخروج:</div>
-                <div className="text-base font-bold font-mono text-blue-600 mt-1">
-                  {todayLog?.period_2_out || todayLog?.period_1_out || (todayLog?.check_out ? todayLog.check_out.slice(11, 16) : '--:--')}
+
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="text-[10.5px] text-slate-400 font-medium">الخروج</div>
+                <div className="text-sm sm:text-base font-bold font-mono text-blue-600 mt-0.5">
+                  {todayLog?.period_2_out || todayLog?.period_1_out || (todayLog?.check_out ? (todayLog.check_out.includes('T') ? todayLog.check_out.slice(11, 16) : todayLog.check_out.slice(0, 5)) : '--:--')}
                 </div>
               </div>
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border">
-                <div className="text-xs text-muted-foreground">الساعات المنجزة:</div>
-                <div className="text-base font-bold font-mono text-purple-600 mt-1">
+
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="text-[10.5px] text-slate-400 font-medium">المنجز</div>
+                <div className="text-sm sm:text-base font-bold font-mono text-purple-600 mt-0.5">
                   {todayLog?.total_hours || 0} س
-                </div>
-              </div>
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border">
-                <div className="text-xs text-muted-foreground">الوردية المعتمدة:</div>
-                <div className="text-xs font-bold text-foreground mt-1 truncate">
-                  {currentEmp.shift || 'شفت أساسي'}
                 </div>
               </div>
             </div>
           </Card>
 
-          {/* Monthly Attendance Quick Stats */}
+          {/* Monthly Attendance Quick Stats (Compact Chips) */}
           {currentMonthPayroll && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+            <Card className="p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-bold text-foreground">
-                    ملخص الدوام والحضور لشهر:
+                  <Calendar className="w-4 h-4 text-teal-600" />
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                    ملخص الشهر
                   </span>
-                  <Badge variant="outline" className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-xs bg-emerald-500/10 border-emerald-500/30">
-                    {attMonth}
-                  </Badge>
                 </div>
-                
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground text-[11px] font-medium">عرض شهر آخر:</span>
-                  <input
-                    type="month"
-                    value={attMonth}
-                    onChange={(e) => setAttMonth(e.target.value)}
-                    className="h-7 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-background px-2.5 shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
+                <input
+                  type="month"
+                  value={attMonth}
+                  onChange={(e) => setAttMonth(e.target.value)}
+                  className="h-7 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 text-slate-700 dark:text-slate-300"
+                />
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground">أيام الحضور الفعلي</div>
-                  <div className="text-2xl font-black font-mono text-emerald-600 mt-1">
-                    {currentMonthPayroll.presentDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+              <div className="grid grid-cols-4 gap-2 pt-1 text-center">
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] text-slate-400">حضور</div>
+                  <div className="text-base font-black font-mono text-emerald-600 mt-0.5">
+                    {currentMonthPayroll.presentDays || 0}
                   </div>
-                </Card>
-                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground">دوام الجمعات (إضافي)</div>
-                  <div className="text-2xl font-black font-mono text-blue-600 mt-1">
-                    {currentMonthPayroll.fridayWorkedDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] text-slate-400">جمعات</div>
+                  <div className="text-base font-black font-mono text-blue-600 mt-0.5">
+                    {currentMonthPayroll.fridayWorkedDays || 0}
                   </div>
-                </Card>
-                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground">أيام الغياب المسجلة</div>
-                  <div className="text-2xl font-black font-mono text-rose-600 mt-1">
-                    {currentMonthPayroll.absentDays || 0} <span className="text-xs font-normal text-muted-foreground font-sans">يوم</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] text-slate-400">غياب</div>
+                  <div className="text-base font-black font-mono text-rose-600 mt-0.5">
+                    {currentMonthPayroll.absentDays || 0}
                   </div>
-                </Card>
-                <Card className="p-4 rounded-3xl border bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground">عجز وتأخير الساعات</div>
-                  <div className="text-xl font-black font-mono text-amber-600 mt-1">
-                    {Math.floor((currentMonthPayroll.totalShortfallMinutes || 0) / 60)} س و {(currentMonthPayroll.totalShortfallMinutes || 0) % 60} د
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] text-slate-400">تأخير</div>
+                  <div className="text-sm font-black font-mono text-amber-600 mt-0.5">
+                    {Math.floor((currentMonthPayroll.totalShortfallMinutes || 0) / 60)}س
                   </div>
-                </Card>
+                </div>
               </div>
-            </div>
+            </Card>
           )}
 
-          {/* Recent Requests Section */}
-          <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-emerald-600" />
-                <h2 className="font-heading font-black text-base text-foreground">أحدث الطلبات المقدمة</h2>
+          {/* Recent Requests Section (Minimal & Concise) */}
+          {requestsList.length > 0 && (
+            <Card className="p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-teal-600" />
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">أحدث الطلبات</span>
+                </div>
+                <button onClick={() => setActiveTab('requests')} className="text-xs text-teal-600 font-bold hover:underline">
+                  الكل ➔
+                </button>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setActiveTab('requests')} className="text-xs font-bold text-emerald-600">
-                عرض كافة الطلبات ➔
-              </Button>
-            </div>
-
-            {requestsList.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-xs">
-                لا توجد طلبات معلقة مسجلة لديك حالياً.
-              </div>
-            ) : (
-              <div className="divide-y divide-border/60">
-                {requestsList.slice(0, 3).map(req => (
-                  <div key={req.id} className="py-3 flex items-center justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <div className="font-bold text-xs text-foreground">
-                        {req.details?.request_label || req.type}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground font-mono">
-                        {req.request_number} • {new Date(req.created_at).toLocaleDateString('ar-SA')}
-                      </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {requestsList.slice(0, 2).map(req => (
+                  <div key={req.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="truncate">
+                      <div className="font-bold text-slate-800 dark:text-slate-200 truncate">{req.details?.request_label || req.type}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{req.request_number}</div>
                     </div>
                     <Badge className={
-                      req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                      req.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                      req.status === 'approved' ? 'bg-emerald-100 text-emerald-800 text-[10px]' :
+                      req.status === 'rejected' ? 'bg-rose-100 text-rose-800 text-[10px]' : 'bg-amber-100 text-amber-800 text-[10px]'
                     }>
-                      {req.status === 'approved' ? 'معتمد ✓' : req.status === 'rejected' ? 'مرفوض ✗' : 'قيد المراجعة ⏳'}
+                      {req.status === 'approved' ? 'معتمد' : req.status === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
                     </Badge>
                   </div>
                 ))}
               </div>
-            )}
-          </Card>
+            </Card>
+          )}
 
+        </div>
+      )}
+
+      {/* Back Button for Child Tabs */}
+      {activeTab !== 'home' && (
+        <div className="flex items-center justify-between pb-1">
+          <button
+            onClick={() => setActiveTab('home')}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3 py-1.5 shadow-xs transition-all"
+          >
+            <ChevronRight className="w-4 h-4" />
+            <span>العودة للخدمات الرئيسية</span>
+          </button>
         </div>
       )}
 
@@ -1135,32 +1209,7 @@ export default function EmployeePortal() {
         />
       )}
 
-      {/* ─── 14. MOBILE FIXED BOTTOM NAVIGATION ──────────────────────────────── */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-2 flex items-center justify-around shadow-2xl">
-        {[
-          { id: 'home', label: 'الرئيسية', icon: Home },
-          { id: 'attendance', label: 'حضوري', icon: Clock },
-          { id: 'requests', label: 'طلباتي', icon: FileText },
-          { id: 'payroll', label: 'مسيري', icon: Wallet },
-          { id: 'documents', label: 'عقدي', icon: FolderOpen },
-          { id: 'account', label: 'حسابي', icon: User }
-        ].map(t => {
-          const Icon = t.icon;
-          const isActive = activeTab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-                isActive ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500'
-              }`}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-[10px]">{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Modals and modals dialogs remain above */}
 
     </div>
   );
