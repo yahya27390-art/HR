@@ -18,6 +18,22 @@ export const REQUEST_TYPES = {
     workflow: ['hr_review', 'owner_approval', 'approved'],
     impact: 'استقطاع مالي مباشر من مسير الراتب لأيام الإجازة'
   },
+  PERMISSION: {
+    id: 'permission',
+    label: 'طلب استئذان',
+    icon: 'Clock4',
+    color: 'amber',
+    workflow: ['hr_review', 'approved'],
+    impact: 'تسجيل إذن غياب مؤقت معتمد بدون احتساب عجز'
+  },
+  OVERTIME: {
+    id: 'overtime',
+    label: 'طلب عمل إضافي',
+    icon: 'Clock',
+    color: 'rose',
+    workflow: ['hr_review', 'owner_approval', 'approved'],
+    impact: 'احتساب ساعات إضافية في مسير الراتب'
+  },
   ADVANCE: {
     id: 'advance',
     label: 'طلب سلفة مالية',

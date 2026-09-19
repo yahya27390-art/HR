@@ -47,7 +47,10 @@ import {
   Mail,
   FileCheck,
   Scale,
-  Eye
+  Eye,
+  Plane,
+  UserX,
+  ArrowRight
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,8 +78,9 @@ export default function EmployeePortal() {
   const [empContract, setEmpContract] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Modals
+  // Modals & Steps
   const [newRequestModal, setNewRequestModal] = useState(false);
+  const [requestStep, setRequestStep] = useState('select'); // 'select' (2-column square grid) | 'form' (dedicated fields)
   const [selectedRequestType, setSelectedRequestType] = useState('annual_leave');
   const [selectedForPayslip, setSelectedForPayslip] = useState(null);
   const [contractModalOpen, setContractModalOpen] = useState(false);
@@ -86,11 +90,17 @@ export default function EmployeePortal() {
   const [reqForm, setReqForm] = useState({
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
+    leaveSubType: 'annual', // 'annual' | 'unpaid' | 'sick'
+    permissionType: 'morning', // 'morning' | 'evening' | 'custom'
+    permissionHours: '2',
+    letterType: 'salary_bank',
+    letterEntity: '',
     amount: '',
     installments: 1,
     reason: '',
     checkInTime: '09:00',
     checkOutTime: '17:00',
+    overtimeHours: '2',
     targetShift: '',
     targetBranch: '',
     targetDept: '',
@@ -198,7 +208,18 @@ export default function EmployeePortal() {
     e.preventDefault();
     if (!currentEmp) return;
 
-    const reqMeta = REQUEST_TYPES[Object.keys(REQUEST_TYPES).find(k => REQUEST_TYPES[k].id === selectedRequestType)] || REQUEST_TYPES.OTHER;
+    let reqMeta = REQUEST_TYPES[Object.keys(REQUEST_TYPES).find(k => REQUEST_TYPES[k].id === selectedRequestType)] || REQUEST_TYPES.OTHER;
+
+    let finalLabel = reqMeta.label;
+    if (selectedRequestType === 'annual_leave') {
+      if (reqForm.leaveSubType === 'unpaid') finalLabel = 'طلب إجازة بدون راتب';
+      else if (reqForm.leaveSubType === 'sick') finalLabel = 'طلب إجازة مرضية';
+      else finalLabel = 'طلب إجازة سنوية';
+    } else if (selectedRequestType === 'permission') {
+      finalLabel = `طلب استئذان (${reqForm.permissionHours} س)`;
+    } else if (selectedRequestType === 'advance') {
+      finalLabel = `طلب سلفة مالية (${reqForm.amount || 0} ر.س)`;
+    }
 
     const payload = {
       type: selectedRequestType,
@@ -206,29 +227,36 @@ export default function EmployeePortal() {
       employee_number: currentEmp.employee_number,
       employee_name: currentEmp.full_name,
       branch_name: currentEmp.branch_name || currentEmp.branch,
-      reason: reqForm.reason || reqMeta.label,
+      reason: reqForm.reason || finalLabel,
       details: {
         ...reqForm,
-        request_label: reqMeta.label
+        request_label: finalLabel
       }
     };
 
     saveUnifiedRequest(payload, user);
     setNewRequestModal(false);
+    setRequestStep('select');
     toast({
       title: '✓ تم تقديم الطلب بنجاح',
-      description: `تم إرسال ${reqMeta.label} لإدارة الموارد البشرية للمراجعة.`
+      description: `تم إرسال ${finalLabel} لإدارة الموارد البشرية للمراجعة.`
     });
 
     // Reset Form
     setReqForm({
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date().toISOString().split('T')[0],
+      leaveSubType: 'annual',
+      permissionType: 'morning',
+      permissionHours: '2',
+      letterType: 'salary_bank',
+      letterEntity: '',
       amount: '',
       installments: 1,
       reason: '',
       checkInTime: '09:00',
       checkOutTime: '17:00',
+      overtimeHours: '2',
       targetShift: '',
       targetBranch: '',
       targetDept: '',
@@ -287,7 +315,10 @@ export default function EmployeePortal() {
             )}
             <Button
               size="sm"
-              onClick={() => setNewRequestModal(true)}
+              onClick={() => {
+                setRequestStep('select');
+                setNewRequestModal(true);
+              }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 sm:h-10 px-3 sm:px-4 rounded-xl gap-1.5 shadow-sm"
             >
               <PlusCircle className="w-4 h-4" />
@@ -362,10 +393,11 @@ export default function EmployeePortal() {
             {[
               {
                 label: 'طلب إجازة',
-                icon: Palmtree,
-                iconClass: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40',
+                icon: Plane,
+                iconClass: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40',
                 onClick: () => {
                   setSelectedRequestType('annual_leave');
+                  setRequestStep('form');
                   setNewRequestModal(true);
                 }
               },
@@ -375,6 +407,7 @@ export default function EmployeePortal() {
                 iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40',
                 onClick: () => {
                   setSelectedRequestType('permission');
+                  setRequestStep('form');
                   setNewRequestModal(true);
                 }
               },
@@ -395,7 +428,8 @@ export default function EmployeePortal() {
                 icon: CreditCard,
                 iconClass: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40',
                 onClick: () => {
-                  setSelectedRequestType('loan');
+                  setSelectedRequestType('advance');
+                  setRequestStep('form');
                   setNewRequestModal(true);
                 }
               },
@@ -675,7 +709,10 @@ export default function EmployeePortal() {
               <p className="text-xs text-muted-foreground">متابعة كافة الطلبات المقدمة ومراحل اعتمادها الإداري</p>
             </div>
             <Button
-              onClick={() => setNewRequestModal(true)}
+              onClick={() => {
+                setRequestStep('select');
+                setNewRequestModal(true);
+              }}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-10 px-4 rounded-xl gap-2 shadow-md"
             >
               <PlusCircle className="w-4 h-4" />
@@ -1060,115 +1097,459 @@ export default function EmployeePortal() {
         </Card>
       )}
 
-      {/* ─── 10. NEW REQUEST MODAL (14 REQUEST TYPES) ────────────────────────── */}
+      {/* ─── 10. NEW REQUEST MODAL (2-COLUMN SQUARE GRID & DEDICATED FORMS) ───── */}
       <Dialog open={newRequestModal} onOpenChange={setNewRequestModal}>
-        <DialogContent className="max-w-xl text-right" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="font-heading font-black text-lg text-foreground flex items-center gap-2">
-              <PlusCircle className="w-5 h-5 text-emerald-600" />
-              <span>تقديم طلب إداري جديد</span>
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-md sm:max-w-lg text-right p-4 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xl" dir="rtl">
+          
+          {requestStep === 'select' ? (
+            /* ── STEP 1: 2-COLUMN SQUARE ICON GRID (MATCHING REFERENCE APP) ── */
+            <div className="space-y-4 py-1">
+              <DialogHeader className="text-right">
+                <DialogTitle className="font-heading font-black text-lg sm:text-xl text-slate-900 dark:text-white flex items-center gap-2">
+                  <PlusCircle className="w-5 h-5 text-emerald-600" />
+                  <span>طلب جديد</span>
+                </DialogTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  اختر نوع المعاملة لتقديم الطلب مباشرة
+                </p>
+              </DialogHeader>
 
-          <form onSubmit={handleSubmitRequest} className="space-y-4 py-2">
-            
-            {/* Request Type Selector */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-foreground">نوع الطلب المراد تقديمه *</Label>
-              <Select value={selectedRequestType} onValueChange={setSelectedRequestType}>
-                <SelectTrigger className="rounded-xl text-xs h-10 bg-background font-bold">
-                  <SelectValue placeholder="اختر نوع الطلب..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {Object.values(REQUEST_TYPES).map(rt => (
-                    <SelectItem key={rt.id} value={rt.id} className="text-xs font-bold">
-                      {rt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* 2-Column Square Cards Grid */}
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 max-h-[62vh] overflow-y-auto p-1">
+                {[
+                  {
+                    id: 'annual_leave',
+                    title: 'الإجازات',
+                    subtitle: 'سنوية، مرضية، طارئة',
+                    icon: Plane,
+                    iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('annual_leave');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'permission',
+                    title: 'الاستئذان',
+                    subtitle: 'خروج مؤقت أو تأخير مصرح',
+                    icon: Clock4,
+                    iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('permission');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'advance',
+                    title: 'سلفة مالية',
+                    subtitle: 'سلفة ميسرة وأقساط شهرية',
+                    icon: CreditCard,
+                    iconBg: 'bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('advance');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'punch_correction',
+                    title: 'تصحيح بصمة',
+                    subtitle: 'تعديل بصمة دخول أو خروج',
+                    icon: RotateCw,
+                    iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('punch_correction');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'salary_certificate',
+                    title: 'الخطابات والنماذج',
+                    subtitle: 'تعريف بالراتب أو شهادة خبرة',
+                    icon: FileText,
+                    iconBg: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-950/60 dark:text-yellow-400 border border-yellow-200/60 dark:border-yellow-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('salary_certificate');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'overtime',
+                    title: 'العمل الإضافي',
+                    subtitle: 'تسجيل ساعات عمل إضافية',
+                    icon: Clock,
+                    iconBg: 'bg-pink-50 text-pink-600 dark:bg-pink-950/60 dark:text-pink-400 border border-pink-200/60 dark:border-pink-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('overtime');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'shift_change',
+                    title: 'تعديل الوردية',
+                    subtitle: 'طلب تغيير شفت الدوام',
+                    icon: Briefcase,
+                    iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60',
+                    onClick: () => {
+                      setSelectedRequestType('shift_change');
+                      setRequestStep('form');
+                    }
+                  },
+                  {
+                    id: 'resignation',
+                    title: 'نهاية الخدمة',
+                    subtitle: 'إشعار استقالة أو إنهاء العقد',
+                    icon: UserX,
+                    iconBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/60',
+                    onClick: () => {
+                      setNewRequestModal(false);
+                      setResignationModalOpen(true);
+                    }
+                  }
+                ].map((item, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={item.onClick}
+                    className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-slate-50/80 hover:bg-white dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/70 hover:border-teal-500/50 dark:hover:border-teal-500/50 flex flex-col items-center justify-center text-center transition-all group active:scale-95 shadow-xs hover:shadow-md min-h-[110px] sm:min-h-[125px]"
+                  >
+                    <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 shadow-xs ${item.iconBg}`}>
+                      <item.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                    <span className="font-heading font-black text-xs sm:text-sm text-slate-800 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors mt-2">
+                      {item.title}
+                    </span>
+                    <span className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                      {item.subtitle}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-
-            {/* Impact Banner */}
-            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 text-xs text-emerald-900 dark:text-emerald-300">
-              <strong>أثر وسير المعالجة:</strong> {REQUEST_TYPES[Object.keys(REQUEST_TYPES).find(k => REQUEST_TYPES[k].id === selectedRequestType)]?.impact || 'مراجعة الموارد البشرية'}
-            </div>
-
-            {/* Conditional Fields based on Request Type */}
-            {(selectedRequestType === 'annual_leave' || selectedRequestType === 'unpaid_leave' || selectedRequestType === 'leave_extension') && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">تاريخ البداية *</Label>
-                  <Input
-                    type="date"
-                    value={reqForm.startDate}
-                    onChange={(e) => setReqForm({ ...reqForm, startDate: e.target.value })}
-                    className="rounded-xl text-xs h-9"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">تاريخ النهاية *</Label>
-                  <Input
-                    type="date"
-                    value={reqForm.endDate}
-                    onChange={(e) => setReqForm({ ...reqForm, endDate: e.target.value })}
-                    className="rounded-xl text-xs h-9"
-                    required
-                  />
+          ) : (
+            /* ── STEP 2: DEDICATED REQUEST FORM (NO DROPDOWN OVERCROWDING!) ── */
+            <form onSubmit={handleSubmitRequest} className="space-y-4 py-1">
+              <div className="flex items-center justify-between border-b pb-3">
+                <button
+                  type="button"
+                  onClick={() => setRequestStep('select')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-800 rounded-xl px-3 py-1.5 transition-all shadow-xs"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  <span>العودة لاختيار الطلبات</span>
+                </button>
+                <div className="font-heading font-black text-sm sm:text-base text-slate-900 dark:text-white">
+                  {selectedRequestType === 'annual_leave' && 'طلب إجازة'}
+                  {selectedRequestType === 'permission' && 'طلب استئذان'}
+                  {selectedRequestType === 'advance' && 'طلب سلفة مالية'}
+                  {selectedRequestType === 'punch_correction' && 'طلب تصحيح بصمة'}
+                  {selectedRequestType === 'salary_certificate' && 'طلب خطابات ونماذج'}
+                  {selectedRequestType === 'overtime' && 'طلب عمل إضافي'}
+                  {selectedRequestType === 'shift_change' && 'طلب تعديل وردية'}
                 </div>
               </div>
-            )}
 
-            {selectedRequestType === 'advance' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">المبلغ المطلوب (ر.س) *</Label>
-                  <Input
-                    type="number"
-                    value={reqForm.amount}
-                    onChange={(e) => setReqForm({ ...reqForm, amount: e.target.value })}
-                    placeholder="مثال: 2000"
-                    className="rounded-xl text-xs h-9 font-mono font-bold"
-                    required
-                  />
+              {/* LEAVE FORM */}
+              {selectedRequestType === 'annual_leave' && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">نوع الإجازة</Label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: 'annual', label: 'سنوية اعتيادية' },
+                        { id: 'unpaid', label: 'بدون راتب' },
+                        { id: 'sick', label: 'مرضية' }
+                      ].map(sub => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setReqForm({ ...reqForm, leaveSubType: sub.id })}
+                          className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border ${
+                            reqForm.leaveSubType === sub.id
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold">تاريخ البداية *</Label>
+                      <Input
+                        type="date"
+                        value={reqForm.startDate}
+                        onChange={(e) => setReqForm({ ...reqForm, startDate: e.target.value })}
+                        className="rounded-xl text-xs h-10"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold">تاريخ النهاية *</Label>
+                      <Input
+                        type="date"
+                        value={reqForm.endDate}
+                        onChange={(e) => setReqForm({ ...reqForm, endDate: e.target.value })}
+                        className="rounded-xl text-xs h-10"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">عدد الأقساط الشهرية *</Label>
-                  <Input
-                    type="number"
-                    value={reqForm.installments}
-                    onChange={(e) => setReqForm({ ...reqForm, installments: e.target.value })}
-                    min="1"
-                    max="24"
-                    className="rounded-xl text-xs h-9 font-mono"
-                    required
-                  />
+              )}
+
+              {/* PERMISSION FORM */}
+              {selectedRequestType === 'permission' && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">فترة الاستئذان</Label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: 'morning', label: 'صباحي (تأخير)' },
+                        { id: 'evening', label: 'مسائي (خروج مبكر)' },
+                        { id: 'custom', label: 'خلال الدوام' }
+                      ].map(sub => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setReqForm({ ...reqForm, permissionType: sub.id })}
+                          className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border ${
+                            reqForm.permissionType === sub.id
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold">تاريخ الإذن *</Label>
+                      <Input
+                        type="date"
+                        value={reqForm.startDate}
+                        onChange={(e) => setReqForm({ ...reqForm, startDate: e.target.value })}
+                        className="rounded-xl text-xs h-10"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold">عدد الساعات المطلوبة</Label>
+                      <Select
+                        value={reqForm.permissionHours}
+                        onValueChange={(val) => setReqForm({ ...reqForm, permissionHours: val })}
+                      >
+                        <SelectTrigger className="rounded-xl text-xs h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 ساعة</SelectItem>
+                          <SelectItem value="2">ساعتان (2 س)</SelectItem>
+                          <SelectItem value="3">3 ساعات</SelectItem>
+                          <SelectItem value="4">نصف يوم (4 س)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              {/* ADVANCE FORM */}
+              {selectedRequestType === 'advance' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">المبلغ المطلوب (ر.س) *</Label>
+                    <Input
+                      type="number"
+                      value={reqForm.amount}
+                      onChange={(e) => setReqForm({ ...reqForm, amount: e.target.value })}
+                      placeholder="مثال: 2000"
+                      className="rounded-xl text-xs h-10 font-mono font-bold"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">عدد الأقساط الشهرية *</Label>
+                    <Input
+                      type="number"
+                      value={reqForm.installments}
+                      onChange={(e) => setReqForm({ ...reqForm, installments: e.target.value })}
+                      min="1"
+                      max="24"
+                      className="rounded-xl text-xs h-10 font-mono"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* PUNCH CORRECTION FORM */}
+              {selectedRequestType === 'punch_correction' && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">تاريخ البصمة المراد تصحيحها *</Label>
+                    <Input
+                      type="date"
+                      value={reqForm.startDate}
+                      onChange={(e) => setReqForm({ ...reqForm, startDate: e.target.value })}
+                      className="rounded-xl text-xs h-10"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold">وقت الدخول الفعلي</Label>
+                      <Input
+                        type="time"
+                        value={reqForm.checkInTime}
+                        onChange={(e) => setReqForm({ ...reqForm, checkInTime: e.target.value })}
+                        className="rounded-xl text-xs h-10 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold">وقت الخروج الفعلي</Label>
+                      <Input
+                        type="time"
+                        value={reqForm.checkOutTime}
+                        onChange={(e) => setReqForm({ ...reqForm, checkOutTime: e.target.value })}
+                        className="rounded-xl text-xs h-10 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* LETTERS & FORMS */}
+              {selectedRequestType === 'salary_certificate' && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">نوع الخطاب المطلوب</Label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: 'salary_bank', label: 'تعريف راتب بنكي' },
+                        { id: 'experience', label: 'شهادة خبرة' },
+                        { id: 'employment_proof', label: 'إثبات استمرار عمل' }
+                      ].map(sub => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setReqForm({ ...reqForm, letterType: sub.id })}
+                          className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border ${
+                            reqForm.letterType === sub.id
+                              ? 'bg-yellow-600 text-white border-yellow-600 shadow-sm'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">الجهة الموجه إليها الخطاب</Label>
+                    <Input
+                      type="text"
+                      value={reqForm.letterEntity}
+                      onChange={(e) => setReqForm({ ...reqForm, letterEntity: e.target.value })}
+                      placeholder="مثال: بنك الراجحي / السفارة / لمن يهمه الأمر"
+                      className="rounded-xl text-xs h-10"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* OVERTIME FORM */}
+              {selectedRequestType === 'overtime' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">تاريخ التكليف الإضافي *</Label>
+                    <Input
+                      type="date"
+                      value={reqForm.startDate}
+                      onChange={(e) => setReqForm({ ...reqForm, startDate: e.target.value })}
+                      className="rounded-xl text-xs h-10"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">عدد الساعات الإضافية *</Label>
+                    <Input
+                      type="number"
+                      value={reqForm.overtimeHours}
+                      onChange={(e) => setReqForm({ ...reqForm, overtimeHours: e.target.value })}
+                      min="1"
+                      max="12"
+                      className="rounded-xl text-xs h-10 font-mono"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* SHIFT CHANGE FORM */}
+              {selectedRequestType === 'shift_change' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">الوردية المطلوبة</Label>
+                    <Input
+                      type="text"
+                      value={reqForm.targetShift}
+                      onChange={(e) => setReqForm({ ...reqForm, targetShift: e.target.value })}
+                      placeholder="مثال: فترة صباحية / 8 ساعات"
+                      className="rounded-xl text-xs h-10"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">تاريخ بدء السريان *</Label>
+                    <Input
+                      type="date"
+                      value={reqForm.startDate}
+                      onChange={(e) => setReqForm({ ...reqForm, startDate: e.target.value })}
+                      className="rounded-xl text-xs h-10"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Reason Textarea (Common) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">المبرر والتفاصيل *</Label>
+                <Textarea
+                  value={reqForm.reason}
+                  onChange={(e) => setReqForm({ ...reqForm, reason: e.target.value })}
+                  placeholder="اكتب تفاصيل طلبك بدقة..."
+                  className="rounded-xl text-xs min-h-[75px]"
+                  required
+                />
               </div>
-            )}
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">المبرر والسبب بالتفصيل *</Label>
-              <Textarea
-                value={reqForm.reason}
-                onChange={(e) => setReqForm({ ...reqForm, reason: e.target.value })}
-                placeholder="اكتب تفاصيل طلبك بدقة..."
-                className="rounded-xl text-xs min-h-[80px]"
-                required
-              />
-            </div>
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-10 px-5 gap-1.5 shadow-md"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>إرسال الطلب للاعتماد</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setNewRequestModal(false)}
+                  className="rounded-xl text-xs font-bold h-10"
+                >
+                  إلغاء
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-2">
-              <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-10 px-5 gap-1.5 shadow-md">
-                <Send className="w-4 h-4" />
-                <span>إرسال الطلب للاعتماد</span>
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setNewRequestModal(false)} className="rounded-xl text-xs font-bold h-10">
-                إلغاء
-              </Button>
-            </DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
 
