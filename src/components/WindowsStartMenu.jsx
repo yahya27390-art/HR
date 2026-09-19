@@ -81,8 +81,6 @@ export default function WindowsStartMenu({ isOpen, onClose }) {
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const handleLogout = async () => {
     onClose();
     await logout();
@@ -167,6 +165,8 @@ export default function WindowsStartMenu({ isOpen, onClose }) {
     : allItemsFlat;
 
   const isActive = (path) => (path === '/' ? location.pathname === '/' : location.pathname.startsWith(path));
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" dir="rtl">
