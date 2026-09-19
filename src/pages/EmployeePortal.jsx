@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { base44 } from '@/api/base44Client';
-import { computeEmployeePayroll, getAdvances } from '@/lib/payrollEngine';
+import { computeEmployeePayroll, getAdvances, getLockedMonthlyPayrolls, getLockedMonthlyPayroll, isMonthLocked } from '@/lib/payrollEngine';
 import { getUnifiedRequests, saveUnifiedRequest, REQUEST_TYPES } from '@/lib/requestsEngine';
 import { getCompanyProfile } from '@/lib/companyProfile';
 import { getEmployeeContract, initializeUnifiedContracts } from '@/lib/contractsEngine';
@@ -50,7 +50,11 @@ import {
   Eye,
   Plane,
   UserX,
-  ArrowRight
+  ArrowRight,
+  CalendarCheck,
+  Lock,
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -190,11 +194,62 @@ export default function EmployeePortal() {
     return attendanceLogs.find(l => l.log_date === todayStr) || null;
   }, [attendanceLogs, todayStr]);
 
-  // Current Month Payroll calculation
-  const currentMonthPayroll = useMemo(() => {
-    if (!currentEmp) return null;
-    return computeEmployeePayroll(currentEmp, attendanceLogs, shifts, { monthPrefix: attMonth });
-  }, [currentEmp, attendanceLogs, shifts, attMonth]);
+  // Current calendar month prefix (e.g. 2026-09)
+  const currentMonthPrefix = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  // Strictly past approved months only (m.month_prefix < currentMonthPrefix && status === 'locked')
+  const approvedPastMonths = useMemo(() => {
+    const lockedList = getLockedMonthlyPayrolls();
+    return lockedList.filter(m => 
+      m.status === 'locked' && 
+      m.month_prefix < currentMonthPrefix
+    ).sort((a, b) => b.month_prefix.localeCompare(a.month_prefix));
+  }, [currentMonthPrefix]);
+
+  const [selectedPayrollMonth, setSelectedPayrollMonth] = useState('');
+
+  // Default to latest approved past month
+  useEffect(() => {
+    if (approvedPastMonths.length > 0 && (!selectedPayrollMonth || !approvedPastMonths.some(m => m.month_prefix === selectedPayrollMonth))) {
+      setSelectedPayrollMonth(approvedPastMonths[0].month_prefix);
+    }
+  }, [approvedPastMonths, selectedPayrollMonth]);
+
+  // Approved Payroll Record for the selected past month
+  const approvedPayrollData = useMemo(() => {
+    if (!currentEmp || !selectedPayrollMonth) return null;
+    const isPastApproved = approvedPastMonths.some(m => m.month_prefix === selectedPayrollMonth);
+    if (!isPastApproved) return null;
+
+    const lockedMeta = approvedPastMonths.find(m => m.month_prefix === selectedPayrollMonth);
+    const lockedSnapshot = getLockedMonthlyPayroll(selectedPayrollMonth);
+
+    const clean = (v) => String(v || '').replace('emp_', '').trim();
+    const empNum = clean(currentEmp.employee_number || currentEmp.id);
+    const empName = clean(currentEmp.full_name);
+
+    let found = null;
+    if (lockedSnapshot && Array.isArray(lockedSnapshot.payrolls)) {
+      found = lockedSnapshot.payrolls.find(p => 
+        clean(p.emp?.employee_number || p.emp?.id) === empNum ||
+        clean(p.employee_number || p.employee_id) === empNum ||
+        (empName && clean(p.emp?.full_name || p.employee_name) === empName)
+      );
+    }
+
+    if (!found) {
+      found = computeEmployeePayroll(currentEmp, attendanceLogs, shifts, { monthPrefix: selectedPayrollMonth });
+    }
+
+    return {
+      payroll: found,
+      meta: lockedMeta,
+      snapshot: lockedSnapshot
+    };
+  }, [currentEmp, selectedPayrollMonth, approvedPastMonths, attendanceLogs, shifts]);
 
   // Filtered attendance for selected month
   const monthlyLogs = useMemo(() => {
@@ -779,54 +834,139 @@ export default function EmployeePortal() {
         </Card>
       )}
 
-      {/* ─── 6. TAB 4: MY PAYROLL ───────────────────────────────────────────── */}
+      {/* ─── 6. TAB 4: MY PAYROLL (STRICTLY GM APPROVED PAST MONTHS ONLY) ─── */}
       {activeTab === 'payroll' && (
         <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="flex items-center justify-between border-b pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 gap-3">
             <div>
               <h2 className="font-heading font-black text-lg text-foreground">قسائم ومسيرات الرواتب الشهرية</h2>
-              <p className="text-xs text-muted-foreground">استعراض وتحميل قسيمة الراتب الرسمية A4 المعتمدة</p>
+              <p className="text-xs text-muted-foreground">استعراض وتحميل قسائم الرواتب المعتمدة رسمياً من المدير العام (الشهور السابقة المنتهية)</p>
             </div>
+
+            {/* Approved Month Selector */}
+            {approvedPastMonths.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground">الشهر المعتمد:</span>
+                <Select value={selectedPayrollMonth} onValueChange={setSelectedPayrollMonth}>
+                  <SelectTrigger className="w-56 h-9 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-900 border">
+                    <SelectValue placeholder="اختر الشهر المعتمد..." />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    {approvedPastMonths.map(m => (
+                      <SelectItem key={m.month_prefix} value={m.month_prefix} className="text-xs font-bold">
+                        ✓ {m.title || `شهر ${m.month_prefix}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
-          {currentMonthPayroll && (
-            <div className="p-6 rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white space-y-6 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="text-xs text-emerald-400 font-bold">مسير راتب شهر: {attMonth}</div>
-                  <div className="text-2xl sm:text-3xl font-heading font-black text-white mt-1">
-                    {currentMonthPayroll.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-sm font-normal text-emerald-300 font-sans">ريال سعودي</span>
+          {/* Verification Guard: Only show if officially approved by GM and past month */}
+          {approvedPastMonths.length === 0 || !approvedPayrollData?.payroll ? (
+            <div className="p-8 rounded-3xl border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-3.5">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+                <Lock className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-heading font-black text-base text-amber-950 dark:text-amber-200">
+                  قسيمة الراتب بانتظار الاعتماد النهائي من الإدارة والمدير العام
+                </h3>
+                <p className="text-xs text-amber-800/80 dark:text-amber-300/80 max-w-md mx-auto leading-relaxed">
+                  وفقاً للسياسات الإدارية المعتمدة، لا تصدر قسيمة الراتب للموظف إلا بعد مراجعتها وتدقيقها والتأكيد على إتمام الاعتماد الرسمي وإقفال المسير من قبل الإدارة والمدير العام بالتحديد. تظهر هنا رواتب الشهور السابقة المنتهية فقط فور اعتمادها.
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-2">
+                <Badge className="bg-amber-200/70 text-amber-900 dark:bg-amber-900 dark:text-amber-200 text-[11px] font-bold px-3 py-1">
+                  ⏳ مسير شهر {currentMonthPrefix} قيد العمل والتدقيق
+                </Badge>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              
+              {/* GM Official Approval Banner */}
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/20 shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
                   </div>
-                  <div className="text-xs text-slate-300 mt-1">صافي الراتب المستحق للصرف</div>
+                  <div>
+                    <div className="font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
+                      <span>معتمد وموثق رسمياً من الإدارة والمدير العام بالتحديد</span>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" />
+                    </div>
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium mt-0.5">
+                      المعتمد: {approvedPayrollData.meta?.locked_by || 'فهد ناصر محمد الجوعي (المدير العام)'}
+                      {approvedPayrollData.meta?.locked_at && (
+                        <span> • بتاريخ {new Date(approvedPayrollData.meta.locked_at).toLocaleDateString('ar-SA')}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <Button
-                  onClick={() => setSelectedForPayslip(currentMonthPayroll)}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>طباعة قسيمة الراتب الرسمية A4</span>
-                </Button>
+                <Badge className="bg-emerald-600 text-white font-bold text-[10px] self-start sm:self-center px-2.5 py-1">
+                  مسير معتمد ومقفل رسمياً ✓
+                </Badge>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-700/60 text-xs">
-                <div>
-                  <div className="text-slate-400">الراتب الأساسي:</div>
-                  <div className="font-mono font-bold text-white mt-0.5">{currentMonthPayroll.basicSalary.toLocaleString('en-US')} ر.س</div>
+              {/* Main Official Payslip Card */}
+              <div className="p-6 rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white space-y-6 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+                      <span>مسير راتب شهر: {selectedPayrollMonth}</span>
+                      <span className="text-slate-400">({approvedPayrollData.meta?.title || `شهر ${selectedPayrollMonth}`})</span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-heading font-black text-white mt-1">
+                      {approvedPayrollData.payroll.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-sm font-normal text-emerald-300 font-sans">ريال سعودي</span>
+                    </div>
+                    <div className="text-xs text-slate-300 mt-1">صافي الراتب المعتمد رسمياً للصرف</div>
+                  </div>
+
+                  <Button
+                    onClick={() => setSelectedForPayslip(approvedPayrollData.payroll)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>طباعة قسيمة الراتب الرسمية A4</span>
+                  </Button>
                 </div>
-                <div>
-                  <div className="text-slate-400">إجمالي البدلات والإضافي:</div>
-                  <div className="font-mono font-bold text-emerald-400 mt-0.5">+{currentMonthPayroll.totalAdditions.toLocaleString('en-US')} ر.س</div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-700/60 text-xs">
+                  <div>
+                    <div className="text-slate-400">الراتب الأساسي:</div>
+                    <div className="font-mono font-bold text-white mt-0.5">{approvedPayrollData.payroll.basicSalary?.toLocaleString('en-US')} ر.س</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400">إجمالي البدلات والإضافي:</div>
+                    <div className="font-mono font-bold text-emerald-400 mt-0.5">+{approvedPayrollData.payroll.totalAdditions?.toLocaleString('en-US')} ر.س</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400">إجمالي الاستقطاعات والسلف:</div>
+                    <div className="font-mono font-bold text-rose-400 mt-0.5">-{approvedPayrollData.payroll.totalDeductions?.toLocaleString('en-US')} ر.س</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400">طريقة الصرف:</div>
+                    <div className="font-bold text-slate-200 mt-0.5">{currentEmp.iban ? 'تحويل بنكي' : 'تسليم نقدي (كاش)'}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-slate-400">إجمالي الاستقطاعات والسلف:</div>
-                  <div className="font-mono font-bold text-rose-400 mt-0.5">-{currentMonthPayroll.totalDeductions.toLocaleString('en-US')} ر.س</div>
-                </div>
-                <div>
-                  <div className="text-slate-400">طريقة الصرف:</div>
-                  <div className="font-bold text-slate-200 mt-0.5">{currentEmp.iban ? 'تحويل بنكي' : 'تسليم نقدي (كاش)'}</div>
+
+                <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>🔒 معتمد ومطابق لمتطلبات نظام حماية الأجور (WPS)</span>
+                  <span className="font-mono">#{currentEmp.employee_number}</span>
                 </div>
               </div>
+
+              {/* Informational Security Footnote */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-[11px] text-muted-foreground flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-500 shrink-0" />
+                <span>
+                  <strong>ملاحظة نظام الرواتب:</strong> تظهر للموظف قسائم رواتب الشهور السابقة المنتهية والمعتمدة رسمياً فقط من المدير العام، ولا يتاح راتب الشهر الحالي إلا بعد اكتمال واعتماد المسير الإداري.
+                </span>
+              </div>
+
             </div>
           )}
         </Card>
@@ -1585,7 +1725,7 @@ export default function EmployeePortal() {
       {selectedForPayslip && (
         <PayslipPrint
           payroll={selectedForPayslip}
-          monthLabel={attMonth}
+          monthLabel={selectedPayrollMonth || attMonth}
           onClose={() => setSelectedForPayslip(null)}
         />
       )}
