@@ -8,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { getRoleMeta } from '@/lib/rbac';
 import { useI18n } from '@/lib/i18n';
+import WindowsStartMenu from '@/components/WindowsStartMenu';
 import { 
   Cloud,
   Download,
@@ -40,6 +41,7 @@ export default function Header({ onOpenMobileMenu }) {
   const { lang, toggleLanguage } = useI18n();
   const navigate = useNavigate();
   const { isDark, toggleDarkMode } = useTheme();
+  const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -49,48 +51,71 @@ export default function Header({ onOpenMobileMenu }) {
   const userName = user?.full_name || user?.name || (user?.email?.includes('dortal') ? 'فهد ناصر محمد الجوعي' : (user?.email?.includes('yahya') ? 'يحيي محمد عبدالغفار باشا' : 'المشرف العام'));
 
   return (
-    <header 
-      className="sticky top-0 z-30 bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-2.5 flex items-center justify-between transition-colors shadow-sm"
-      dir="rtl"
-    >
-      
-      {/* ─── RIGHT: BRAND LOGO & SYSTEM TITLE ─────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        {/* Mobile Hamburger Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onOpenMobileMenu}
-          className="lg:hidden w-9 h-9 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm"
-          aria-label="القائمة"
-        >
-          <Menu className="w-5 h-5" />
-        </Button>
-
-        {/* Brand Logo & Name */}
-        <Link to="/" className="flex items-center gap-3 group">
-          <img 
-            src={profile.logo_url || "/company-logo.png"} 
-            alt="شعار درة السيارة" 
-            className="h-10 w-auto max-w-[44px] object-contain group-hover:scale-105 transition-transform" 
-          />
-          <div>
-            <div className="text-xs sm:text-sm font-heading font-black text-foreground tracking-tight flex items-center gap-1.5">
-              <span>درة السيارة</span>
-              <span className="text-[9px] bg-sky-500/15 text-sky-600 dark:text-sky-400 font-bold px-1.5 py-0.5 rounded-md font-mono">HR</span>
+    <>
+      <header 
+        className="sticky top-0 z-30 bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-2.5 flex items-center justify-between transition-colors shadow-sm"
+        dir="rtl"
+      >
+        
+        {/* ─── RIGHT: BRAND LOGO & SYSTEM TITLE ─────────────────────────────── */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Mobile Hamburger / Start Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsStartMenuOpen(true)}
+            className="lg:hidden w-9 h-9 rounded-2xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/20 shadow-sm"
+            aria-label="قائمة ابدأ"
+            title="قائمة ابدأ (Windows 11 Start)"
+          >
+            <div className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5">
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00adef]" />
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00a859]" />
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#ffb900]" />
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#f25022]" />
             </div>
-            <div className="text-[9.5px] text-muted-foreground font-medium hidden sm:block">الموارد البشرية والخدمة الذاتية</div>
-          </div>
-        </Link>
-      </div>
+          </Button>
 
-      {/* ─── CENTER: GREETING MESSAGE (DESKTOP ONLY) ───────────────────────── */}
-      <div className="hidden md:flex items-center gap-2 bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 px-4 py-1.5 rounded-full shadow-inner">
-        <span className="text-sm">👋</span>
-        <span className="text-xs font-bold text-foreground">
-          أهلاً بك، <strong className="text-emerald-600 dark:text-emerald-400 font-black">{userName.split(' ')[0]}</strong>
-        </span>
-      </div>
+          {/* Brand Logo & Name */}
+          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
+            <img 
+              src={profile.logo_url || "/company-logo.png"} 
+              alt="شعار درة السيارة" 
+              className="h-10 w-auto max-w-[44px] object-contain group-hover:scale-105 transition-transform" 
+            />
+            <div>
+              <div className="text-xs sm:text-sm font-heading font-black text-foreground tracking-tight flex items-center gap-1.5">
+                <span>درة السيارة</span>
+                <span className="text-[9px] bg-sky-500/15 text-sky-600 dark:text-sky-400 font-bold px-1.5 py-0.5 rounded-md font-mono">HR</span>
+              </div>
+              <div className="text-[9.5px] text-muted-foreground font-medium hidden sm:block">الموارد البشرية والخدمة الذاتية</div>
+            </div>
+          </Link>
+
+          {/* Desktop Windows 11 Start Button */}
+          <button
+            type="button"
+            onClick={() => setIsStartMenuOpen(true)}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-gradient-to-r from-sky-500/10 via-emerald-500/10 to-purple-500/10 hover:from-sky-500/20 hover:via-emerald-500/20 hover:to-purple-500/20 border border-slate-200/80 dark:border-slate-800 transition-all duration-200 shadow-xs group active:scale-95 ms-1"
+            title="قائمة ابدأ (Windows 11 Start)"
+          >
+            <div className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5 drop-shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00adef]" />
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00a859]" />
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#ffb900]" />
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#f25022]" />
+            </div>
+            <span className="text-xs font-black text-foreground">ابدأ</span>
+          </button>
+        </div>
+
+        {/* ─── CENTER: GREETING MESSAGE (DESKTOP ONLY) ───────────────────────── */}
+        <div className="hidden md:flex items-center gap-2 bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 px-4 py-1.5 rounded-full shadow-inner">
+          <span className="text-sm">👋</span>
+          <span className="text-xs font-bold text-foreground">
+            أهلاً بك، <strong className="text-emerald-600 dark:text-emerald-400 font-black">{userName.split(' ')[0]}</strong>
+          </span>
+        </div>
 
       {/* ─── LEFT: CONTROLS & USER AVATAR ─────────────────────────────────── */}
       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -199,6 +224,13 @@ export default function Header({ onOpenMobileMenu }) {
 
       </div>
 
-    </header>
+      </header>
+
+      {/* Windows 11 Start Menu Dialog */}
+      <WindowsStartMenu 
+        isOpen={isStartMenuOpen} 
+        onClose={() => setIsStartMenuOpen(false)} 
+      />
+    </>
   );
 }

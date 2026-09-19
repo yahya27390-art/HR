@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { EKTEFA_MODULES, getVisibleModules } from '@/lib/nav';
 import { hasPermission, getRoleMeta } from '@/lib/rbac';
+import WindowsStartMenu from '@/components/WindowsStartMenu';
 import {
   Search,
   ChevronRight,
@@ -73,6 +74,7 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
 
   const [activeModuleId, setActiveModuleId] = useState(() => findModuleForPath(location.pathname));
   const [searchQuery, setSearchQuery] = useState('');
+  const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
 
   // Sync active module when location (route) changes
   useEffect(() => {
@@ -125,11 +127,27 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
         {/* Brand Mini Logo */}
         <Link 
           to="/" 
-          className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3.5 hover:scale-105 transition-all duration-300 shrink-0 p-1 bg-slate-50 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800 shadow-sm group"
+          className="w-12 h-12 rounded-2xl flex items-center justify-center mb-2 hover:scale-105 transition-all duration-300 shrink-0 p-1 bg-slate-50 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800 shadow-sm group"
           title="درة السيارة HR - لوحة التحكم"
         >
           <img src={profile.logo_url || "/company-logo.png"} alt="شعار درة السيارة" className="w-10 h-10 object-contain drop-shadow-sm group-hover:rotate-6 transition-transform" />
         </Link>
+
+        {/* Windows 11 Start Tile Launcher */}
+        <button
+          type="button"
+          onClick={() => setIsStartMenuOpen(true)}
+          className="w-12 h-12 rounded-2xl flex flex-col items-center justify-center mb-3 hover:scale-105 active:scale-95 transition-all duration-200 shrink-0 bg-gradient-to-tr from-sky-500/15 via-emerald-500/15 to-purple-500/15 hover:from-sky-500/25 hover:via-emerald-500/25 hover:to-purple-500/25 border border-slate-200/80 dark:border-slate-800 shadow-sm group"
+          title="قائمة ابدأ (Windows 11 Start)"
+        >
+          <div className="grid grid-cols-2 gap-0.5 w-4 h-4 drop-shadow-xs">
+            <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00adef]" />
+            <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00a859]" />
+            <span className="w-1.5 h-1.5 rounded-[1px] bg-[#ffb900]" />
+            <span className="w-1.5 h-1.5 rounded-[1px] bg-[#f25022]" />
+          </div>
+          <span className="text-[8.5px] font-black text-slate-700 dark:text-slate-300 mt-1 leading-none">ابدأ</span>
+        </button>
 
         {/* Primary Module Icons List */}
         <div className="flex-1 flex flex-col items-center gap-2 overflow-y-auto no-scrollbar w-full px-2 py-1">
@@ -324,6 +342,12 @@ export default function Sidebar({ isSubMenuOpen, setIsSubMenuOpen }) {
           </div>
         </aside>
       )}
+
+      {/* Windows 11 Start Menu Modal */}
+      <WindowsStartMenu 
+        isOpen={isStartMenuOpen} 
+        onClose={() => setIsStartMenuOpen(false)} 
+      />
 
     </div>
   );

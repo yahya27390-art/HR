@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import MobileSidebar from '@/components/MobileSidebar';
+import WindowsStartMenu from '@/components/WindowsStartMenu';
 import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 import { getNavItems } from '@/lib/nav';
 import { Grid, Menu, ChevronLeft, User, Clock, FileSignature } from 'lucide-react';
@@ -36,9 +36,9 @@ export default function Layout() {
         <Sidebar isSubMenuOpen={isSubMenuOpen} setIsSubMenuOpen={setIsSubMenuOpen} />
       </div>
 
-      {/* 2. Mobile Slide-out Drawer */}
+      {/* 2. Universal Windows 11 Start Menu */}
       <div className="no-print print:hidden">
-        <MobileSidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+        <WindowsStartMenu isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
       </div>
 
       {/* 3. Main Content Area with EXPLICIT right padding */}
@@ -117,16 +117,22 @@ export default function Layout() {
             <span className="text-[10.5px] font-bold tracking-tight">ملفي 360°</span>
           </Link>
 
-          {/* Mobile All Menus Sheet */}
+          {/* Windows 11 Start Menu Dock Button */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
-            className="flex flex-col items-center justify-center gap-1 py-1 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-slate-900 active:scale-95 transition-all"
+            className="flex flex-col items-center justify-center gap-1 py-1 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-slate-900 active:scale-95 transition-all group"
+            title="قائمة ابدأ (Windows 11 Start)"
           >
-            <div className="p-1 rounded-xl">
-              <Menu className="w-5 h-5" />
+            <div className="p-1 rounded-xl group-hover:scale-110 transition-transform">
+              <div className="grid grid-cols-2 gap-0.5 w-4 h-4 drop-shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00adef]" />
+                <span className="w-1.5 h-1.5 rounded-[1px] bg-[#00a859]" />
+                <span className="w-1.5 h-1.5 rounded-[1px] bg-[#ffb900]" />
+                <span className="w-1.5 h-1.5 rounded-[1px] bg-[#f25022]" />
+              </div>
             </div>
-            <span className="text-[10.5px] font-bold tracking-tight">المزيد</span>
+            <span className="text-[10.5px] font-bold tracking-tight">ابدأ</span>
           </button>
 
         </div>

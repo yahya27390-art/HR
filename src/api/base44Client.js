@@ -1092,17 +1092,19 @@ function createEntityHandler(entityName) {
             query = query.range(offset, offset + batchSize - 1);
 
             const { data, error } = await query;
-            if (error || !data || data.length === 0) break;
+            if (error) {
+              console.warn('Supabase query error for ' + entityName + ':', error);
+              break;
+            }
+            if (!data || data.length === 0) break;
 
             allFetched = allFetched.concat(data);
             if (data.length < batchSize) break;
           }
 
-          if (allFetched.length > 0) {
-            const mapped = allFetched.map(r => fromDbRecord(entityName, r));
-            saveLocalItems(entityName, mapped);
-            return mapped;
-          }
+          const mapped = (allFetched || []).map(r => fromDbRecord(entityName, r));
+          saveLocalItems(entityName, mapped);
+          return mapped;
         } catch (e) {
           console.warn('Supabase fetch error for ' + entityName + ':', e);
         }
