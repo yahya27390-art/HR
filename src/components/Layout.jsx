@@ -25,7 +25,7 @@ export default function Layout() {
     return location.pathname.startsWith(base);
   };
 
-  const desktopRightPadding = isSubMenuOpen ? 'lg:pr-[268px]' : 'lg:pr-[68px]';
+  const desktopRightPadding = isSubMenuOpen ? 'lg:pr-[287px]' : 'lg:pr-[72px]';
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 text-foreground font-sans selection:bg-sky-500 selection:text-white" dir="rtl">
