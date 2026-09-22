@@ -258,6 +258,17 @@ export default function EmployeePortal() {
       .sort((a, b) => new Date(b.log_date) - new Date(a.log_date));
   }, [attendanceLogs, attMonth]);
 
+  // Current month attendance summary & stats based on attMonth
+  const currentMonthPayroll = useMemo(() => {
+    if (!currentEmp) return null;
+    try {
+      return computeEmployeePayroll(currentEmp, attendanceLogs, shifts, { monthPrefix: attMonth });
+    } catch (e) {
+      console.error('Error computing current month payroll stats:', e);
+      return null;
+    }
+  }, [currentEmp, attendanceLogs, shifts, attMonth]);
+
   // Handle Request Submission
   const handleSubmitRequest = (e) => {
     e.preventDefault();
