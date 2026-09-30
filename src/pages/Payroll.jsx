@@ -1,6 +1,6 @@
 import { initFullCloudSync } from '@/lib/cloudSyncEngine';
 import { MaskedSalary, PrivacyMaskToggle } from '@/lib/FinancialPrivacyContext';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import {
   Wallet, Download, Printer, CheckCircle2, Clock, AlertTriangle, Coins,
@@ -246,6 +246,10 @@ export default function Payroll() {
   const [selectedBranch, setSelectedBranch] = useState('all');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [search, setSearch] = useState('');
+  const selectedEmpIdRef = useRef(selectedEmpId);
+  useEffect(() => {
+    selectedEmpIdRef.current = selectedEmpId;
+  }, [selectedEmpId]);
 
   // Lock status
   const [isLocked, setIsLocked] = useState(false);
@@ -326,8 +330,19 @@ export default function Payroll() {
       const dbLocked = await isMonthLockedDB(monthPrefix);
       setIsLocked(dbLocked || isMonthLocked(monthPrefix));
 
-      if (emps && emps.length > 0 && !selectedEmpId) {
-        setSelectedEmpId(String(emps[0].employee_number || emps[0].id));
+      if (emps && emps.length > 0) {
+        setSelectedEmpId(prev => {
+          const current = prev || selectedEmpIdRef.current;
+          if (current) {
+            const match = emps.find(e => 
+              String(e.employee_number || '') === String(current) || 
+              String(e.id || '') === String(current) ||
+              String(e.employee_number || '').replace('emp_', '') === String(current).replace('emp_', '')
+            );
+            if (match) return String(match.employee_number || match.id);
+          }
+          return String(emps[0].employee_number || emps[0].id);
+        });
       }
     } catch (e) {
       console.error('Failed to load payroll data:', e);
@@ -428,11 +443,38 @@ export default function Payroll() {
     return allPayrolls.find(pr => String(pr.emp.employee_number || pr.emp.id) === String(currentSelectedEmp.employee_number || currentSelectedEmp.id)) || null;
   }, [allPayrolls, currentSelectedEmp]);
 
-  // Filtered Employees for the Selected Branch (in Stage 1/2/3 selector)
+  // Filtered Employees for the Selected Branch & Search (in Stage 1/2/3 selector)
   const branchFilteredEmployees = useMemo(() => {
-    if (selectedBranch === 'all') return employees;
-    return employees.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
-  }, [employees, selectedBranch]);
+    let list = employees;
+    if (selectedBranch !== 'all') {
+      list = list.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
+    }
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(e => 
+        (e.full_name || '').toLowerCase().includes(q) ||
+        String(e.employee_number || '').includes(q)
+      );
+    }
+    return list;
+  }, [employees, selectedBranch, search]);
+
+  // When branch filter changes, ensure selected employee belongs to that branch
+  useEffect(() => {
+    if (selectedBranch === 'all' || !employees.length) return;
+    const branchEmps = employees.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
+    if (branchEmps.length > 0) {
+      const isCurrentInBranch = branchEmps.some(e => 
+        String(e.employee_number || e.id) === String(selectedEmpId) ||
+        String(e.employee_number || '').replace('emp_', '') === String(selectedEmpId).replace('emp_', '')
+      );
+      if (!isCurrentInBranch) {
+        const nextId = String(branchEmps[0].employee_number || branchEmps[0].id);
+        setSelectedEmpId(nextId);
+        selectedEmpIdRef.current = nextId;
+      }
+    }
+  }, [selectedBranch, employees, selectedEmpId]);
 
   // Summary Totals for Stage 4
   const totals = useMemo(() => {
@@ -1349,7 +1391,13 @@ export default function Payroll() {
                   {/* Employee Selector */}
                   <div className="space-y-1">
                     <Label className="text-xs font-bold">2. اختر الموظف لتدقيق بصماته:</Label>
-                    <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+                    <Select 
+                      value={currentSelectedEmp ? String(currentSelectedEmp.employee_number || currentSelectedEmp.id) : selectedEmpId} 
+                      onValueChange={(val) => {
+                        setSelectedEmpId(val);
+                        selectedEmpIdRef.current = val;
+                      }}
+                    >
                       <SelectTrigger className="rounded-2xl text-xs bg-background h-10 font-bold">
                         <SelectValue placeholder="اختر الموظف..." />
                       </SelectTrigger>
@@ -1726,7 +1774,13 @@ export default function Payroll() {
               <div className="flex items-center justify-between bg-card p-4 rounded-3xl border shadow-sm flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-bold text-muted-foreground">تدقيق استقطاعات:</span>
-                  <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+                  <Select 
+                    value={currentSelectedEmp ? String(currentSelectedEmp.employee_number || currentSelectedEmp.id) : selectedEmpId} 
+                    onValueChange={(val) => {
+                      setSelectedEmpId(val);
+                      selectedEmpIdRef.current = val;
+                    }}
+                  >
                     <SelectTrigger className="w-64 rounded-xl text-xs font-bold h-9">
                       <SelectValue />
                     </SelectTrigger>
@@ -2222,7 +2276,13 @@ export default function Payroll() {
               <div className="flex items-center justify-between bg-card p-4 rounded-3xl border shadow-sm">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-bold text-muted-foreground">تدقيق مستحقات:</span>
-                  <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+                  <Select 
+                    value={currentSelectedEmp ? String(currentSelectedEmp.employee_number || currentSelectedEmp.id) : selectedEmpId} 
+                    onValueChange={(val) => {
+                      setSelectedEmpId(val);
+                      selectedEmpIdRef.current = val;
+                    }}
+                  >
                     <SelectTrigger className="w-64 rounded-xl text-xs font-bold h-9">
                       <SelectValue />
                     </SelectTrigger>
