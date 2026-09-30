@@ -651,6 +651,71 @@ export default function Payroll() {
     }
   };
 
+  // Fast 1-Click Cancel National Day Attendance (Sets to official paid holiday without deduction)
+  const handleCancelNationalDayAttendance = async (day) => {
+    if (!currentSelectedEmp) return;
+    const emp = currentSelectedEmp;
+    const empId = emp.id || ('emp_' + emp.employee_number);
+    const empNum = String(emp.employee_number || '').replace('emp_', '');
+    const empName = emp.full_name || 'موظف';
+
+    const updatedItem = {
+      ...day,
+      id: day.id || `att_${empNum}_${day.log_date}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      employee_id: empId,
+      user_id: empId,
+      employee_number: empNum,
+      employee_name: empName,
+      log_date: day.log_date,
+      check_in: null,
+      check_out: null,
+      status: 'holiday',
+      timestamp_raw: '',
+      total_hours: 0,
+      period_1_in: '',
+      period_1_out: '',
+      period_2_in: '',
+      period_2_out: '',
+      notes: JSON.stringify({
+        employee_number: empNum,
+        user_id: empId,
+        total_hours: 0,
+        timestamp_raw: '',
+        period_1_in: '',
+        period_1_out: '',
+        period_2_in: '',
+        period_2_out: '',
+        leave_type: 'holiday',
+        note: 'عطلة رسمية (اليوم الوطني السعودي 🇸🇦) - إجازة مدفوعة الأجر بدون دوام',
+        manual_edit_by: user?.full_name || 'مدير الموارد البشرية',
+        manual_edit_at: new Date().toISOString()
+      })
+    };
+
+    try {
+      if (day.id) {
+        await base44.entities.AttendanceLog.update(day.id, updatedItem);
+      } else {
+        await base44.entities.AttendanceLog.create(updatedItem);
+      }
+
+      setAttendanceLogs(prev => {
+        const copy = [...prev];
+        const idx = copy.findIndex(l => (l.id && l.id === day.id) || (String(l.employee_number || l.employee_id) === empNum && l.log_date === day.log_date));
+        if (idx !== -1) copy[idx] = { ...copy[idx], ...updatedItem };
+        else copy.unshift(updatedItem);
+        return copy;
+      });
+
+      toast({
+        title: '🇸🇦 تم إلغاء دوام اليوم الوطني بنجاح',
+        description: `يوم ${day.log_date}: تم تعيين اليوم كعطلة رسمية مدفوعة الأجر (بدون خصم غياب وبدون تعويض دوام إضافي).`
+      });
+    } catch (e) {
+      toast({ title: 'خطأ أثناء إلغاء دوام اليوم الوطني', description: e.message, variant: 'destructive' });
+    }
+  };
+
   // Fast 1-Click Cancel Evening Period (Sets Period 2 empty and records shortfall hours deficit, NOT absence)
   const handleCancelPeriod2 = async (day) => {
     if (!currentSelectedEmp) return;
@@ -1550,7 +1615,11 @@ export default function Payroll() {
                       </thead>
                       <tbody className="divide-y divide-border/60">
                         {currentSelectedPayroll.dailyDetails?.map((d, di) => {
-                          const statusLabel = d.isFriday 
+                          const statusLabel = d.isNationalDay
+                            ? (d.hasAttendance ? 'دوام اليوم الوطني (+2 يوم) 🇸🇦' : 'عطلة اليوم الوطني 🇸🇦 (مدفوعة الأجر)')
+                            : d.isOfficialHoliday
+                            ? (d.hasAttendance ? `دوام ${d.holidayName || 'عطلة رسمية'} ⚡` : `${d.holidayName || 'عطلة رسمية'}`)
+                            : d.isFriday 
                             ? 'عطلة جمعة' 
                             : d.isUnpaidLeave 
                             ? 'إجازة بدون راتب' 
@@ -1562,7 +1631,11 @@ export default function Payroll() {
                             ? `عجز دوام (${formatMinutes(d.shortfallMinutes)})` 
                             : 'حاضر ✓';
 
-                          const statusBadgeColor = d.isFriday 
+                          const statusBadgeColor = d.isNationalDay
+                            ? (d.hasAttendance ? 'bg-emerald-600 text-white font-black shadow-sm' : 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold')
+                            : d.isOfficialHoliday
+                            ? (d.hasAttendance ? 'bg-teal-600 text-white font-extrabold' : 'bg-teal-100 text-teal-800 border border-teal-300 font-bold')
+                            : d.isFriday 
                             ? 'bg-indigo-100 text-indigo-800' 
                             : d.isUnpaidLeave 
                             ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' 
@@ -1639,8 +1712,32 @@ export default function Payroll() {
                               <td className="py-2.5 px-4 text-center">
                                 {isAdmin && !isLocked && (
                                   <div className="flex items-center justify-center gap-1.5">
-                                    {/* Fast Friday Buttons */}
-                                    {d.isFriday ? (
+                                    {/* Fast National Day Buttons */}
+                                    {d.isNationalDay ? (
+                                      d.hasAttendance ? (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleCancelNationalDayAttendance(d)}
+                                          title="إلغاء دوام اليوم الوطني وإعادته كعطلة رسمية مدفوعة الأجر"
+                                          className="h-7 text-[10px] font-bold rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 px-2.5 gap-1 border border-rose-200/60"
+                                        >
+                                          <X className="w-3 h-3" />
+                                          <span>إلغاء دوام اليوم الوطني 🚫</span>
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleQuickStandardPunch(d)}
+                                          title="توثيق دوام اليوم الوطني واعتماد استحقاق تعويض يومين إضافيين"
+                                          className="h-7 text-[10px] font-black rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 gap-1 shadow-sm"
+                                        >
+                                          <Sparkles className="w-3 h-3" />
+                                          <span>توثيق دوام اليوم الوطني (+2 يوم) 🇸🇦</span>
+                                        </Button>
+                                      )
+                                    ) : d.isFriday ? (
                                       d.hasAttendance ? (
                                         <Button
                                           size="sm"
@@ -2318,7 +2415,7 @@ export default function Payroll() {
               </div>
 
               {/* Earnings Breakdown Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 
                 {/* 1. Friday Allowance */}
                 <Card className="p-5 rounded-3xl border bg-card shadow-sm space-y-3">
@@ -2343,12 +2440,39 @@ export default function Payroll() {
                   </div>
                 </Card>
 
-                {/* 2. Daily OT Allowance */}
+                {/* 2. National Day Allowance (المادة 112 من نظام العمل السعودي: تعويض يومين إضافيين على الراتب الأساسي) */}
+                <Card className={`p-5 rounded-3xl border shadow-sm space-y-3 ${currentSelectedPayroll.nationalDayWorkedDays > 0 ? 'bg-emerald-50/50 border-emerald-300 dark:bg-emerald-950/30' : 'bg-card'}`}>
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-emerald-600" />
+                      <h3 className="font-heading font-black text-sm text-foreground">2. تعويض اليوم الوطني 🇸🇦</h3>
+                    </div>
+                    <Badge className={`${currentSelectedPayroll.nationalDayWorkedDays > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'} text-xs font-mono font-bold border-0`}>
+                      {currentSelectedPayroll.nationalDayWorkedDays || 0} يوم دوام
+                    </Badge>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">أجر اليوم الأساسي:</span>
+                      <span className="font-mono font-bold">{fmtNum(currentSelectedPayroll.nationalDayDailyRate || (currentSelectedPayroll.basicSalary / 30))} ر.س</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">المعادلة (تعويض يومين):</span>
+                      <span className="font-mono font-bold">{currentSelectedPayroll.nationalDayWorkedDays || 0} يوم × 2 يوم × {fmtNum(currentSelectedPayroll.nationalDayDailyRate || (currentSelectedPayroll.basicSalary / 30))} ر.س</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-bold text-emerald-800 dark:text-emerald-300">المبلغ المستحق:</span>
+                      <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">+{fmtNum(currentSelectedPayroll.nationalDayAllowance)} ر.س</span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* 3. Daily OT Allowance */}
                 <Card className="p-5 rounded-3xl border bg-card shadow-sm space-y-3">
                   <div className="flex items-center justify-between border-b pb-3">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 text-blue-600" />
-                      <h3 className="font-heading font-black text-sm text-foreground">2. إضافي دوام 9 ساعات (100 ر.س / يوم)</h3>
+                      <h3 className="font-heading font-black text-sm text-foreground">3. إضافي دوام 9 ساعات</h3>
                     </div>
                     <Badge className="bg-blue-100 text-blue-800 text-xs font-mono font-bold border-0">
                       {currentSelectedPayroll.overtimeDays} يوم
@@ -2366,12 +2490,12 @@ export default function Payroll() {
                   </div>
                 </Card>
 
-                {/* 3. Basic & Fixed Allowances */}
+                {/* 4. Basic & Fixed Allowances */}
                 <Card className="p-5 rounded-3xl border bg-card shadow-sm space-y-3">
                   <div className="flex items-center justify-between border-b pb-3">
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-5 h-5 text-slate-700" />
-                      <h3 className="font-heading font-black text-sm text-foreground">3. الراتب والبدلات الثابتة</h3>
+                      <h3 className="font-heading font-black text-sm text-foreground">4. الراتب والبدلات الثابتة</h3>
                     </div>
                     <Badge variant="outline" className="text-xs font-mono font-bold">عقد العمل</Badge>
                   </div>

@@ -89,6 +89,7 @@ export default function PayslipPrint({ payroll, monthLabel, onClose }) {
   const {
     emp = {}, basicSalary = 0, housing = 0, transport = 0,
     fridayAllowance = 0, fridayNote = '',
+    nationalDayAllowance = 0, nationalDayNote = '',
     dailyOvertimeAllowance = 0, dailyOvertimeNote = '',
     proposedShortfallDeduction = 0, approvedShortfallDeduction = 0, proposedAbsenceDeduction = 0, approvedAbsenceDeduction = 0, absentDays = 0,
     shortfallApprovalStatus = '', shortfallApprovalNote = '',
@@ -392,6 +393,17 @@ export default function PayslipPrint({ payroll, monthLabel, onClose }) {
                         {fridayNote && <span className="text-[9px] text-slate-500 block">{fridayNote}</span>}
                       </div>
                       <span className="font-mono font-bold text-slate-900">+{fmtSAR(fridayAllowance)} ر.س</span>
+                    </div>
+                  )}
+
+                  {/* National Day Allowance (تعويض دوام اليوم الوطني) */}
+                  {nationalDayAllowance > 0 && (
+                    <div className="flex items-center justify-between p-1.5 bg-emerald-50/70 border-r-2 border-emerald-500">
+                      <div>
+                        <span className="font-bold text-emerald-950">تعويض دوام اليوم الوطني السعودي 🇸🇦</span>
+                        {nationalDayNote && <span className="text-[9px] text-emerald-800 block">{nationalDayNote}</span>}
+                      </div>
+                      <span className="font-mono font-bold text-emerald-950">+{fmtSAR(nationalDayAllowance)} ر.س</span>
                     </div>
                   )}
 

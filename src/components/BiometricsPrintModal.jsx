@@ -156,7 +156,11 @@ export default function BiometricsPrintModal({ open, onOpenChange, employee, dai
                 </thead>
                 <tbody>
                   {dailyDetails?.map((d, idx) => {
-                    const statusLabel = d.isFriday 
+                    const statusLabel = d.isNationalDay
+                      ? (d.hasAttendance ? 'دوام اليوم الوطني (+2 يوم) 🇸🇦' : 'عطلة اليوم الوطني 🇸🇦')
+                      : d.isOfficialHoliday
+                      ? (d.hasAttendance ? `دوام ${d.holidayName || 'عطلة'} ⚡` : `${d.holidayName || 'عطلة رسمية'}`)
+                      : d.isFriday 
                       ? 'عطلة جمعة' 
                       : d.isUnpaidLeave 
                       ? 'إجازة بدون راتب' 
@@ -168,7 +172,11 @@ export default function BiometricsPrintModal({ open, onOpenChange, employee, dai
                       ? 'عجز دوام' 
                       : 'حاضر ✓';
 
-                    const statusColor = d.isFriday 
+                    const statusColor = d.isNationalDay
+                      ? (d.hasAttendance ? '#059669' : '#0d9488')
+                      : d.isOfficialHoliday
+                      ? (d.hasAttendance ? '#0f766e' : '#0d9488')
+                      : d.isFriday 
                       ? '#4338ca' 
                       : d.isExempt 
                       ? '#64748b' 

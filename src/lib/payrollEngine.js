@@ -787,8 +787,48 @@ export function hasRealBiometricPunches(log) {
   return false;
 }
 
+export function isNationalDay(log) {
+  if (!log) return false;
+  const dateStr = log.log_date || log.date;
+  if (dateStr) {
+    const clean = String(dateStr).split('T')[0].trim().replace(/\//g, '-');
+    if (clean.endsWith('-09-23') || clean.endsWith('-9-23') || clean.startsWith('23-09-') || clean.startsWith('23-9-') || clean.includes('-09-23') || clean.includes('-9-23')) {
+      return true;
+    }
+  }
+  const name = (log.day_name || log.notes || log.status_label || '').toLowerCase();
+  if (name.includes('اليوم الوطني') || name.includes('national day')) return true;
+  return false;
+}
+
+export function isOfficialHoliday(log) {
+  if (!log) return false;
+  if (isNationalDay(log)) return { isHoliday: true, name: 'عطلة اليوم الوطني السعودي 🇸🇦', type: 'national_day' };
+  const dateStr = log.log_date || log.date;
+  if (dateStr) {
+    const clean = String(dateStr).split('T')[0].trim().replace(/\//g, '-');
+    if (clean.endsWith('-02-22') || clean.endsWith('-2-22') || clean.startsWith('22-02-') || clean.includes('-02-22')) {
+      return { isHoliday: true, name: 'عطلة يوم التأسيس السعودي 🇸🇦', type: 'founding_day' };
+    }
+  }
+  const status = (log.status || '').toLowerCase();
+  const label = (log.status_label || log.statusLabel || log.notes || '').toLowerCase();
+  if (status.includes('holiday') || status.includes('عطلة') || label.includes('عيد الفطر') || label.includes('عيد الأضحى') || label.includes('اليوم الوطني') || label.includes('يوم التأسيس') || label.includes('عطلة رسمية') || label.includes('إجازة رسمية') || label.includes('اجازة رسمية')) {
+    let holidayName = 'عطلة رسمية';
+    if (label.includes('عيد الفطر')) holidayName = 'عطلة عيد الفطر المبارك';
+    else if (label.includes('عيد الأضحى')) holidayName = 'عطلة عيد الأضحى المبارك';
+    else if (label.includes('اليوم الوطني')) holidayName = 'عطلة اليوم الوطني السعودي 🇸🇦';
+    else if (label.includes('يوم التأسيس')) holidayName = 'عطلة يوم التأسيس السعودي 🇸🇦';
+    else if (log.notes) holidayName = log.notes;
+    return { isHoliday: true, name: holidayName, type: 'official_holiday' };
+  }
+  return false;
+}
+
 export function isDayExempt(log) {
   if (!log) return false;
+  if (isNationalDay(log)) return true; // Saudi National Day (23/09)
+  if (isOfficialHoliday(log)) return true; // Official Holidays (Eid, etc.)
   const status = (log.status || '').toLowerCase();
   const label = (log.statusLabel || log.status_label || '').toLowerCase();
   
@@ -1511,11 +1551,14 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   let totalRequiredMinutes = 0, totalActualMinutes = 0;
   let totalDelayMinutes = 0, totalExtraMinutes = 0;
   let presentDays = 0, absentDays = 0, leaveDays = 0, unpaidLeaveDays = 0, fridayDays = 0, fridayWorkedDays = 0, overtimeDays = 0;
+  let nationalDayWorkedDays = 0, officialHolidayDays = 0;
 
   const isExecutive = (emp.job_title || '').includes('المدير العام') || String(emp.employee_number || '') === '1001' || (emp.shift || '').includes('المدير العام') || (emp.shift || '').includes('إدارة عامة');
 
   const dailyDetails = uniqueLogs.map(log => {
     const isFri = isFriday(log);
+    const isNatDay = isNationalDay(log);
+    const holidayInfo = isOfficialHoliday(log);
     const exempt = isDayExempt(log) || log.is_exempt || (isExecutive && !isFri);
     const hasAtt = hasRealBiometricPunches(log) || !!log.has_approved_correction || (isExecutive && !!log.check_in);
     const status = (log.status || 'present').toLowerCase();
@@ -1553,15 +1596,41 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
       requiredMins = 0;
       actualMins = 0;
       shortfallMins = 0;
+    } else if (isNatDay) {
+      // 3. SAUDI NATIONAL DAY (23/9 - اليوم الوطني السعودي)
+      // Official paid holiday. If attended: +2 days extra compensation based on basic salary in Stage 3.
+      // If not attended: 0 required, 0 shortfall, NEVER marked as absent!
+      requiredMins = 0;
+      shortfallMins = 0;
+      if (hasAtt) {
+        nationalDayWorkedDays++;
+        presentDays++;
+        actualMins = actualMins || (shiftHours * 60);
+      } else {
+        officialHolidayDays++;
+        actualMins = 0;
+      }
+    } else if (holidayInfo) {
+      // 4. OFFICIAL HOLIDAY (Eid al-Fitr, Eid al-Adha, Founding Day, etc.)
+      // Official paid holiday. If attended: counted as present. If off: 0 required, never absent.
+      requiredMins = 0;
+      shortfallMins = 0;
+      officialHolidayDays++;
+      if (hasAtt) {
+        presentDays++;
+        actualMins = actualMins || (shiftHours * 60);
+      } else {
+        actualMins = 0;
+      }
     } else if (exempt) {
-      // 3. EXEMPT / PAID LEAVE DAY (Annual, Sick, Emergency, or Admin Exemption)
+      // 5. EXEMPT / PAID LEAVE DAY (Annual, Sick, Emergency, or Admin Exemption)
       requiredMins = 0;
       shortfallMins = 0;
       actualMins = actualMins || 0;
       if (status.includes('إجازة') || status.includes('leave') || status === 'on_leave') leaveDays++;
       else if (isExecutive) presentDays++;
     } else if (hasAtt) {
-      // 4. REGULAR WORKING DAY WITH ATTENDANCE
+      // 6. REGULAR WORKING DAY WITH ATTENDANCE
       presentDays++;
       requiredMins = shiftHours * 60;
       totalRequiredMinutes += requiredMins;
@@ -1587,14 +1656,14 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
         shortfallMins = 0;
       }
     } else if (isExecutive && (log.check_in || hasAtt)) {
-      // 5. EXECUTIVE
+      // 7. EXECUTIVE
       requiredMins = shiftHours * 60;
       totalRequiredMinutes += requiredMins;
       totalActualMinutes += requiredMins;
       shortfallMins = 0;
       presentDays++;
     } else {
-      // 6. ABSENCE DAY (Regular working day, not Friday, not exempt, no punches)
+      // 8. ABSENCE DAY (Regular working day, not Friday, not exempt, no punches)
       // Counted under absentDays, NOT added to delay shortfall minutes!
       absentDays++;
       requiredMins = shiftHours * 60;
@@ -1644,7 +1713,11 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     const surplusMins = (hasAtt && !exempt && !isFri && actualMins > requiredMins) ? (actualMins - requiredMins) : 0;
 
     let rowStatus = 'present';
-    if (isFri) {
+    if (isNatDay) {
+      rowStatus = hasAtt ? 'national_day_worked' : 'holiday';
+    } else if (holidayInfo) {
+      rowStatus = hasAtt ? 'holiday_worked' : 'holiday';
+    } else if (isFri) {
       rowStatus = 'weekend';
     } else if (isUnpaidLeave) {
       rowStatus = 'unpaid_leave';
@@ -1671,6 +1744,9 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
       period_2_out: displayP2Out,
       timestamp_raw: hasAtt ? (log.timestamp_raw || '') : '',
       isFriday: isFri,
+      isNationalDay: isNatDay,
+      isOfficialHoliday: Boolean(holidayInfo || isNatDay),
+      holidayName: isNatDay ? 'اليوم الوطني السعودي 🇸🇦' : (holidayInfo ? holidayInfo.name : null),
       isUnpaidLeave,
       isExempt: exempt,
       hasAttendance: hasAtt,
@@ -1731,6 +1807,14 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   // Friday allowance ONLY for days with real biometric attendance on Friday
   const fridayAllowance = fridayWorkedDays * fridayDailyRate;
   const fridayNote = fridayWorkedDays > 0 ? `${fridayWorkedDays} جمعات دوام فعلي × ${fridayDailyRate} = ${fridayAllowance} ريال` : null;
+
+  // National Day Compensation: 2 extra days based on Basic Salary per worked National Day (المادة 112 من نظام العمل السعودي)
+  const nationalDayDailyRate = dailySalaryRate;
+  const nationalDayAllowance = Math.round(nationalDayWorkedDays * 2 * nationalDayDailyRate * 100) / 100;
+  const nationalDayNote = nationalDayWorkedDays > 0 
+    ? `${nationalDayWorkedDays} يوم دوام في اليوم الوطني × تعويض يومين (${Math.round(2 * nationalDayDailyRate * 100) / 100} ر.س) = ${nationalDayAllowance} ريال` 
+    : null;
+
   // 9-Hour Monthly Flat Allowance: 100 SAR fixed for the month upon full attendance completion
   const dailyOvertimeAllowance = (is9HourShift && presentDays > 0) ? 100 : 0;
   const dailyOvertimeNote = dailyOvertimeAllowance > 0 ? 'بدل مقطوع عن اكتمال دوام 9 ساعات الشهري = 100 ريال' : null;
@@ -1805,7 +1889,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   }
 
   // TOTALS CALCULATION
-  const totalAdditions = housing + transport + electricity + phone + otherAllowance + fridayAllowance + dailyOvertimeAllowance + customBonusesTotal;
+  const totalAdditions = housing + transport + electricity + phone + otherAllowance + fridayAllowance + dailyOvertimeAllowance + nationalDayAllowance + customBonusesTotal;
   const totalDeductions = approvedShortfallDeduction + approvedAbsenceDeduction + proposedUnpaidLeaveDeduction + customPenaltiesTotal + advanceInstallment;
   const netSalary = Math.max(0, basicSalary + totalAdditions - totalDeductions);
 
@@ -1847,6 +1931,11 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     fridayDays,
     fridayWorkedDays,
     overtimeDays,
+    nationalDayWorkedDays,
+    nationalDayDailyRate,
+    nationalDayAllowance,
+    nationalDayNote,
+    officialHolidayDays,
     totalRequiredMinutes,
     totalActualMinutes,
     totalDelayMinutes,
