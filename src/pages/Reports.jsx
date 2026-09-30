@@ -490,53 +490,119 @@ export default function Reports() {
           return matchEmp && matchBranch;
         });
 
+function normalizeIsoDate(str, fallback) {
+  if (!str) return fallback || '';
+  const s = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parts = s.split(/[\/\-\.]/);
+  if (parts.length === 3) {
+    if (parts[2].length === 4) {
+      const year = parts[2];
+      let p0 = parseInt(parts[0], 10);
+      let p1 = parseInt(parts[1], 10);
+      let month = p0;
+      let day = p1;
+      if (p0 > 12) {
+        day = p0;
+        month = p1;
+      }
+      const maxDays = new Date(year, month, 0).getDate();
+      day = Math.min(day, maxDays);
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  return s;
+}
+
         let rows = [];
         let summary = {};
         const activeDef = REPORT_DEFINITIONS.find(r => r.id === repId) || currentReportDef || REPORT_DEFINITIONS[0];
-        const monthKey = fromDate.slice(0, 7) || '2026-08';
+        const cleanFromDate = normalizeIsoDate(fromDate, '2026-06-01');
+        const cleanToDate = normalizeIsoDate(toDate, '2026-06-30');
+        const monthKey = cleanFromDate.slice(0, 7) || '2026-06';
         const settings = getPayrollSettings();
         const daysAr = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
         // ─── 1. ATTENDANCE REPORTS GENERATION ────────────────────────────
         if (repId === 'daily_biometrics' || repId === 'branch_biometrics_advanced') {
           targetEmployees.forEach(emp => {
-            const pr = computeEmployeePayroll(emp, attendanceLogs, shifts, {
-              ...settings,
-              monthPrefix: monthKey
+            const empNum = String(emp.employee_number || emp.id || '').replace('emp_', '').trim();
+            const empLogsInRange = (attendanceLogs || []).filter(l => {
+              const lNum = String(l.employee_number || l.employee_id || '').replace('emp_', '').trim();
+              const lName = (l.employee_name || '').trim();
+              const match = lNum === empNum || lName === emp.full_name;
+              if (!match) return false;
+              const d = normalizeIsoDate(l.log_date);
+              return d >= cleanFromDate && d <= cleanToDate;
             });
 
-            const days = (pr.dailyDetails || []).filter(d => {
-              const dStr = d.log_date || '';
-              return !dStr || (dStr >= fromDate && dStr <= toDate);
-            });
-
-            days.forEach((d, idx) => {
-              const logDate = d.log_date || (monthKey + '-01');
-              let dayName = d.day_name;
-              if (!dayName && logDate) {
-                const dt = new Date(logDate);
-                if (!isNaN(dt.getTime())) dayName = daysAr[dt.getDay()];
-              }
-
-              const actMins = Number(d.actualMinutes) || 0;
-              const lateMins = Number(d.shortfallMinutes) || 0;
-              const actHrs = (actMins / 60).toFixed(1);
-
-              rows.push({
-                index: rows.length + 1,
-                emp_num: emp.employee_number || '1000',
-                emp_name: emp.full_name,
-                branch: emp.branch_name || 'الفرع الرئيسي',
-                shift: emp.shift || 'دوام رسمي',
-                date: logDate,
-                day_name: dayName || 'يوم عمل',
-                check_in: d.check_in ? (d.check_in.includes('T') ? d.check_in.split('T')[1].slice(0, 5) : d.check_in.slice(0, 5)) : '--:--',
-                check_out: d.check_out ? (d.check_out.includes('T') ? d.check_out.split('T')[1].slice(0, 5) : d.check_out.slice(0, 5)) : '--:--',
-                actual_hours: actHrs,
-                late_minutes: lateMins,
-                status: d.status === 'present' ? 'حاضر' : d.status === 'absent' ? 'غائب' : d.status
+            if (empLogsInRange.length > 0) {
+              empLogsInRange.sort((a, b) => (a.log_date || '').localeCompare(b.log_date || ''));
+              empLogsInRange.forEach(l => {
+                const logDate = l.log_date;
+                let dayName = '';
+                if (logDate) {
+                  const dt = new Date(logDate);
+                  if (!isNaN(dt.getTime())) dayName = daysAr[dt.getDay()];
+                }
+                const actHrs = Number(l.total_hours) || (l.check_in && l.check_out ? 8 : 4);
+                rows.push({
+                  index: rows.length + 1,
+                  emp_num: emp.employee_number || empNum,
+                  emp_name: emp.full_name,
+                  branch: emp.branch_name || emp.branch || 'الفرع الرئيسي',
+                  shift: emp.shift || 'دوام رسمي',
+                  date: logDate,
+                  day_name: dayName || 'يوم عمل',
+                  check_in: l.check_in ? (l.check_in.includes('T') ? l.check_in.split('T')[1].slice(0, 5) : l.check_in.slice(0, 5)) : '--:--',
+                  check_out: l.check_out ? (l.check_out.includes('T') ? l.check_out.split('T')[1].slice(0, 5) : l.check_out.slice(0, 5)) : '--:--',
+                  actual_hours: typeof actHrs === 'number' ? actHrs.toFixed(1) : String(actHrs),
+                  late_minutes: 0,
+                  status: 'حاضر'
+                });
               });
-            });
+            } else {
+              const pr = computeEmployeePayroll(emp, attendanceLogs, shifts, {
+                ...settings,
+                monthPrefix: monthKey
+              });
+
+              const days = (pr.dailyDetails || []).filter(d => {
+                const dStr = normalizeIsoDate(d.log_date || '');
+                return !dStr || (dStr >= cleanFromDate && dStr <= cleanToDate);
+              });
+
+              days.forEach((d) => {
+                const logDate = d.log_date || (monthKey + '-01');
+                let dayName = d.day_name;
+                if (!dayName && logDate) {
+                  const dt = new Date(logDate);
+                  if (!isNaN(dt.getTime())) dayName = daysAr[dt.getDay()];
+                }
+
+                const actMins = Number(d.actualMinutes) || 0;
+                const lateMins = Number(d.shortfallMinutes) || 0;
+                const actHrs = (actMins / 60).toFixed(1);
+
+                rows.push({
+                  index: rows.length + 1,
+                  emp_num: emp.employee_number || '1000',
+                  emp_name: emp.full_name,
+                  branch: emp.branch_name || 'الفرع الرئيسي',
+                  shift: emp.shift || 'دوام رسمي',
+                  date: logDate,
+                  day_name: dayName || 'يوم عمل',
+                  check_in: d.check_in ? (d.check_in.includes('T') ? d.check_in.split('T')[1].slice(0, 5) : d.check_in.slice(0, 5)) : '--:--',
+                  check_out: d.check_out ? (d.check_out.includes('T') ? d.check_out.split('T')[1].slice(0, 5) : d.check_out.slice(0, 5)) : '--:--',
+                  actual_hours: actHrs,
+                  late_minutes: lateMins,
+                  status: d.status === 'present' ? 'حاضر' : d.status === 'absent' ? 'غائب' : d.status
+                });
+              });
+            }
           });
 
           summary = {

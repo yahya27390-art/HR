@@ -191,12 +191,43 @@ export default function Attendance() {
     return map;
   }, [employees]);
 
+function normalizeIsoDate(str, fallback) {
+  if (!str) return fallback || '';
+  const s = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parts = s.split(/[\/\-\.]/);
+  if (parts.length === 3) {
+    if (parts[2].length === 4) {
+      const year = parts[2];
+      let p0 = parseInt(parts[0], 10);
+      let p1 = parseInt(parts[1], 10);
+      let month = p0;
+      let day = p1;
+      if (p0 > 12) {
+        day = p0;
+        month = p1;
+      }
+      const maxDays = new Date(year, month, 0).getDate();
+      day = Math.min(day, maxDays);
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  return s;
+}
+
   // Flatten biometric punch logs into discrete punch timestamps (Ektefa Table Spec)
   const flattenedPunches = useMemo(() => {
     const list = [];
+    const cleanStart = normalizeIsoDate(startDate, '2020-01-01');
+    const cleanEnd = normalizeIsoDate(endDate, '2030-12-31');
+
     attendanceLogs.forEach(log => {
+      const logD = normalizeIsoDate(log.log_date);
       // Date filter
-      if (log.log_date < startDate || log.log_date > endDate) return;
+      if (logD < cleanStart || logD > cleanEnd) return;
 
       const emp = empMap[String(log.employee_number)] || empMap[log.employee_name] || {};
       const branchName = emp.branch_name || emp.branch || 'الفرع الرئيسي';
@@ -208,38 +239,70 @@ export default function Attendance() {
       if (branchName.includes('هونداي')) deviceSource = '.3 EK0201000045';
       if (branchName.includes('كيا')) deviceSource = '.2 EK0201000044';
 
-      // Check-in punch
-      if (log.check_in) {
-        list.push({
-          id: `${log.id}_in`,
-          logId: log.id,
-          employee_name: log.employee_name || emp.full_name || 'موظف',
-          employee_number: log.employee_number || emp.employee_number || '1001',
-          branch_name: branchName,
-          department_name: deptName,
-          device_source: deviceSource,
-          timestamp_raw: log.check_in,
-          timestamp_display: log.check_in.includes('T') ? `${log.check_in.slice(11, 16)} ${log.log_date}` : `${log.check_in} ${log.log_date}`,
-          inserted_at: `${log.check_in.includes('T') ? log.check_in.slice(11, 16) : '08:00'} ${log.log_date}`,
-          punch_type: 'دخول'
-        });
+      let parsedRawPunches = [];
+      if (log.notes) {
+        try {
+          const nObj = typeof log.notes === 'string' ? JSON.parse(log.notes) : log.notes;
+          if (nObj.raw_punches) {
+            parsedRawPunches = String(nObj.raw_punches).split(',').map(s => s.trim()).filter(Boolean);
+          }
+        } catch (e) {}
       }
 
-      // Check-out punch
-      if (log.check_out) {
-        list.push({
-          id: `${log.id}_out`,
-          logId: log.id,
-          employee_name: log.employee_name || emp.full_name || 'موظف',
-          employee_number: log.employee_number || emp.employee_number || '1001',
-          branch_name: branchName,
-          department_name: deptName,
-          device_source: deviceSource,
-          timestamp_raw: log.check_out,
-          timestamp_display: log.check_out.includes('T') ? `${log.check_out.slice(11, 16)} ${log.log_date}` : `${log.check_out} ${log.log_date}`,
-          inserted_at: `${log.check_out.includes('T') ? log.check_out.slice(11, 16) : '17:00'} ${log.log_date}`,
-          punch_type: 'خروج'
+      if (parsedRawPunches.length > 0) {
+        parsedRawPunches.forEach((pt, pIdx) => {
+          const isFirst = pIdx === 0;
+          const isLast = pIdx === parsedRawPunches.length - 1 && parsedRawPunches.length > 1;
+          const punchType = isFirst ? 'دخول' : (isLast ? 'خروج' : 'حركة حضور');
+          const timeClean = pt.length === 5 ? `${pt}:00` : pt;
+          list.push({
+            id: `${log.id}_p_${pIdx}`,
+            logId: log.id,
+            employee_name: log.employee_name || emp.full_name || 'موظف',
+            employee_number: log.employee_number || emp.employee_number || '1001',
+            branch_name: branchName,
+            department_name: deptName,
+            device_source: deviceSource,
+            timestamp_raw: `${logD}T${timeClean}`,
+            timestamp_display: `${timeClean.slice(0, 5)} ${logD}`,
+            inserted_at: `${timeClean.slice(0, 5)} ${logD}`,
+            punch_type: punchType
+          });
         });
+      } else {
+        // Check-in punch
+        if (log.check_in) {
+          list.push({
+            id: `${log.id}_in`,
+            logId: log.id,
+            employee_name: log.employee_name || emp.full_name || 'موظف',
+            employee_number: log.employee_number || emp.employee_number || '1001',
+            branch_name: branchName,
+            department_name: deptName,
+            device_source: deviceSource,
+            timestamp_raw: log.check_in,
+            timestamp_display: log.check_in.includes('T') ? `${log.check_in.slice(11, 16)} ${logD}` : `${log.check_in} ${logD}`,
+            inserted_at: `${log.check_in.includes('T') ? log.check_in.slice(11, 16) : '08:00'} ${logD}`,
+            punch_type: 'دخول'
+          });
+        }
+
+        // Check-out punch
+        if (log.check_out) {
+          list.push({
+            id: `${log.id}_out`,
+            logId: log.id,
+            employee_name: log.employee_name || emp.full_name || 'موظف',
+            employee_number: log.employee_number || emp.employee_number || '1001',
+            branch_name: branchName,
+            department_name: deptName,
+            device_source: deviceSource,
+            timestamp_raw: log.check_out,
+            timestamp_display: log.check_out.includes('T') ? `${log.check_out.slice(11, 16)} ${logD}` : `${log.check_out} ${logD}`,
+            inserted_at: `${log.check_out.includes('T') ? log.check_out.slice(11, 16) : '17:00'} ${logD}`,
+            punch_type: 'خروج'
+          });
+        }
       }
     });
 
