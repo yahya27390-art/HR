@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { AUTHORITATIVE_LEAVE_BASELINES } from '@/lib/leaveBalance';
+import { AUTHORITATIVE_ATTENDANCE_LOGS } from '@/lib/attendanceBaseline';
 
 const isSupabaseConfigured = Boolean(supabase);
 export { supabase };
@@ -19,9 +20,9 @@ function normalizeEmployeeBranches(list) {
 }
 
 // ============================================================================
-// AUTO DATABASE SYNC v8 (Guarantees zero cache mismatch across all browsers)
+// AUTO DATABASE SYNC v13 (Synchronizes authentic biometric device punches)
 // ============================================================================
-const CURRENT_DB_VERSION = 'v12_leave_balances_baseline';
+const CURRENT_DB_VERSION = 'v13_biometric_hardware_synced';
 try {
   if (typeof window !== 'undefined' && window.localStorage) {
     if (localStorage.getItem('hr_flow_db_ver') !== CURRENT_DB_VERSION) {
@@ -673,7 +674,7 @@ export const initialData = {
     }
   ],
   EmploymentContract: [],
-  AttendanceLog: [],
+  AttendanceLog: AUTHORITATIVE_ATTENDANCE_LOGS || [],
   LeaveRequest: []
 };
 
@@ -699,7 +700,14 @@ function getLocalItems(entityName) {
       localStorage.setItem(STORAGE_PREFIX + entityName, JSON.stringify(init));
       return init;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (entityName === 'AttendanceLog') {
+      const map = new Map();
+      (AUTHORITATIVE_ATTENDANCE_LOGS || []).forEach(l => map.set(l.id, l));
+      (parsed || []).forEach(l => map.set(l.id, { ...(map.get(l.id) || {}), ...l }));
+      return Array.from(map.values());
+    }
+    return parsed;
   } catch (e) {
     return initialData[entityName] || [];
   }
