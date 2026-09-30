@@ -80,7 +80,9 @@ import {
   Copy,
   Pencil,
   Activity,
-  CheckCheck
+  CheckCheck,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -91,6 +93,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { getBiometricDevices, saveBiometricDevices, testDeviceConnection } from '@/lib/biometricDevices';
 
 // ─── EKTEFA SETTINGS NAVIGATION MENU STRUCTURE (22 SECTIONS) ─────────────────
 const SETTINGS_CATEGORIES = [
@@ -642,36 +645,39 @@ export default function Settings() {
   };
 
   // ─── 8. BIOMETRIC HARDWARE & DEVICES STATE ─────────────────────────────────
-  const defaultDevices = [
-    { id: 'dev_1', name: 'جهاز بصمة - الفرع الرئيسي', ip: '192.168.1.201', port: 4370, brand: 'ZKTeco K40 Pro', serial: 'EK0201000043', branch: 'الفرع الرئيسي', status: 'online' },
-    { id: 'dev_2', name: 'جهاز بصمة - فرع هونداي الرواف', ip: '192.168.2.202', port: 4370, brand: 'ZKTeco MB20', serial: 'EK0201000045', branch: 'فرع هونداي ( الرواف )', status: 'online' },
-    { id: 'dev_3', name: 'جهاز بصمة - فرع كيا السليم', ip: '192.168.3.203', port: 4370, brand: 'ZKTeco SilkID', serial: 'EK0201000044', branch: 'فرع كيا ( السليم )', status: 'online' },
-    { id: 'dev_4', name: 'جهاز بصمة - مكتب الإدارة', ip: '192.168.1.205', port: 4370, brand: 'Hikvision Face ID', serial: 'HK9920100099', branch: 'مكتب الإدارة', status: 'online' },
-  ];
-
-  const [devicesList, setDevicesList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dorat_biometric_devices');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return defaultDevices;
-  });
+  const [devicesList, setDevicesList] = useState(() => getBiometricDevices());
+  const [testingDeviceId, setTestingDeviceId] = useState(null);
 
   const [deviceDialog, setDeviceDialog] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
-  const [deviceForm, setDeviceForm] = useState({ name: '', ip: '', port: 4370, brand: 'ZKTeco', serial: '', branch: 'الفرع الرئيسي', status: 'online' });
+  const [deviceForm, setDeviceForm] = useState({ 
+    name: '', 
+    ip_address: '192.168.8.', 
+    port: '80', 
+    comm_port: '5005',
+    comm_key: '12345678',
+    brand: 'Ektefa ai806 (Face & Fingerprint)', 
+    serial_number: '', 
+    branch_name: 'فرع كيا ( السليم )', 
+    status: 'offline' 
+  });
 
   const handleSaveDevice = async () => {
-    if (!deviceForm.name.trim() || !deviceForm.ip.trim()) return;
+    if (!deviceForm.name.trim() || !(deviceForm.ip_address || deviceForm.ip)) return;
     let updated;
+    const finalDev = {
+      ...deviceForm,
+      ip_address: deviceForm.ip_address || deviceForm.ip,
+      serial_number: deviceForm.serial_number || deviceForm.serial,
+      branch_name: deviceForm.branch_name || deviceForm.branch
+    };
     if (editingDevice) {
-      updated = devicesList.map(d => d.id === editingDevice.id ? { ...deviceForm, id: d.id } : d);
+      updated = devicesList.map(d => d.id === editingDevice.id ? { ...finalDev, id: d.id } : d);
     } else {
-      updated = [...devicesList, { ...deviceForm, id: 'dev_' + Date.now() }];
+      updated = [...devicesList, { ...finalDev, id: 'dev_' + Date.now() }];
     }
     setDevicesList(updated);
-    localStorage.setItem('dorat_biometric_devices', JSON.stringify(updated));
-    await cloudSave('dorat_biometric_devices', updated);
+    saveBiometricDevices(updated);
     setDeviceDialog(false);
     toast({ title: '✓ تم حفظ جهاز البصمة ومزامنته سحابياً' });
   };
@@ -680,16 +686,38 @@ export default function Settings() {
     if (!confirm('هل أنت متأكد من حذف هذا الجهاز؟')) return;
     const updated = devicesList.filter(d => d.id !== id);
     setDevicesList(updated);
-    localStorage.setItem('dorat_biometric_devices', JSON.stringify(updated));
-    await cloudSave('dorat_biometric_devices', updated);
+    saveBiometricDevices(updated);
     toast({ title: '✓ تم حذف الجهاز' });
   };
 
-  const handlePingDevice = (dev) => {
-    toast({
-      title: `فحص الاتصال بجهاز (${dev.name})`,
-      description: `تم إرسال إشارة Ping إلى ${dev.ip}:${dev.port} ➔ استجابة ممتازة (12ms) متصل ومزامن ✓`
-    });
+  const handlePingDevice = async (dev) => {
+    setTestingDeviceId(dev.id);
+    try {
+      const result = await testDeviceConnection(dev);
+      const updated = devicesList.map(d => d.id === dev.id ? { ...d, status: result.status, last_ping_time: result.latency } : d);
+      setDevicesList(updated);
+      saveBiometricDevices(updated);
+      if (result.success) {
+        toast({
+          title: `فحص الاتصال بجهاز (${dev.name}) ✓`,
+          description: result.message
+        });
+      } else {
+        toast({
+          title: `تعذر الاتصال بجهاز (${dev.name}) ✕`,
+          description: result.message,
+          variant: 'destructive'
+        });
+      }
+    } catch (e) {
+      toast({
+        title: `خطأ في اختبار الاتصال`,
+        description: e.message || 'فشل الاتصال',
+        variant: 'destructive'
+      });
+    } finally {
+      setTestingDeviceId(null);
+    }
   };
 
   // ─── 9. MEDICAL INSURANCE STATE ────────────────────────────────────────────
@@ -2110,41 +2138,83 @@ export default function Settings() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {devicesList.map((dev) => (
-                  <Card key={dev.id} className="p-4 rounded-2xl border space-y-3 bg-card hover:border-purple-300 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <h3 className="font-bold text-sm text-foreground">{dev.name}</h3>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => { setEditingDevice(dev); setDeviceForm({ ...dev }); setDeviceDialog(true); }} className="h-7 w-7">
-                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
-                        <Button size="icon" variant="ghost" onClick={() => handleDeleteDevice(dev.id)} className="h-7 w-7 text-rose-500">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </div>
+                {devicesList.map((dev) => {
+                  const isOnline = dev.status === 'online';
+                  const isTesting = testingDeviceId === dev.id;
+                  const ip = dev.ip_address || dev.ip || '192.168.8.110';
+                  const port = dev.port || '80';
+                  const sn = dev.serial_number || dev.serial || 'EK0201000044';
+                  const branch = dev.branch_name || dev.branch || 'فرع كيا ( السليم )';
 
-                    <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                      <div>الفرع: <strong className="text-foreground">{dev.branch}</strong></div>
-                      <div>الطراز: <strong className="text-foreground">{dev.brand}</strong></div>
-                      <div>IP: <strong className="text-foreground font-mono">{dev.ip}:{dev.port}</strong></div>
-                      <div>الرقم التسلسلي: <strong className="text-foreground font-mono">{dev.serial || 'EK02010043'}</strong></div>
-                    </div>
+                  return (
+                    <Card key={dev.id} className={`p-4 rounded-2xl border space-y-3 transition-colors ${
+                      isOnline ? 'bg-card border-emerald-300 dark:border-emerald-800/80 shadow-sm' : 'bg-card border-slate-200 dark:border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          {isOnline ? (
+                            <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" title="الجهاز متصل فعلياً (Online)" />
+                          ) : (
+                            <span className="w-3 h-3 rounded-full bg-slate-400 dark:bg-slate-600" title="الجهاز غير متصل (Offline)" />
+                          )}
+                          <div>
+                            <h3 className="font-bold text-sm text-foreground">{dev.name}</h3>
+                            <div className="text-[10px] text-muted-foreground">{branch}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" onClick={() => { setEditingDevice(dev); setDeviceForm({ ...dev }); setDeviceDialog(true); }} className="h-7 w-7">
+                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => handleDeleteDevice(dev.id)} className="h-7 w-7 text-rose-500">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
 
-                    <div className="pt-2 border-t flex items-center justify-between">
-                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
-                        متصل ومزامن سحابياً ✓
-                      </Badge>
-                      <Button size="sm" variant="outline" onClick={() => handlePingDevice(dev)} className="h-7 text-[11px] rounded-lg gap-1">
-                        <Activity className="w-3 h-3 text-purple-600" />
-                        <span>فحص الاتصال (Ping)</span>
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] bg-secondary/30 p-2.5 rounded-xl border border-border/50 text-muted-foreground font-medium">
+                        <div>الطراز: <strong className="text-foreground">{dev.brand || 'Ektefa ai806'}</strong></div>
+                        <div>الرقم التسلسلي: <strong className="text-foreground font-mono">{sn}</strong></div>
+                        <div>عنوان IP: <strong className="text-foreground font-mono">{ip}:{port}</strong></div>
+                        <div>كلمة المرور: <strong className="text-foreground font-mono">{dev.comm_key || '12345678'}</strong></div>
+                      </div>
+
+                      <div className="pt-2 border-t flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          {isOnline ? (
+                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] border border-emerald-500/30 gap-1">
+                              <Wifi className="w-3 h-3" />
+                              <span>متصل فعلياً (Online)</span>
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-bold text-[10px] gap-1">
+                              <WifiOff className="w-3 h-3" />
+                              <span>غير متصل (Offline)</span>
+                            </Badge>
+                          )}
+                          {dev.last_ping_time && (
+                            <span className="text-[10px] font-mono text-emerald-600 font-bold">
+                              {dev.last_ping_time}
+                            </span>
+                          )}
+                        </div>
+
+                        <Button 
+                          size="sm" 
+                          variant={isOnline ? "default" : "outline"} 
+                          onClick={() => handlePingDevice(dev)} 
+                          disabled={isTesting}
+                          className={`h-7 text-[11px] rounded-lg gap-1 font-bold ${
+                            isOnline ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : ''
+                          }`}
+                        >
+                          <Activity className={`w-3 h-3 ${isTesting ? 'animate-spin' : 'text-primary'}`} />
+                          <span>{isTesting ? 'جاري الفحص...' : 'فحص الاتصال الفعلي (Ping)'}</span>
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </Card>
           )}
