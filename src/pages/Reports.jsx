@@ -481,6 +481,10 @@ export default function Reports() {
     setTimeout(() => {
       try {
         let targetEmployees = employees.filter(e => {
+          const status = String(e.status || '').toLowerCase().trim();
+          const isTerminated = ['inactive', 'terminated', 'suspended', 'متوقف عن العمل', 'غير نشط', 'مفصول', 'مفصول عن العمل', 'منتهي الخدمات', 'مستقيل'].includes(status);
+          if (isTerminated) return false;
+
           const matchEmp = filterEmpId === 'all' || String(e.employee_number || e.id) === String(filterEmpId);
           const matchBranch = filterBranch === 'all' || (e.branch_name || e.branch || '') === filterBranch;
           return matchEmp && matchBranch;

@@ -1,5 +1,24 @@
 
 /**
+ * Check if employee is terminated, separated from work, or inactive
+ */
+export function isTerminatedOrInactiveEmployee(emp) {
+  if (!emp) return false;
+  const s = String(emp.status || '').toLowerCase().trim();
+  return [
+    'inactive',
+    'terminated',
+    'suspended',
+    'متوقف عن العمل',
+    'غير نشط',
+    'مفصول',
+    'مفصول عن العمل',
+    'منتهي الخدمات',
+    'مستقيل'
+  ].includes(s);
+}
+
+/**
  * Save monthly custom advance deduction override
  */
 export function saveMonthlyAdvanceOverride(employeeNumber, monthPrefix, overrideData) {
@@ -1891,7 +1910,55 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   // TOTALS CALCULATION
   const totalAdditions = housing + transport + electricity + phone + otherAllowance + fridayAllowance + dailyOvertimeAllowance + nationalDayAllowance + customBonusesTotal;
   const totalDeductions = approvedShortfallDeduction + approvedAbsenceDeduction + proposedUnpaidLeaveDeduction + customPenaltiesTotal + advanceInstallment;
-  const netSalary = Math.max(0, basicSalary + totalAdditions - totalDeductions);
+  const rawNetSalary = Math.max(0, basicSalary + totalAdditions - totalDeductions);
+
+  // ─── STRICT RULE: AN EMPLOYEE WITH ZERO ATTENDANCE IN MONTH EARNS ZERO SALARY ───
+  // If an employee has 0 days of real presence, 0 Friday attendance, 0 National Day attendance,
+  // and 0 actual minutes worked throughout the month, AND has no approved paid annual leave (leaveDays === 0):
+  // (and for General Manager, has no check-in logged):
+  const hasZeroAttendance = (presentDays === 0 && fridayWorkedDays === 0 && nationalDayWorkedDays === 0 && totalActualMinutes === 0 && leaveDays === 0) &&
+    (!isExecutive || !empLogs.some(l => l.check_in));
+
+  const contractBasicSalary = basicSalary;
+  const contractHousing = housing;
+  const contractTransport = transport;
+  const contractElectricity = electricity;
+  const contractPhone = phone;
+
+  let effectiveBasicSalary = basicSalary;
+  let effectiveHousing = housing;
+  let effectiveTransport = transport;
+  let effectiveElectricity = electricity;
+  let effectivePhone = phone;
+  let effectiveOtherAllowance = otherAllowance;
+  let effectiveFridayAllowance = fridayAllowance;
+  let effectiveDailyOT = dailyOvertimeAllowance;
+  let effectiveNatDayAllowance = nationalDayAllowance;
+  let effectiveTotalAdditions = totalAdditions;
+  let effectiveShortfallDeduction = approvedShortfallDeduction;
+  let effectiveAbsenceDeduction = approvedAbsenceDeduction;
+  let effectiveAdvanceInstallment = advanceInstallment;
+  let effectiveTotalDeductions = totalDeductions;
+  let effectiveNetSalary = rawNetSalary;
+
+  if (hasZeroAttendance) {
+    // Zero out all earned pay components for non-attending employees
+    effectiveBasicSalary = 0;
+    effectiveHousing = 0;
+    effectiveTransport = 0;
+    effectiveElectricity = 0;
+    effectivePhone = 0;
+    effectiveOtherAllowance = 0;
+    effectiveFridayAllowance = 0;
+    effectiveDailyOT = 0;
+    effectiveNatDayAllowance = 0;
+    effectiveTotalAdditions = customBonusesTotal; // Only manual bonuses if any
+    effectiveShortfallDeduction = 0;
+    effectiveAbsenceDeduction = 0;
+    effectiveAdvanceInstallment = 0; // Postpone loan deduction when net is 0
+    effectiveTotalDeductions = customPenaltiesTotal;
+    effectiveNetSalary = Math.max(0, customBonusesTotal - customPenaltiesTotal);
+  }
 
   // 4. PAYOUT METHOD & SPLIT DISBURSEMENT (Bank Transfer vs Cash Handout)
   const payoutMethod = emp.payout_method || (emp.iban ? 'bank_full' : 'cash_full');
@@ -1899,24 +1966,31 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   let cashPayoutAmount = 0;
 
   if (payoutMethod === 'bank_full') {
-    bankTransferAmount = netSalary;
+    bankTransferAmount = effectiveNetSalary;
     cashPayoutAmount = 0;
   } else if (payoutMethod === 'cash_full') {
     bankTransferAmount = 0;
-    cashPayoutAmount = netSalary;
+    cashPayoutAmount = effectiveNetSalary;
   } else if (payoutMethod === 'split_bank_cash') {
     const fixedBank = Number(emp.bank_transfer_amount || emp.insured_salary || emp.basic_salary) || 0;
-    bankTransferAmount = Math.min(fixedBank, netSalary);
-    cashPayoutAmount = Math.max(0, netSalary - bankTransferAmount);
+    bankTransferAmount = Math.min(fixedBank, effectiveNetSalary);
+    cashPayoutAmount = Math.max(0, effectiveNetSalary - bankTransferAmount);
   }
 
   // 5. SAUDI LABOR LAW ARTICLE 92: DEDUCTIONS CEILING (حماية سقف الاستقطاعات - حد أقصى 50% من الأجر الأساسي)
-  const maxAllowableDeduction = basicSalary > 0 ? Math.round(basicSalary * 0.5 * 100) / 100 : 0;
-  const isDeductionCeilingExceeded = basicSalary > 0 && totalDeductions > maxAllowableDeduction;
-  const deductionPercentage = basicSalary > 0 ? Math.round((totalDeductions / basicSalary) * 100) : 0;
+  const maxAllowableDeduction = effectiveBasicSalary > 0 ? Math.round(effectiveBasicSalary * 0.5 * 100) / 100 : 0;
+  const isDeductionCeilingExceeded = effectiveBasicSalary > 0 && effectiveTotalDeductions > maxAllowableDeduction;
+  const deductionPercentage = effectiveBasicSalary > 0 ? Math.round((effectiveTotalDeductions / effectiveBasicSalary) * 100) : 0;
 
   return {
     emp,
+    hasZeroAttendance,
+    zeroAttendanceNote: hasZeroAttendance ? 'لا يستحق راتب (0 أيام حضور خلال الشهر)' : null,
+    contractBasicSalary,
+    contractHousing,
+    contractTransport,
+    contractElectricity,
+    contractPhone,
     maxAllowableDeduction,
     isDeductionCeilingExceeded,
     deductionPercentage,
@@ -1933,8 +2007,8 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     overtimeDays,
     nationalDayWorkedDays,
     nationalDayDailyRate,
-    nationalDayAllowance,
-    nationalDayNote,
+    nationalDayAllowance: effectiveNatDayAllowance,
+    nationalDayNote: hasZeroAttendance ? null : nationalDayNote,
     officialHolidayDays,
     totalRequiredMinutes,
     totalActualMinutes,
@@ -1945,24 +2019,24 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     shortfallHours: Math.round(shortfallHours * 100) / 100,
     hourlyRate: Math.round(hourlyRate * 100) / 100,
     dailySalaryRate,
-    basicSalary,
-    housing,
-    transport,
-    electricity,
-    phone,
-    otherAllowance,
-    fridayAllowance,
-    fridayNote,
+    basicSalary: effectiveBasicSalary,
+    housing: effectiveHousing,
+    transport: effectiveTransport,
+    electricity: effectiveElectricity,
+    phone: effectivePhone,
+    otherAllowance: effectiveOtherAllowance,
+    fridayAllowance: effectiveFridayAllowance,
+    fridayNote: hasZeroAttendance ? null : fridayNote,
     fridayDailyRate,
-    dailyOvertimeAllowance,
-    dailyOvertimeNote,
+    dailyOvertimeAllowance: effectiveDailyOT,
+    dailyOvertimeNote: hasZeroAttendance ? null : dailyOvertimeNote,
     isInsured,
     gosiNumber,
     gosiDeduction,
-    proposedShortfallDeduction,
-    approvedShortfallDeduction,
-    proposedAbsenceDeduction,
-    approvedAbsenceDeduction,
+    proposedShortfallDeduction: hasZeroAttendance ? 0 : proposedShortfallDeduction,
+    approvedShortfallDeduction: effectiveShortfallDeduction,
+    proposedAbsenceDeduction: hasZeroAttendance ? 0 : proposedAbsenceDeduction,
+    approvedAbsenceDeduction: effectiveAbsenceDeduction,
     absenceApprovalStatus,
     absenceApprovalNote,
     proposedUnpaidLeaveDeduction,
@@ -1974,16 +2048,18 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     approvedPenalties,
     customPenaltiesTotal,
     activeAdvance,
-    advanceInstallment,
+    advanceInstallment: effectiveAdvanceInstallment,
     advanceRemaining,
     advanceNote,
     advanceOverrideStatus,
     approvedLeaves,
     approvedPermissions,
     approvedCorrections,
-    totalAdditions,
-    totalDeductions,
-    netSalary,
+    totalAdditions: effectiveTotalAdditions,
+    totalDeductions: effectiveTotalDeductions,
+    netSalary: effectiveNetSalary,
+    bankTransferAmount,
+    cashPayoutAmount,
   };
 }
 

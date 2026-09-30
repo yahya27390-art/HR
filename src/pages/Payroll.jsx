@@ -28,6 +28,7 @@ import { hasPermission } from '@/lib/rbac';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   computeEmployeePayroll,
+  isTerminatedOrInactiveEmployee,
   getArabicDayName,
   getStandardShiftPunches,
   isFriday,
@@ -331,17 +332,19 @@ export default function Payroll() {
       setIsLocked(dbLocked || isMonthLocked(monthPrefix));
 
       if (emps && emps.length > 0) {
+        const activeList = emps.filter(e => !isTerminatedOrInactiveEmployee(e));
+        const listToUse = activeList.length > 0 ? activeList : emps;
         setSelectedEmpId(prev => {
           const current = prev || selectedEmpIdRef.current;
           if (current) {
-            const match = emps.find(e => 
+            const match = listToUse.find(e => 
               String(e.employee_number || '') === String(current) || 
               String(e.id || '') === String(current) ||
               String(e.employee_number || '').replace('emp_', '') === String(current).replace('emp_', '')
             );
             if (match) return String(match.employee_number || match.id);
           }
-          return String(emps[0].employee_number || emps[0].id);
+          return String(listToUse[0].employee_number || listToUse[0].id);
         });
       }
     } catch (e) {
@@ -383,25 +386,30 @@ export default function Payroll() {
 
   const settings = useMemo(() => getPayrollSettings(), []);
 
-  // Compute all employee payrolls
+  // ─── STRICT RULE: EXCLUDE TERMINATED / INACTIVE EMPLOYEES FROM PAYROLL RUN ───
+  const activeEmployees = useMemo(() => {
+    return (employees || []).filter(emp => !isTerminatedOrInactiveEmployee(emp));
+  }, [employees]);
+
+  // Compute all employee payrolls (strictly active employees only)
   const allPayrolls = useMemo(() => {
-    if (!employees.length) return [];
+    if (!activeEmployees.length) return [];
     
     // If month is locked, read from locked snapshot
     if (isLocked) {
       const lockedData = getLockedMonthlyPayroll(monthPrefix);
       if (lockedData && lockedData.payrolls?.length > 0) {
-        return lockedData.payrolls;
+        return lockedData.payrolls.filter(pr => !isTerminatedOrInactiveEmployee(pr.emp));
       }
     }
 
-    return employees.map(emp => {
+    return activeEmployees.map(emp => {
       return computeEmployeePayroll(emp, attendanceLogs, shifts, {
         ...settings,
         monthPrefix,
       });
     });
-  }, [employees, attendanceLogs, shifts, settings, monthPrefix, advancesList, adjustmentsList, isLocked, overrideTrigger]);
+  }, [activeEmployees, attendanceLogs, shifts, settings, monthPrefix, advancesList, adjustmentsList, isLocked, overrideTrigger]);
 
   // Filtered Payrolls by branch & search
   const filteredPayrolls = useMemo(() => {
@@ -416,36 +424,36 @@ export default function Payroll() {
     });
   }, [allPayrolls, search, selectedBranch]);
 
-  // Branches list
+  // Branches list (from active employees)
   const branches = useMemo(() => {
     const set = new Set();
-    employees.forEach(e => {
+    activeEmployees.forEach(e => {
       const b = e.branch_name || e.branch;
       if (b) set.add(b);
     });
     return Array.from(set);
-  }, [employees]);
+  }, [activeEmployees]);
 
-  // Currently Selected Employee in Stage 1/2/3
+  // Currently Selected Employee in Stage 1/2/3 (Active only)
   const currentSelectedEmp = useMemo(() => {
-    if (!employees || employees.length === 0) return null;
-    if (!selectedEmpId) return employees[0];
+    if (!activeEmployees || activeEmployees.length === 0) return null;
+    if (!selectedEmpId) return activeEmployees[0];
     const sId = String(selectedEmpId).replace('emp_', '');
-    return employees.find(e => {
+    return activeEmployees.find(e => {
       const eNum = String(e.employee_number || '').replace('emp_', '');
       const eId = String(e.id || '').replace('emp_', '');
       return eNum === sId || eId === sId || String(e.id) === String(selectedEmpId) || String(e.employee_number) === String(selectedEmpId);
-    }) || employees[0];
-  }, [employees, selectedEmpId]);
+    }) || activeEmployees[0];
+  }, [activeEmployees, selectedEmpId]);
 
   const currentSelectedPayroll = useMemo(() => {
     if (!currentSelectedEmp) return null;
     return allPayrolls.find(pr => String(pr.emp.employee_number || pr.emp.id) === String(currentSelectedEmp.employee_number || currentSelectedEmp.id)) || null;
   }, [allPayrolls, currentSelectedEmp]);
 
-  // Filtered Employees for the Selected Branch & Search (in Stage 1/2/3 selector)
+  // Filtered Employees for the Selected Branch & Search (Active only)
   const branchFilteredEmployees = useMemo(() => {
-    let list = employees;
+    let list = activeEmployees;
     if (selectedBranch !== 'all') {
       list = list.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
     }
@@ -457,12 +465,12 @@ export default function Payroll() {
       );
     }
     return list;
-  }, [employees, selectedBranch, search]);
+  }, [activeEmployees, selectedBranch, search]);
 
   // When branch filter changes, ensure selected employee belongs to that branch
   useEffect(() => {
-    if (selectedBranch === 'all' || !employees.length) return;
-    const branchEmps = employees.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
+    if (selectedBranch === 'all' || !activeEmployees.length) return;
+    const branchEmps = activeEmployees.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
     if (branchEmps.length > 0) {
       const isCurrentInBranch = branchEmps.some(e => 
         String(e.employee_number || e.id) === String(selectedEmpId) ||
@@ -1539,6 +1547,22 @@ export default function Payroll() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Alert if employee has zero attendance in the month */}
+                  {currentSelectedPayroll.hasZeroAttendance && (
+                    <div className="p-3.5 mx-5 my-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <div>
+                          <div className="font-bold">تنبيه النظام: لا توجد أي بصمات أو أيام حضور مسجلة لهذا الموظف خلال شهر ({monthPrefix})</div>
+                          <div className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">وفقاً لقواعد المنشأة: لن يُحتسب أي راتب أو بدلات للموظف في مسير هذا الشهر (الراتب المستحق: 0.00 ر.س).</div>
+                        </div>
+                      </div>
+                      <Badge className="bg-rose-600 text-white font-bold text-xs shrink-0">
+                        لا يستحق راتب (0 حضور)
+                      </Badge>
+                    </div>
+                  )}
 
                   {/* Attendance Stats Cards (5 Precise Metrics) */}
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-5 border-b bg-slate-50/50 dark:bg-slate-900/30 text-center">
@@ -2767,19 +2791,38 @@ export default function Payroll() {
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {filteredPayrolls.map((pr, idx) => (
-                        <tr key={pr.emp.id || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
+                        <tr key={pr.emp.id || idx} className={`hover:bg-slate-50/80 dark:hover:bg-slate-900/40 ${pr.hasZeroAttendance ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''}`}>
                           <td className="py-3 px-4">
-                            <div className="font-bold text-foreground text-xs">{pr.emp.full_name}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono">#{pr.emp.employee_number} • {pr.emp.job_title}</div>
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <div className="font-bold text-foreground text-xs">{pr.emp.full_name}</div>
+                                <div className="text-[10px] text-muted-foreground font-mono">#{pr.emp.employee_number} • {pr.emp.job_title}</div>
+                              </div>
+                              {pr.hasZeroAttendance && (
+                                <Badge className="bg-rose-100 text-rose-800 border-rose-300 text-[10px] font-bold">
+                                  0 حضور (لا يستحق راتب)
+                                </Badge>
+                              )}
+                            </div>
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold">{fmtNum(pr.basicSalary)}</td>
-                          <td className="py-3 px-3 font-mono font-bold text-emerald-600">+{fmtNum(pr.totalAdditions)}</td>
-                          <td className="py-3 px-3 font-mono font-bold text-rose-600">-{fmtNum(pr.totalDeductions)}</td>
+                          <td className="py-3 px-3 font-mono font-bold">
+                            {pr.hasZeroAttendance ? <span className="text-slate-400">0.00</span> : fmtNum(pr.basicSalary)}
+                          </td>
+                          <td className="py-3 px-3 font-mono font-bold text-emerald-600">
+                            {pr.hasZeroAttendance ? <span className="text-slate-400">0.00</span> : `+${fmtNum(pr.totalAdditions)}`}
+                          </td>
+                          <td className="py-3 px-3 font-mono font-bold text-rose-600">
+                            {pr.hasZeroAttendance ? <span className="text-slate-400">0.00</span> : `-${fmtNum(pr.totalDeductions)}`}
+                          </td>
                           <td className="py-3 px-3 text-center">
                             {pr.isInsured ? <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">🛡️ مؤمن</Badge> : <span className="text-muted-foreground/60 text-[10px]">غير مسجل</span>}
                           </td>
                           <td className="py-3 px-3 text-center">
-                            {pr.isDeductionCeilingExceeded ? (
+                            {pr.hasZeroAttendance ? (
+                              <Badge className="bg-slate-100 text-slate-700 border-slate-300 text-[10px] font-bold" title="لا يستحق راتب لعدم وجود أي حضور مسجل خلال الشهر">
+                                معفى (0 حضور)
+                              </Badge>
+                            ) : pr.isDeductionCeilingExceeded ? (
                               <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold" title="الاستقطاعات تتجاوز 50% من الراتب الأساسي (المادة 92)">
                                 ⚠️ تجاوز 50%
                               </Badge>
@@ -2793,7 +2836,11 @@ export default function Payroll() {
                               </Badge>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-center font-mono font-black text-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30 text-sm">
+                          <td className={`py-3 px-4 text-center font-mono font-black text-sm ${
+                            pr.hasZeroAttendance
+                              ? 'text-slate-400 bg-slate-100/60 dark:bg-slate-900/60'
+                              : 'text-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30'
+                          }`}>
                             {fmtNum(pr.netSalary)}
                           </td>
                           <td className="py-3 px-4 text-center">
