@@ -28,6 +28,7 @@ import { hasPermission } from '@/lib/rbac';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   computeEmployeePayroll,
+  getArabicDayName,
   getStandardShiftPunches,
   isFriday,
   getPayrollSettings,
@@ -1528,7 +1529,9 @@ export default function Payroll() {
                           return (
                             <tr key={di} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30">
                               <td className="py-2.5 px-3 font-mono font-bold">{d.log_date}</td>
-                              <td className="py-2.5 px-2 font-semibold">{d.day_name}</td>
+                              <td className="py-2.5 px-2 font-semibold text-slate-700 dark:text-slate-300">
+                                {d.day_name || getArabicDayName(d.log_date)}
+                              </td>
                               <td className="py-2.5 px-3 text-center">
                                 {d.hasAttendance || d.isExempt ? (
                                   d.period_1_in ? (
@@ -2828,7 +2831,7 @@ export default function Payroll() {
                 <div className="space-y-1">
                   <Label className="font-bold">تاريخ اليوم:</Label>
                   <div className="h-10 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 border flex items-center font-mono font-bold text-slate-800 dark:text-slate-200">
-                    {editPunchModal.log.log_date} ({editPunchModal.log.day_name})
+                    {editPunchModal.log.log_date} ({editPunchModal.log.day_name || getArabicDayName(editPunchModal.log.log_date)})
                   </div>
                 </div>
 

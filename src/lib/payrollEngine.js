@@ -814,6 +814,30 @@ export function isFriday(log) {
   return false;
 }
 
+export function getArabicDayName(dateStr, existingName) {
+  if (existingName && typeof existingName === 'string' && existingName.trim().length > 1) {
+    const clean = existingName.trim();
+    if (!clean.includes('-') && !clean.includes('/') && !/^\d+$/.test(clean)) {
+      return clean;
+    }
+  }
+  if (!dateStr) return '';
+  try {
+    const cleanDate = String(dateStr).split('T')[0];
+    const parts = cleanDate.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(Date.UTC(year, month, day, 12, 0, 0));
+      const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      const dayIdx = d.getUTCDay();
+      return dayNames[dayIdx] || '';
+    }
+  } catch {}
+  return '';
+}
+
 export function isFridayAttendance(log) {
   return isFriday(log);
 }
@@ -1637,7 +1661,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     return {
       ...log,
       log_date: log.log_date,
-      day_name: log.day_name || '',
+      day_name: getArabicDayName(log.log_date, log.day_name),
       status: rowStatus,
       check_in: displayCheckIn,
       check_out: displayCheckOut,
