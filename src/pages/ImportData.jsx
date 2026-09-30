@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { parseRawPunchesToPeriods } from '@/lib/payrollEngine';
 import { 
   UploadCloud, 
   FileSpreadsheet, 
@@ -221,63 +222,14 @@ export default function ImportData() {
 
       // Combine all punch times from both "البصمات خلال اليوم" and "الطابع الزمني"
       const combinedPunchesStr = (rawDailyPunches + ' ' + rawTimetable).trim();
-      const rawMatches = (combinedPunchesStr.match(/\b([01]?[0-9]|2[0-3]):[0-5][0-9]\b/g) || []);
-      
-      // Standardize format HH:MM
-      const cleanTimes = rawMatches.map(t => {
-        const p = t.split(':');
-        return p[0].padStart(2, '0') + ':' + p[1].padStart(2, '0');
-      });
+      const parsedPunches = parseRawPunchesToPeriods(combinedPunchesStr, true);
 
-      // Deduplicate preserving chronological order
-      const uniqueTimes = Array.from(new Set(cleanTimes)).sort();
-
-      let p1In = '';
-      let p1Out = '';
-      let p2In = '';
-      let p2Out = '';
-      let totalHrs = 0;
-
-      const parseM = (t) => {
-        if (!t) return null;
-        const p = t.split(':');
-        return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
-      };
-
-      if (uniqueTimes.length >= 4) {
-        // Dual shift (4 punches)
-        p1In = uniqueTimes[0];
-        p1Out = uniqueTimes[1];
-        p2In = uniqueTimes[2];
-        p2Out = uniqueTimes[3];
-        const m1In = parseM(p1In), m1Out = parseM(p1Out), m2In = parseM(p2In), m2Out = parseM(p2Out);
-        let dur1 = 0, dur2 = 0;
-        if (m1In !== null && m1Out !== null) dur1 = m1Out >= m1In ? m1Out - m1In : (m1Out + 1440) - m1In;
-        if (m2In !== null && m2Out !== null) dur2 = m2Out >= m2In ? m2Out - m2In : (m2Out + 1440) - m2In;
-        totalHrs = Math.round(((dur1 + dur2) / 60) * 100) / 100;
-      } else if (uniqueTimes.length >= 2) {
-        // Flexible or single shift: First punch is In, Last punch is Out
-        p1In = uniqueTimes[0];
-        p1Out = uniqueTimes[uniqueTimes.length - 1];
-        p2Out = p1Out;
-        const inM = parseM(p1In);
-        const outM = parseM(p1Out);
-        if (inM !== null && outM !== null) {
-          const diff = outM >= inM ? outM - inM : (outM + 1440) - inM;
-          totalHrs = Math.round((diff / 60) * 100) / 100;
-        }
-      } else if (uniqueTimes.length === 1) {
-        // Single punch recorded
-        p1In = uniqueTimes[0];
-        p1Out = '';
-        totalHrs = 0;
-      }
-
-      const empNum = rawEmpNum.replace(/\D/g, '') || '1000';
-      const empName = rawEmpName || 'موظف';
-      const rawPunchesDisplay = uniqueTimes.length >= 2 
-        ? (p2In ? `${p1In}:00 -- ${p1Out}:00 & ${p2In}:00 -- ${p2Out}:00` : `${p1In}:00 -- ${p1Out}:00`)
-        : (p1In ? `${p1In}:00 --` : '');
+      const p1In = parsedPunches.period_1_in;
+      const p1Out = parsedPunches.period_1_out;
+      const p2In = parsedPunches.period_2_in;
+      const p2Out = parsedPunches.period_2_out;
+      const totalHrs = parsedPunches.total_hours;
+      const rawPunchesDisplay = parsedPunches.timestamp_raw;
 
       parsed.push({
         id: ('att_' + empNum + '_' + finalDate).replace(/[^a-zA-Z0-9_]/g, '_'),

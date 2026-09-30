@@ -5,7 +5,7 @@ import { base44 } from '@/api/base44Client';
 import {
   Wallet, Download, Printer, CheckCircle2, Clock, AlertTriangle, Coins,
   Eye, FileSpreadsheet, ShieldCheck, Users, CalendarCheck, CalendarDays, Calendar, History,
-  Filter, Search, X, Edit3, Check, XCircle, Gift, AlertOctagon,
+  Filter, Search, X, Edit3, Check, XCircle, Gift, AlertOctagon, Receipt, RotateCcw,
   CreditCard, PlusCircle, Trash2, ChevronRight, ChevronLeft,
   FileText, CheckSquare, Sparkles, Building2, UserCheck, UserX, LayoutGrid,
   SlidersHorizontal, Lock, Unlock, Archive, ArrowRight, ArrowLeft,
@@ -31,6 +31,7 @@ import {
   getStandardShiftPunches,
   isFriday,
   getPayrollSettings,
+  parseRawPunchesToPeriods,
   saveShortfallApproval,
   saveAbsenceApproval,
   getAbsenceApproval,
@@ -46,6 +47,9 @@ import {
   saveAdvance,
   recordAdvanceInstallmentPayment,
   recordAdvanceRepayment,
+  getAllRepayments,
+  updateAdvanceRepayment,
+  deleteAdvanceRepayment,
   getAdjustments,
   saveAdjustment,
   deleteAdjustment,
@@ -57,6 +61,13 @@ import {
   unlockMonthlyPayroll,
   isMonthLocked
 } from '@/lib/payrollEngine';
+import {
+  lockPayrollPeriod,
+  unlockPayrollPeriod,
+  getPayrollPeriods,
+  isMonthLocked as isMonthLockedDB,
+  getLockedPayroll
+} from '@/lib/payrollService';
 import {
   validateWpsCompliance,
   downloadWpsSif,
@@ -81,8 +92,8 @@ const fmtNum = (n, decimals = 2) => {
 const PAYROLL_RUN_STATUS = {
   draft:        { label: 'مسودة',          icon: '📝', color: 'bg-slate-100 text-slate-700 border-slate-200', btnLabel: 'إرسال للمراجعة',  btnColor: 'bg-sky-600 hover:bg-sky-700 text-white',    nextStatus: 'under_review',  permission: 'payroll.create' },
   under_review: { label: 'تحت المراجعة',   icon: '🔍', color: 'bg-sky-100 text-sky-700 border-sky-200',     btnLabel: 'اعتماد المسير',   btnColor: 'bg-amber-600 hover:bg-amber-700 text-white', nextStatus: 'approved',      permission: 'payroll.approve' },
-  approved:     { label: 'معتمد',           icon: '✅', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', btnLabel: 'تسجيل الدفع',  btnColor: 'bg-purple-600 hover:bg-purple-700 text-white', nextStatus: 'paid',       permission: 'payroll.approve' },
-  paid:         { label: 'تم الصرف',        icon: '💰', color: 'bg-purple-100 text-purple-700 border-purple-200', btnLabel: 'إغلاق المسير',  btnColor: 'bg-rose-600 hover:bg-rose-700 text-white',   nextStatus: 'closed',       permission: 'payroll.close' },
+  approved:     { label: 'معتمد',           icon: '✅', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', btnLabel: 'تسجيل الدفع',  btnColor: 'bg-sky-600 hover:bg-sky-600 text-white', nextStatus: 'paid',       permission: 'payroll.approve' },
+  paid:         { label: 'تم الصرف',        icon: '💰', color: 'bg-sky-100 text-sky-700 border-sky-200', btnLabel: 'إغلاق المسير',  btnColor: 'bg-rose-600 hover:bg-rose-700 text-white',   nextStatus: 'closed',       permission: 'payroll.close' },
   closed:       { label: 'مغلق',            icon: '🔒', color: 'bg-rose-100 text-rose-700 border-rose-200',  btnLabel: null,              btnColor: '',                                             nextStatus: null,            permission: null },
 };
 
@@ -198,7 +209,7 @@ export default function Payroll() {
   const canApprovePayroll = hasPermission(user, 'payroll.approve');
   const canCreatePayroll  = hasPermission(user, 'payroll.create');
   const canClosePayroll   = hasPermission(user, 'payroll.close');
-  const isAdmin = user?.role === 'admin' || user?.email?.includes('admin') || true;
+  const isAdmin = user?.role === 'system_admin' || user?.role === 'owner' || user?.role === 'general_manager';
 
   // Main Mode: 'wizard' (4 stages) vs 'archive' (past locked months)
   const [mainView, setMainView] = useState('wizard');
@@ -304,10 +315,15 @@ export default function Payroll() {
       setAdvancesList(getAdvances());
       setAdjustmentsList(getAdjustments());
       setAuditLogs(getAuditLog());
-      setLockedArchives(getLockedMonthlyPayrolls());
+      const { data: periods } = await getPayrollPeriods();
+      if (periods && periods.length > 0) {
+        setLockedArchives(periods);
+      } else {
+        setLockedArchives(getLockedMonthlyPayrolls());
+      }
       
-      const locked = isMonthLocked(monthPrefix);
-      setIsLocked(locked);
+      const dbLocked = await isMonthLockedDB(monthPrefix);
+      setIsLocked(dbLocked || isMonthLocked(monthPrefix));
 
       if (emps && emps.length > 0 && !selectedEmpId) {
         setSelectedEmpId(String(emps[0].employee_number || emps[0].id));
@@ -322,14 +338,31 @@ export default function Payroll() {
 
   useEffect(() => {
     loadData();
-    const handleEmpUpdate = () => loadData();
-    window.addEventListener('hr_employee_updated', handleEmpUpdate);
-    return () => window.removeEventListener('hr_employee_updated', handleEmpUpdate);
+    const handleUpdate = () => loadData();
+    window.addEventListener('hr_employee_updated', handleUpdate);
+    window.addEventListener('hr_requests_updated', handleUpdate);
+    window.addEventListener('hr_attendance_updated', handleUpdate);
+    window.addEventListener('cloud_data_synced', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('hr_employee_updated', handleUpdate);
+      window.removeEventListener('hr_requests_updated', handleUpdate);
+      window.removeEventListener('hr_attendance_updated', handleUpdate);
+      window.removeEventListener('cloud_data_synced', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, [loadData]);
 
-  // Check lock status when monthPrefix changes
+  // Check lock status when monthPrefix changes (DB authoritative + fallback)
   useEffect(() => {
-    setIsLocked(isMonthLocked(monthPrefix));
+    let active = true;
+    (async () => {
+      const dbLocked = await isMonthLockedDB(monthPrefix);
+      if (active) {
+        setIsLocked(dbLocked || isMonthLocked(monthPrefix));
+      }
+    })();
+    return () => { active = false; };
   }, [monthPrefix]);
 
   const settings = useMemo(() => getPayrollSettings(), []);
@@ -575,6 +608,91 @@ export default function Payroll() {
     }
   };
 
+  // Fast 1-Click Cancel Evening Period (Sets Period 2 empty and records shortfall hours deficit, NOT absence)
+  const handleCancelPeriod2 = async (day) => {
+    if (!currentSelectedEmp) return;
+    const emp = currentSelectedEmp;
+    const empId = emp.id || ('emp_' + emp.employee_number);
+    const empNum = String(emp.employee_number || '').replace('emp_', '');
+    const empName = emp.full_name || 'موظف';
+
+    const p1In = day.period_1_in || (day.check_in ? String(day.check_in).slice(11, 16) : '08:00');
+    const p1Out = day.period_1_out || '12:00';
+
+    const parseM = (t) => {
+      if (!t) return null;
+      const clean = t.replace(/[^0-9:]/g, '');
+      const p = clean.split(':');
+      return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
+    };
+
+    const inM = parseM(p1In);
+    const outM = parseM(p1Out);
+    let dur1 = 0;
+    if (inM !== null && outM !== null) {
+      dur1 = outM >= inM ? outM - inM : (outM + 1440) - inM;
+    }
+    const totalHrs = Math.round((dur1 / 60) * 10) / 10;
+    const rawPunches = `${p1In}:00 -- ${p1Out}:00`;
+
+    const updatedItem = {
+      ...day,
+      id: day.id || `att_${empNum}_${day.log_date}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      employee_id: empId,
+      user_id: empId,
+      employee_number: empNum,
+      employee_name: empName,
+      log_date: day.log_date,
+      check_in: `${day.log_date}T${p1In}:00`,
+      check_out: `${day.log_date}T${p1Out}:00`,
+      status: 'late', // Counted as present with delay/shortfall, NOT absent!
+      timestamp_raw: rawPunches,
+      total_hours: totalHrs,
+      actual_minutes: dur1,
+      period_1_in: p1In,
+      period_1_out: p1Out,
+      period_2_in: '',
+      period_2_out: '',
+      notes: JSON.stringify({
+        employee_number: empNum,
+        user_id: empId,
+        total_hours: totalHrs,
+        timestamp_raw: rawPunches,
+        period_1_in: p1In,
+        period_1_out: p1Out,
+        period_2_in: '',
+        period_2_out: '',
+        period_2_cancelled: true,
+        note: 'إلغاء الفترة المسائية واحتسابها عجز دوام',
+        manual_edit_by: user?.full_name || 'مدير الموارد البشرية',
+        manual_edit_at: new Date().toISOString()
+      })
+    };
+
+    try {
+      if (day.id) {
+        await base44.entities.AttendanceLog.update(day.id, updatedItem);
+      } else {
+        await base44.entities.AttendanceLog.create(updatedItem);
+      }
+
+      setAttendanceLogs(prev => {
+        const copy = [...prev];
+        const idx = copy.findIndex(l => (l.id && l.id === day.id) || (String(l.employee_number || l.employee_id) === empNum && l.log_date === day.log_date));
+        if (idx !== -1) copy[idx] = { ...copy[idx], ...updatedItem };
+        else copy.unshift(updatedItem);
+        return copy;
+      });
+
+      toast({
+        title: '✓ تم إلغاء الفترة المسائية واحتسابها عجز ساعات',
+        description: `يوم ${day.log_date}: تم قيد حضور الفترة الصباحية (${p1In} ➔ ${p1Out}) وحساب باقي الشفت كعجز ساعات يخصم بالساعة (وليس غياب كامل).`
+      });
+    } catch (e) {
+      toast({ title: 'خطأ أثناء حفظ التعديل', description: e.message, variant: 'destructive' });
+    }
+  };
+
   // Stage 1: Edit Biometric Log (Admin Only)
   const handleSavePunchEdit = async () => {
     if (!editPunchModal) return;
@@ -612,10 +730,10 @@ export default function Payroll() {
 
       if (!isLeave) {
         if (isSplitShift) {
-          const m1In = parseM(p1In);
-          const m1Out = parseM(p1Out);
-          const m2In = parseM(p2In);
-          const m2Out = parseM(p2Out);
+          const m1In = parseM(cleanP1In);
+          const m1Out = parseM(cleanP1Out);
+          const m2In = parseM(cleanP2In);
+          const m2Out = parseM(cleanP2Out);
 
           let dur1 = 0;
           if (m1In !== null && m1Out !== null) {
@@ -626,9 +744,23 @@ export default function Payroll() {
             dur2 = m2Out >= m2In ? m2Out - m2In : (m2Out + 1440) - m2In;
           }
           totalHrs = Math.round(((dur1 + dur2) / 60) * 10) / 10;
-          rawPunches = `${p1In || '09:00'}:00 -- ${p1Out || '13:00'}:00 & ${p2In || '16:00'}:00 -- ${p2Out || '21:00'}:00`;
-          checkInFinal = p1In ? `${log.log_date}T${p1In}:00` : null;
-          checkOutFinal = p2Out ? `${log.log_date}T${p2Out}:00` : null;
+          
+          // Build clean raw punches string from only actual periods entered
+          const punchParts = [];
+          if (cleanP1In && cleanP1Out) {
+            punchParts.push(`${cleanP1In}:00 -- ${cleanP1Out}:00`);
+          } else if (cleanP1In) {
+            punchParts.push(`${cleanP1In}:00`);
+          }
+          if (cleanP2In && cleanP2Out) {
+            punchParts.push(`${cleanP2In}:00 -- ${cleanP2Out}:00`);
+          } else if (cleanP2In) {
+            punchParts.push(`${cleanP2In}:00`);
+          }
+          rawPunches = punchParts.join(' & ');
+
+          checkInFinal = cleanP1In ? `${log.log_date}T${cleanP1In}:00` : (cleanP2In ? `${log.log_date}T${cleanP2In}:00` : null);
+          checkOutFinal = cleanP2Out ? `${log.log_date}T${cleanP2Out}:00` : (cleanP1Out ? `${log.log_date}T${cleanP1Out}:00` : null);
         } else {
           const inM = parseM(newCheckIn);
           const outM = parseM(newCheckOut);
@@ -636,9 +768,23 @@ export default function Payroll() {
             const diff = outM >= inM ? outM - inM : (outM + 1440) - inM;
             totalHrs = Math.round((diff / 60) * 10) / 10;
           }
-          rawPunches = `${newCheckIn || '16:00'}:00 -- ${newCheckOut || '21:00'}:00`;
+          rawPunches = newCheckIn ? `${newCheckIn}:00 -- ${newCheckOut || newCheckIn}:00` : '';
           checkInFinal = newCheckIn ? `${log.log_date}T${newCheckIn}:00` : null;
-          checkOutFinal = newCheckOut ? `${log.log_date}T${newCheckOut}:00` : null;
+          checkOutFinal = newCheckOut ? `${log.log_date}T${newCheckOut}:00` : (newCheckIn ? `${log.log_date}T${newCheckIn}:00` : null);
+        }
+      }
+
+      // Automatically determine status if not an official leave:
+      // If employee attended partially (e.g. only 1 of 2 shifts), auto-set status to 'late' (عجز دوام)
+      const shiftHours = (emp?.shift || '').includes('8 ساعات') ? 8 : 9;
+      let finalStatus = newStatus || log.status || 'present';
+      if (!isLeave) {
+        if (totalHrs > 0 && totalHrs < shiftHours) {
+          finalStatus = 'late';
+        } else if (totalHrs >= shiftHours) {
+          finalStatus = 'present';
+        } else if (totalHrs === 0) {
+          finalStatus = 'absent';
         }
       }
 
@@ -652,13 +798,15 @@ export default function Payroll() {
         log_date: log.log_date,
         check_in: checkInFinal,
         check_out: checkOutFinal,
-        status: newStatus || log.status || 'present',
+        status: finalStatus,
         timestamp_raw: rawPunches,
         total_hours: totalHrs,
+        actual_minutes: Math.round(totalHrs * 60),
         period_1_in: cleanP1In,
         period_1_out: cleanP1Out,
         period_2_in: cleanP2In,
         period_2_out: cleanP2Out,
+        period_2_cancelled: isSplitShift && !cleanP2In && !cleanP2Out,
         notes: JSON.stringify({
           employee_number: empNum,
           user_id: empId,
@@ -668,6 +816,7 @@ export default function Payroll() {
           period_1_out: cleanP1Out,
           period_2_in: cleanP2In,
           period_2_out: cleanP2Out,
+          period_2_cancelled: isSplitShift && !cleanP2In && !cleanP2Out,
           leave_type: isLeave ? newStatus : null,
           deduction_from_annual_balance: newStatus === 'annual_leave',
           manual_edit_by: user?.full_name || 'مدير الموارد البشرية',
@@ -715,40 +864,95 @@ export default function Payroll() {
     }
   };
 
-  // Stage 4: Lock and Commit Monthly Payroll
-  const handleLockMonthlyPayroll = () => {
+  // Stage 4: Lock and Commit Monthly Payroll (DB Authoritative)
+  const handleLockMonthlyPayroll = async () => {
     if (filteredPayrolls.length === 0) {
       toast({ title: 'لا توجد بيانات رواتب للاعتماد', variant: 'destructive' });
       return;
     }
 
-    const record = saveLockedMonthlyPayroll(monthPrefix, {
-      totals,
-      payrolls: allPayrolls
-    }, user?.full_name || 'فهد ناصر محمد الجوعي (المدير العام)');
+    try {
+      const res = await lockPayrollPeriod(monthPrefix, {
+        totals,
+        payrolls: allPayrolls
+      }, user);
 
-    setIsLocked(true);
-    setLockConfirmModal(false);
-    setLockedArchives(getLockedMonthlyPayrolls());
-    setAuditLogs(getAuditLog());
+      if (!res.success) {
+        toast({
+          title: 'فشل اعتماد وإقفال المسير',
+          description: (res.errors || []).join(' | ') || 'حدث خطأ أثناء الحفظ في السيرفر',
+          variant: 'destructive'
+        });
+        return;
+      }
 
-    toast({
-      title: `🔒 تم اعتماد وإقفال ${record.title} بنجاح!`,
-      description: 'تم حفظ النسخة المقفلة في قاعدة البيانات السحابية المركزية، وأصبحت متاحة للمحاسب للقراءة فقط.'
-    });
+      // Also mirror to legacy snapshot for any legacy offline viewers
+      saveLockedMonthlyPayroll(monthPrefix, {
+        totals,
+        payrolls: allPayrolls
+      }, user?.full_name || 'فهد ناصر محمد الجوعي (المدير العام)');
+
+      setIsLocked(true);
+      setLockConfirmModal(false);
+      
+      const { data: updatedPeriods } = await getPayrollPeriods();
+      setLockedArchives(updatedPeriods || getLockedMonthlyPayrolls());
+      setAuditLogs(getAuditLog());
+
+      toast({
+        title: `🔒 تم اعتماد وإقفال مسير شهر (${monthPrefix}) بنجاح!`,
+        description: 'تم تثبيت المسير وأقساط السلف في قاعدة البيانات المركزية وأصبح غير قابل للتعديل.'
+      });
+    } catch (err) {
+      console.error('Lock error:', err);
+      toast({
+        title: 'خطأ أثناء الاعتماد',
+        description: err.message,
+        variant: 'destructive'
+      });
+    }
   };
 
-  // Unlock Monthly Payroll (Admin Only)
-  const handleUnlockMonthlyPayroll = () => {
-    unlockMonthlyPayroll(monthPrefix, unlockReason || 'تعديل استثنائي بقرار المدير العام', user?.full_name || 'المدير العام');
-    setIsLocked(false);
-    setUnlockModal(false);
-    setLockedArchives(getLockedMonthlyPayrolls());
-    setAuditLogs(getAuditLog());
-    toast({
-      title: `🔓 تم فك إقفال رواتب شهر ${monthPrefix} للتعديل`,
-      description: 'تم توثيق عملية فك الإقفال في سجل الرقابة المالي.'
-    });
+  // Unlock Monthly Payroll (Admin Only with Mandatory Reason)
+  const handleUnlockMonthlyPayroll = async () => {
+    if (!unlockReason || unlockReason.trim().length === 0) {
+      toast({ title: 'يجب كتابة سبب توثيقي لفك الإقفال', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const res = await unlockPayrollPeriod(monthPrefix, unlockReason, user);
+      if (!res.success) {
+        toast({
+          title: 'فشل فك الإقفال',
+          description: (res.errors || []).join(' | ') || 'غير مصرح لفك الإقفال إلا لمدير النظام',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      unlockMonthlyPayroll(monthPrefix, unlockReason, user?.full_name || 'المدير العام');
+
+      setIsLocked(false);
+      setUnlockModal(false);
+      setUnlockReason('');
+
+      const { data: updatedPeriods } = await getPayrollPeriods();
+      setLockedArchives(updatedPeriods || getLockedMonthlyPayrolls());
+      setAuditLogs(getAuditLog());
+
+      toast({
+        title: `🔓 تم فك إقفال رواتب شهر ${monthPrefix} للتعديل`,
+        description: 'تم توثيق عملية وسبب فك الإقفال في سجل الرقابة المالي المركزي.'
+      });
+    } catch (err) {
+      console.error('Unlock error:', err);
+      toast({
+        title: 'خطأ أثناء فك الإقفال',
+        description: err.message,
+        variant: 'destructive'
+      });
+    }
   };
 
 
@@ -1243,12 +1447,18 @@ export default function Payroll() {
                       <div className="text-xl font-black font-mono text-rose-700 dark:text-rose-400 mt-1">
                         {currentSelectedPayroll.absentDays} <span className="text-xs font-sans font-normal">أيام</span>
                       </div>
+                      <div className="text-[10px] text-rose-600 font-bold mt-1">
+                        خصم أجر يوم كامل ({currentSelectedPayroll.dailySalaryRate || 100} ر.س/يوم)
+                      </div>
                     </div>
 
-                    <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 p-3 rounded-2xl">
-                      <div className="text-xs font-bold text-purple-800 dark:text-purple-300">إجازة بدون راتب</div>
-                      <div className="text-xl font-black font-mono text-purple-700 dark:text-purple-400 mt-1">
+                    <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 p-3 rounded-2xl">
+                      <div className="text-xs font-bold text-sky-800 dark:text-sky-300">إجازة بدون راتب</div>
+                      <div className="text-xl font-black font-mono text-sky-700 dark:text-sky-400 mt-1">
                         {currentSelectedPayroll.unpaidLeaveDays || 0} <span className="text-xs font-sans font-normal">أيام</span>
+                      </div>
+                      <div className="text-[10px] text-sky-600 font-bold mt-1">
+                        خصم أجر اليوم كاملاً
                       </div>
                     </div>
 
@@ -1257,7 +1467,9 @@ export default function Payroll() {
                       <div className="text-xl font-black font-mono text-amber-700 dark:text-amber-400 mt-1">
                         {formatMinutes(currentSelectedPayroll.totalShortfallMinutes)}
                       </div>
-                      <div className="text-[9px] text-muted-foreground mt-0.5">بعد مقاصة الإضافي</div>
+                      <div className="text-[10px] text-amber-700 font-bold mt-1">
+                        خصم بالساعة فقط ({currentSelectedPayroll.hourlyRate || 11.11} ر.س/ساعة)
+                      </div>
                     </div>
                   </div>
 
@@ -1268,8 +1480,18 @@ export default function Payroll() {
                         <tr className="bg-slate-100 dark:bg-slate-800/80 font-heading font-bold text-muted-foreground border-b">
                           <th className="py-3 px-3">التاريخ</th>
                           <th className="py-3 px-2">اليوم</th>
-                          <th className="py-3 px-3 text-emerald-700 dark:text-emerald-400">الفترة النهارية (دخول ➔ خروج)</th>
-                          <th className="py-3 px-3 text-blue-700 dark:text-blue-400">الفترة المسائية (دخول ➔ خروج)</th>
+                          <th className="py-3 px-3 text-emerald-700 dark:text-emerald-400">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span>الفترة النهارية</span>
+                              <span dir="ltr" className="text-[10px] font-mono text-emerald-600 font-semibold">(دخول ➔ خروج)</span>
+                            </div>
+                          </th>
+                          <th className="py-3 px-3 text-blue-700 dark:text-blue-400">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span>الفترة المسائية</span>
+                              <span dir="ltr" className="text-[10px] font-mono text-blue-600 font-semibold">(دخول ➔ خروج)</span>
+                            </div>
+                          </th>
                           <th className="py-3 px-2">المطلوب</th>
                           <th className="py-3 px-2">إجمالي الفعلي</th>
                           <th className="py-3 px-3">الفارق (عجز / زيادة)</th>
@@ -1294,7 +1516,7 @@ export default function Payroll() {
                           const statusBadgeColor = d.isFriday 
                             ? 'bg-indigo-100 text-indigo-800' 
                             : d.isUnpaidLeave 
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' 
+                            ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' 
                             : d.isExempt 
                             ? 'bg-slate-100 text-slate-700' 
                             : !d.hasAttendance 
@@ -1307,15 +1529,45 @@ export default function Payroll() {
                             <tr key={di} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30">
                               <td className="py-2.5 px-3 font-mono font-bold">{d.log_date}</td>
                               <td className="py-2.5 px-2 font-semibold">{d.day_name}</td>
-                              <td className="py-2.5 px-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                                {d.hasAttendance || d.isExempt 
-                                  ? (d.period_1_in ? `${d.period_1_in} ➔ ${d.period_1_out || '--:--'}` : (d.check_in ? (d.check_in.includes('T') ? d.check_in.slice(11, 16) : d.check_in.slice(0, 5)) : '—'))
-                                  : '—'}
+                              <td className="py-2.5 px-3 text-center">
+                                {d.hasAttendance || d.isExempt ? (
+                                  d.period_1_in ? (
+                                    <div 
+                                      style={{ direction: 'ltr', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', unicodeBidi: 'isolate' }} 
+                                      className="font-mono font-bold text-emerald-700 dark:text-emerald-400"
+                                    >
+                                      <span>{d.period_1_in}</span>
+                                      <span className="text-emerald-500 font-sans text-xs">➔</span>
+                                      <span>{d.period_1_out || '--:--'}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 px-2 py-0.5 rounded-lg">
+                                      مُلغاة (عجز)
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="font-mono text-muted-foreground">—</span>
+                                )}
                               </td>
-                              <td className="py-2.5 px-3 font-mono font-bold text-blue-700 dark:text-blue-400">
-                                {d.hasAttendance || d.isExempt 
-                                  ? (d.period_2_in ? `${d.period_2_in} ➔ ${d.period_2_out || '--:--'}` : '—')
-                                  : '—'}
+                              <td className="py-2.5 px-3 text-center">
+                                {d.hasAttendance || d.isExempt ? (
+                                  d.period_2_in ? (
+                                    <div 
+                                      style={{ direction: 'ltr', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', unicodeBidi: 'isolate' }} 
+                                      className="font-mono font-bold text-blue-700 dark:text-blue-400"
+                                    >
+                                      <span>{d.period_2_in}</span>
+                                      <span className="text-blue-500 font-sans text-xs">➔</span>
+                                      <span>{d.period_2_out || '--:--'}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 px-2 py-0.5 rounded-lg">
+                                      مُلغاة (عجز دوام)
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="font-mono text-muted-foreground">—</span>
+                                )}
                               </td>
                               <td className="py-2.5 px-2 font-mono">{d.requiredMinutes ? formatMinutes(d.requiredMinutes) : '—'}</td>
                               <td className="py-2.5 px-2 font-mono font-bold text-foreground">{d.actualMinutes ? formatMinutes(d.actualMinutes) : '—'}</td>
@@ -1375,6 +1627,20 @@ export default function Payroll() {
                                       </Button>
                                     )}
 
+                                    {/* 1-Click Fast Cancel Evening Shift (Counts shortfall hours deficit, NOT full absence) */}
+                                    {!d.isFriday && (d.period_2_in || d.period_2_out) && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleCancelPeriod2(d)}
+                                        title="إلغاء الفترة المسائية واحتساب ساعاتها كعجز دوام وتأخير (يخصم بالساعة وليس كيوم غياب كامل)"
+                                        className="h-7 text-[10px] font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-2 gap-1 border border-amber-200/60"
+                                      >
+                                        <Moon className="w-3 h-3 text-amber-600" />
+                                        <span>إلغاء ف 2 (عجز)</span>
+                                      </Button>
+                                    )}
+
                                     {/* Full Modal Edit Button */}
                                     <Button
                                       size="sm"
@@ -1388,12 +1654,27 @@ export default function Payroll() {
                                           (currentSelectedEmp?.nationality !== 'سعودي' && currentSelectedEmp?.employee_number !== '1001');
 
                                         const rawStr = d.timestamp_raw || '';
-                                        const times = (rawStr.match(/\b([01]?[0-9]|2[0-3]):[0-5][0-9]\b/g) || []);
+                                        const parsedRaw = parseRawPunchesToPeriods(rawStr, isSplit);
 
-                                        let p1In = d.period_1_in || (times[0] || (d.check_in ? String(d.check_in).slice(11, 16) : '09:00'));
-                                        let p1Out = d.period_1_out || (times[1] || (isSplit ? '13:00' : ''));
-                                        let p2In = d.period_2_in || (times[2] || (isSplit ? '16:00' : ''));
-                                        let p2Out = d.period_2_out || (times[3] || times[times.length - 1] || (d.check_out ? String(d.check_out).slice(11, 16) : (isSplit ? '21:00' : '')));
+                                        // If period_1_in / period_2_in are explicitly defined (even if empty string ""), preserve them
+                                        let p1In = (d.period_1_in !== undefined && d.period_1_in !== null)
+                                          ? d.period_1_in
+                                          : (parsedRaw.period_1_in || (d.check_in ? String(d.check_in).slice(11, 16) : '09:00'));
+                                        let p1Out = (d.period_1_out !== undefined && d.period_1_out !== null)
+                                          ? d.period_1_out
+                                          : (parsedRaw.period_1_out || (d.hasAttendance ? '' : (isSplit ? '13:00' : '')));
+                                        let p2In = (d.period_2_in !== undefined && d.period_2_in !== null)
+                                          ? d.period_2_in
+                                          : (parsedRaw.period_2_in || (d.hasAttendance ? '' : (isSplit ? '16:00' : '')));
+                                        let p2Out = (d.period_2_out !== undefined && d.period_2_out !== null)
+                                          ? d.period_2_out
+                                          : (parsedRaw.period_2_out || (d.hasAttendance ? '' : (isSplit ? '21:00' : '')));
+
+                                        const isPeriod2Cancelled = d.period_2_cancelled || (typeof d.notes === 'string' && d.notes.includes('"period_2_cancelled":true'));
+                                        if (isPeriod2Cancelled) {
+                                          p2In = '';
+                                          p2Out = '';
+                                        }
 
                                         let singleIn = p1In || (d.check_in ? String(d.check_in).slice(11, 16) : '16:00');
                                         let singleOut = p2Out || p1Out || (d.check_out ? String(d.check_out).slice(11, 16) : '21:00');
@@ -1403,10 +1684,10 @@ export default function Payroll() {
                                           log: d,
                                           emp: currentSelectedEmp,
                                           isSplitShift: isSplit,
-                                          p1In: isFriNoAtt ? '' : (p1In || (empShift.includes('8 ساعات') ? '08:00' : '09:00')),
-                                          p1Out: isFriNoAtt ? '' : (p1Out || (empShift.includes('8 ساعات') ? '12:00' : '13:00')),
-                                          p2In: isFriNoAtt ? '' : (p2In || '16:00'),
-                                          p2Out: isFriNoAtt ? '' : (p2Out || (empShift.includes('8 ساعات') ? '20:00' : '21:00')),
+                                          p1In: isFriNoAtt ? '' : (p1In !== undefined ? p1In : (empShift.includes('8 ساعات') ? '08:00' : '09:00')),
+                                          p1Out: isFriNoAtt ? '' : (p1Out !== undefined ? p1Out : (empShift.includes('8 ساعات') ? '12:00' : '13:00')),
+                                          p2In: isFriNoAtt ? '' : (p2In !== undefined ? p2In : ''),
+                                          p2Out: isFriNoAtt ? '' : (p2Out !== undefined ? p2Out : ''),
                                           newCheckIn: isFriNoAtt ? '' : singleIn,
                                           newCheckOut: isFriNoAtt ? '' : singleOut,
                                           newStatus: d.isFriday ? (d.hasAttendance ? 'present' : 'weekend') : (d.hasAttendance ? (d.status || 'present') : 'absent')
@@ -2565,7 +2846,7 @@ export default function Payroll() {
                       <SelectItem value="present" className="font-bold text-emerald-700 py-2">✓ حاضر (دوام منضبط مكتمل)</SelectItem>
                       <SelectItem value="late" className="font-bold text-amber-700 py-2">⏰ متأخر (مع احتساب التأخير)</SelectItem>
                       <SelectItem value="annual_leave" className="font-bold text-teal-700 py-2">🏖️ إجازة سنوية (تخصم من رصيد الإجازات - مدفوعة)</SelectItem>
-                      <SelectItem value="sick_leave" className="font-bold text-purple-700 py-2">🏥 إجازة مرضية (بتقرير طبي - مدفوعة)</SelectItem>
+                      <SelectItem value="sick_leave" className="font-bold text-sky-700 py-2">🏥 إجازة مرضية (بتقرير طبي - مدفوعة)</SelectItem>
                       <SelectItem value="emergency_leave" className="font-bold text-indigo-700 py-2">⚠️ إجازة اضطرارية (تخصم من الرصيد)</SelectItem>
                       <SelectItem value="unpaid_leave" className="font-bold text-rose-700 py-2">⏳ إجازة بدون راتب (خصم من الراتب)</SelectItem>
                       <SelectItem value="unexcused_absence" className="font-bold text-rose-800 py-2">🚫 غياب بدون إذن (خصم يوم كامل)</SelectItem>
@@ -2587,7 +2868,22 @@ export default function Payroll() {
                           <Sun className="w-4 h-4" />
                           <span>بصمات الفترة الصباحية:</span>
                         </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">الفترة 1</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground font-mono">الفترة 1</span>
+                          {(editPunchModal.p1In || editPunchModal.p1Out) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditPunchModal(prev => ({ ...prev, p1In: '', p1Out: '', newStatus: 'late' }))}
+                              className="h-6 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 rounded-lg font-bold gap-1"
+                              title="تفريغ بصمات الفترة الصباحية واحتسابها عجز دوام"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>مسح الفترة 1 (عجز)</span>
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -2625,29 +2921,68 @@ export default function Payroll() {
                           <Moon className="w-4 h-4" />
                           <span>بصمات الفترة المسائية:</span>
                         </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">الفترة 2</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground font-mono">الفترة 2</span>
+                          {(editPunchModal.p2In || editPunchModal.p2Out) ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditPunchModal(prev => ({ ...prev, p2In: '', p2Out: '', newStatus: 'late' }))}
+                              className="h-6 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 px-2 rounded-lg font-bold gap-1 shadow-sm"
+                              title="تفريغ بصمات الفترة المسائية واحتسابها عجز ساعات"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>إلغاء الفترة 2 (عجز ساعات) 🚫</span>
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditPunchModal(prev => ({ ...prev, p2In: '16:00', p2Out: '21:00', newStatus: 'present' }))}
+                              className="h-6 text-[10px] text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-200 px-2 rounded-lg font-bold gap-1 shadow-sm"
+                              title="استعادة بصمات الفترة المسائية الافتراضية"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>استعادة مواعيد الفترة (16:00 - 21:00)</span>
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground font-bold">3. دخول مسائي (Check In 2)</Label>
-                          <Input 
-                            type="time" 
-                            value={editPunchModal.p2In} 
-                            onChange={(e) => setEditPunchModal(prev => ({ ...prev, p2In: e.target.value }))}
-                            className="rounded-xl font-mono text-xs font-bold h-9 bg-white dark:bg-slate-900 mt-1"
-                          />
+                      {(!editPunchModal.p2In && !editPunchModal.p2Out) ? (
+                        <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+                          <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>الفترة المسائية مُلغاة (احتساب عجز ساعات تأخير):</span>
+                          </div>
+                          <p className="leading-relaxed text-amber-800/90 dark:text-amber-300/90">
+                            سيتم تسجيل الموظف <strong>حاضراً</strong> لليوم (الفترة الصباحية)، واحتساب ساعات الفترة المسائية المتبقية كـ <strong>عجز ساعات</strong> يُخصم بمعدل أجر الساعة (<strong>{currentSelectedPayroll?.hourlyRate || 11.11} ر.س/س</strong>) بدلاً من خصم يوم غياب كامل (<strong>{currentSelectedPayroll?.dailySalaryRate || 100} ر.س/يوم</strong>).
+                          </p>
                         </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground font-bold">4. خروج مسائي (Check Out 2)</Label>
-                          <Input 
-                            type="time" 
-                            value={editPunchModal.p2Out} 
-                            onChange={(e) => setEditPunchModal(prev => ({ ...prev, p2Out: e.target.value }))}
-                            className="rounded-xl font-mono text-xs font-bold h-9 bg-white dark:bg-slate-900 mt-1"
-                          />
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground font-bold">3. دخول مسائي (Check In 2)</Label>
+                            <Input 
+                              type="time" 
+                              value={editPunchModal.p2In} 
+                              onChange={(e) => setEditPunchModal(prev => ({ ...prev, p2In: e.target.value }))}
+                              className="rounded-xl font-mono text-xs font-bold h-9 bg-white dark:bg-slate-900 mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground font-bold">4. خروج مسائي (Check Out 2)</Label>
+                            <Input 
+                              type="time" 
+                              value={editPunchModal.p2Out} 
+                              onChange={(e) => setEditPunchModal(prev => ({ ...prev, p2Out: e.target.value }))}
+                              className="rounded-xl font-mono text-xs font-bold h-9 bg-white dark:bg-slate-900 mt-1"
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     /* ─── 2 PUNCHES FOR SINGLE SHIFT ──────────────────────── */
@@ -2682,9 +3017,9 @@ export default function Payroll() {
               ) : (
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-border text-xs space-y-2">
                   <div className="font-bold flex items-center gap-2">
-                    {editPunchModal.newStatus === 'unpaid_leave' && <span className="text-purple-600 font-black">⏳ إجازة بدون راتب:</span>}
+                    {editPunchModal.newStatus === 'unpaid_leave' && <span className="text-sky-600 font-black">⏳ إجازة بدون راتب:</span>}
                     {editPunchModal.newStatus === 'annual_leave' && <span className="text-teal-600 font-black">🏖️ إجازة سنوية:</span>}
-                    {editPunchModal.newStatus === 'sick_leave' && <span className="text-purple-600 font-black">🏥 إجازة مرضية:</span>}
+                    {editPunchModal.newStatus === 'sick_leave' && <span className="text-sky-600 font-black">🏥 إجازة مرضية:</span>}
                     {editPunchModal.newStatus === 'exempt' && <span className="text-slate-600 font-black">✨ معفى / عطلة رسمية:</span>}
                     {(editPunchModal.newStatus === 'absent' || editPunchModal.newStatus === 'unexcused_absence') && <span className="text-rose-600 font-black">🚫 غياب غير مبرر:</span>}
                   </div>
@@ -2697,6 +3032,40 @@ export default function Payroll() {
                   </p>
                 </div>
               )}
+
+              {/* Financial Calculation Notice in Modal */}
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1.5">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="text-slate-800 dark:text-slate-200">التمييز بين عجز الساعات والغياب في المسير:</span>
+                  {(!editPunchModal.p2In && !editPunchModal.p2Out && (editPunchModal.p1In || editPunchModal.p1Out)) ? (
+                    <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-300">
+                      حاضر ف1 + عجز ساعات ف2 ⚖️
+                    </span>
+                  ) : (editPunchModal.newStatus === 'absent' || editPunchModal.newStatus === 'unexcused_absence') ? (
+                    <span className="text-[10px] font-extrabold text-rose-700 bg-rose-100 dark:bg-rose-950 px-2 py-0.5 rounded-full border border-rose-300">
+                      غياب غير مبرر 🚫
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-300">
+                      دوام منضبط ✓
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200 dark:border-slate-700/60 text-muted-foreground">
+                  <div className="p-2 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/50">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 block">عجز الساعات (تأخير):</span>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-amber-900/80 dark:text-amber-300/80">
+                      يُخصم بالساعة فقط ({currentSelectedPayroll?.hourlyRate || 11.11} ر.س/س) ويبقى الموظف مسجلاً كـ "حاضر" لليوم.
+                    </p>
+                  </div>
+                  <div className="p-2 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200/50">
+                    <span className="font-bold text-rose-800 dark:text-rose-300 block">الغياب الكامل:</span>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-rose-900/80 dark:text-rose-300/80">
+                      يُخصم أجر اليوم كاملاً ({currentSelectedPayroll?.dailySalaryRate || 100} ر.س/يوم) ولا يُحتسب حضور إطلاقاً.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
             </div>
 
@@ -2753,7 +3122,7 @@ export default function Payroll() {
         <DialogContent className="sm:max-w-md rounded-3xl" dir="rtl">
           <DialogHeader>
             <DialogTitle className="text-base font-heading font-black flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-purple-700" />
+              <CreditCard className="w-5 h-5 text-sky-700" />
               <span>تسجيل ومنح سلفة مالية جديدة لموظف</span>
             </DialogTitle>
           </DialogHeader>
@@ -2837,14 +3206,14 @@ export default function Payroll() {
             </div>
 
             {/* Live Remaining Balance Calculation */}
-            <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 flex items-center justify-between">
+            <div className="p-3 rounded-2xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 flex items-center justify-between">
               <div>
-                <div className="text-[10px] text-purple-700 dark:text-purple-300 font-bold">الرصيد المتبقي الفعلي قيد الاستقطاع:</div>
-                <div className="font-mono font-black text-base text-purple-900 dark:text-purple-100 mt-0.5">
+                <div className="text-[10px] text-sky-700 dark:text-sky-300 font-bold">الرصيد المتبقي الفعلي قيد الاستقطاع:</div>
+                <div className="font-mono font-black text-base text-sky-900 dark:text-purple-100 mt-0.5">
                   {fmtNum(Math.max(0, (Number(advanceForm.total_amount) || 0) - (Number(advanceForm.paid_amount) || 0)))} ر.س
                 </div>
               </div>
-              <Badge className="bg-purple-600 text-white font-bold text-[10px]">
+              <Badge className="bg-sky-600 text-white font-bold text-[10px]">
                 {advanceForm.monthly_installment} ر.س / شهر
               </Badge>
             </div>
@@ -2912,7 +3281,7 @@ export default function Payroll() {
                 // Automatically open printable note
                 setSelectedAdvanceForPrint(createdAdvance);
               }}
-              className="bg-purple-700 hover:bg-purple-600 text-white rounded-xl font-bold shadow-md shadow-purple-500/20"
+              className="bg-sky-600 hover:bg-sky-600 text-white rounded-xl font-bold shadow-md shadow-sky-500/20"
             >
               اعتماد ومنح السلفة ➔
             </Button>
@@ -3004,691 +3373,6 @@ export default function Payroll() {
               حفظ واعتماد
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-    </div>
-  );
-}
-
-
-// ─── STAGE 5 COMPONENT: HISTORICAL CERTIFIED PAYSLIP WITH ACCOUNTANT STAMP ────
-function Stage5HistoricalArchive({ employees, branches, monthPrefix, allPayrolls, attendanceLogs, shifts, settings, fmtNum, onOpenPayslip }) {
-  const [selectedBranch, setSelectedBranch] = useState('all');
-  const [selectedEmpId, setSelectedEmpId] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(monthPrefix || '2026-08');
-  const [extractedData, setExtractedData] = useState(null);
-  const { toast } = useToast();
-
-  const branchEmployees = useMemo(() => {
-    if (selectedBranch === 'all') return employees;
-    return employees.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
-  }, [employees, selectedBranch]);
-
-  useEffect(() => {
-    if (branchEmployees.length > 0) {
-      setSelectedEmpId(String(branchEmployees[0].employee_number || branchEmployees[0].id));
-    } else {
-      setSelectedEmpId('');
-    }
-  }, [branchEmployees]);
-
-  const handleExtract = () => {
-    if (!selectedEmpId) {
-      toast({ title: 'يرجى اختيار الموظف', variant: 'destructive' });
-      return;
-    }
-
-    const emp = employees.find(e => String(e.employee_number || e.id) === String(selectedEmpId));
-    if (!emp) return;
-
-    const result = computeEmployeePayroll(emp, attendanceLogs, shifts, { ...settings, monthPrefix: selectedMonth });
-    setExtractedData({
-      employee: emp,
-      month: selectedMonth,
-      payroll: result,
-      extractedAt: new Date().toISOString()
-    });
-
-    if (onOpenPayslip) {
-      onOpenPayslip(result);
-    }
-    toast({ title: `✓ تم استخراج وفتح قسيمة الراتب الرسمية A4 لـ: ${emp.full_name}` });
-  };
-
-  return (
-    <div className="space-y-6" dir="rtl">
-      
-      {/* Search & Extraction Controls Card */}
-      <Card className="p-5 rounded-3xl border bg-card shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
-              <Award className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-heading font-black text-base text-foreground">
-                أرشيف مسيرات الرواتب المعتمدة والمختومة
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                استخراج وطباعة قسيمة الراتب الرسمية A4 المتوافقة مع البنوك ووزارة الموارد البشرية ونظام حماية الأجور (WPS)
-              </p>
-            </div>
-          </div>
-          <Badge className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 text-xs font-bold px-3 py-1">
-            WPS Compliant ✓
-          </Badge>
-        </div>
-
-        {/* 3 Selectors */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
-          
-          {/* 1. Branch */}
-          <div className="space-y-1.5">
-            <Label className="font-bold text-foreground">1. اختر فرع الموظف:</Label>
-            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-              <SelectTrigger className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/60 h-11 font-bold">
-                <SelectValue placeholder="اختر الفرع..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كافة الفروع والأقسام</SelectItem>
-                <SelectItem value="مكتب الإدارة">مكتب الإدارة</SelectItem>
-                <SelectItem value="الفرع الرئيسي">الفرع الرئيسي</SelectItem>
-                <SelectItem value="فرع هونداي ( الرواف )">فرع هونداي ( الرواف )</SelectItem>
-                <SelectItem value="فرع كيا ( السليم )">فرع كيا ( السليم )</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 2. Employee */}
-          <div className="space-y-1.5">
-            <Label className="font-bold text-foreground">2. اختر اسم الموظف:</Label>
-            <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
-              <SelectTrigger className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/60 h-11 font-bold">
-                <SelectValue placeholder="اختر الموظف..." />
-              </SelectTrigger>
-              <SelectContent>
-                {branchEmployees.map(e => (
-                  <SelectItem key={e.id} value={String(e.employee_number || e.id)}>
-                    {e.full_name} (#{e.employee_number})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 3. Month */}
-          <div className="space-y-1.5">
-            <Label className="font-bold text-foreground">3. الشهر المالي المعتمد:</Label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/60 h-11 font-bold font-mono">
-                <SelectValue placeholder="اختر الشهر..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2026-08">أغسطس 2026 (August 2026)</SelectItem>
-                <SelectItem value="2026-07">يوليو 2026 (July 2026)</SelectItem>
-                <SelectItem value="2026-06">يونيو 2026 (June 2026)</SelectItem>
-                <SelectItem value="2026-05">مايو 2026 (May 2026)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 4. Extract Button */}
-          <div className="flex items-end">
-            <Button
-              onClick={handleExtract}
-              className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs gap-2 shadow-md shadow-emerald-600/20"
-            >
-              <Printer className="w-4 h-4" />
-              <span>استخراج وطباعة قسيمة الراتب A4</span>
-            </Button>
-          </div>
-
-        </div>
-      </Card>
-
-      {/* Extracted Payslip Document Banner */}
-      {extractedData && (
-        <div className="bg-white dark:bg-slate-900 border-2 border-emerald-500/30 rounded-3xl p-6 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
-              <CheckCircle2 className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="font-heading font-black text-base text-foreground">
-                مسير راتب: {extractedData.employee.full_name} (#{extractedData.employee.employee_number})
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                صافي الراتب المستحق: <strong className="text-emerald-600 font-mono text-sm">{fmtNum(extractedData.payroll.netSalary)} ر.س</strong> • شهر: {extractedData.month}
-              </div>
-            </div>
-          </div>
-
-          <Button
-            onClick={() => onOpenPayslip && onOpenPayslip(extractedData.payroll)}
-            className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs h-11 px-6 rounded-2xl gap-2 shadow-md"
-          >
-            <Printer className="w-4 h-4 text-emerald-400" />
-            <span>فتح نافذة الطباعة الرسمية A4</span>
-          </Button>
-        </div>
-      )}
-
-    </div>
-  );
-}
-
-// ─── DEDICATED ADVANCES & LOANS MANAGEMENT HUB COMPONENT ─────────────────────
-function AdvancesManagementHub({ employees, advancesList, onRefresh, onOpenNewAdvance, onPrintAdvance, fmtNum }) {
-  const { user } = useAuth();
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'completed'
-  const { toast } = useToast();
-
-  // Repayment Modal State
-  const [repaymentModalOpen, setRepaymentModalOpen] = useState(false);
-  const [selectedAdvForRepay, setSelectedAdvForRepay] = useState(null);
-  const [isSubmittingRepay, setIsSubmittingRepay] = useState(false);
-  const [repayForm, setRepayForm] = useState({
-    amount: '',
-    payment_date: new Date().toISOString().split('T')[0],
-    payment_method: 'cash',
-    notes: '',
-    receipt_number: ''
-  });
-
-  // Normalize all advances and filter out 0-amount ghost records
-  const normalizedList = useMemo(() => {
-    return (advancesList || [])
-      .map(a => normalizeAdvance(a))
-      .filter(a => a && a.total_amount > 0);
-  }, [advancesList]);
-
-  // Statistics
-  const stats = useMemo(() => {
-    let totalGranted = 0;
-    let totalRepaid = 0;
-    let activeCount = 0;
-    let completedCount = 0;
-
-    normalizedList.forEach(adv => {
-      const amt = Number(adv.total_amount) || 0;
-      const paid = Number(adv.paid_amount) || 0;
-      totalGranted += amt;
-      totalRepaid += paid;
-      const rem = Math.max(0, amt - paid);
-      if (rem <= 0 || adv.status === 'completed') completedCount++;
-      else activeCount++;
-    });
-
-    const totalRemaining = Math.max(0, totalGranted - totalRepaid);
-    return { totalGranted, totalRepaid, totalRemaining, activeCount, completedCount, totalCount: normalizedList.length };
-  }, [normalizedList]);
-
-  // Filtered advances
-  const filtered = useMemo(() => {
-    return normalizedList.filter(adv => {
-      const q = search.toLowerCase();
-      const matchSearch = !search ||
-        (adv.employee_name || '').toLowerCase().includes(q) ||
-        (adv.employee_number || '').toString().includes(q) ||
-        (adv.reason || '').toLowerCase().includes(q);
-
-      const rem = Math.max(0, (Number(adv.total_amount) || 0) - (Number(adv.paid_amount) || 0));
-      const isComp = rem <= 0 || adv.status === 'completed';
-
-      let matchStatus = true;
-      if (statusFilter === 'active') matchStatus = !isComp;
-      if (statusFilter === 'completed') matchStatus = isComp;
-
-      return matchSearch && matchStatus;
-    });
-  }, [normalizedList, search, statusFilter]);
-
-  const handleDelete = async (adv) => {
-    if (!adv || !adv.id) return;
-    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء سلفة الموظف: ${adv.employee_name || ''} بمبلغ ${fmtNum(adv.total_amount)} ر.س نهائياً؟`)) {
-      return;
-    }
-
-    try {
-      await deleteAdvance(adv.id, adv);
-      toast({ title: '✓ تم حذف وإلغاء السلفة بنجاح من النظام والسحابة' });
-      onRefresh();
-    } catch (err) {
-      toast({ title: 'خطأ في حذف السلفة', description: err.message, variant: 'destructive' });
-    }
-  };
-
-  return (
-    <div className="space-y-6" dir="rtl">
-      
-      {/* ─── 1. TOP TITLE BAR ──────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-3xl border shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 font-bold">
-            <CreditCard className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-heading font-black text-foreground">
-                نظام إدارة السلف والقروض المؤسسية
-              </h1>
-              <Badge className="bg-purple-50 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 text-xs font-mono font-bold">
-                {normalizedList.length} سلفة معتمدة
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              متابعة السلف، جدولة الأقساط الشهرية الآلية، وسندات لأمر المعتمدة
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={onOpenNewAdvance}
-            className="bg-purple-700 hover:bg-purple-600 text-white rounded-2xl text-xs font-black gap-2 h-10 px-5 shadow-md shadow-purple-500/20"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>تسجيل سلفة جديدة لموظف</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* ─── 2. TOP STATS CARDS ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Total Granted */}
-        <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-xs text-muted-foreground font-bold">إجمالي مبالغ السلف</div>
-            <div className="font-mono font-black text-2xl text-purple-700 dark:text-purple-400 mt-1">
-              {fmtNum(stats.totalGranted)} <span className="text-xs font-normal">ر.س</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">{stats.totalCount} سلفة إجمالية</div>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center">
-            <CreditCard className="w-5 h-5" />
-          </div>
-        </Card>
-
-        {/* Total Repaid */}
-        <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-xs text-muted-foreground font-bold">المبالغ المسددة والمستردة</div>
-            <div className="font-mono font-black text-2xl text-emerald-600 dark:text-emerald-400 mt-1">
-              {fmtNum(stats.totalRepaid)} <span className="text-xs font-normal">ر.س</span>
-            </div>
-            <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
-              {stats.totalGranted > 0 ? Math.round((stats.totalRepaid / stats.totalGranted) * 100) : 0}% نسبة الاسترداد
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </Card>
-
-        {/* Total Remaining */}
-        <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-xs text-muted-foreground font-bold">الرصيد المتبقي قيد السداد</div>
-            <div className="font-mono font-black text-2xl text-rose-600 dark:text-rose-400 mt-1">
-              {fmtNum(stats.totalRemaining)} <span className="text-xs font-normal">ر.س</span>
-            </div>
-            <div className="text-[10px] text-rose-500 font-bold mt-0.5">ذمم مدينة قيد الاستقطاع</div>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center">
-            <Clock className="w-5 h-5" />
-          </div>
-        </Card>
-
-        {/* Active Advances */}
-        <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-xs text-muted-foreground font-bold">السلف النشطة الجارية</div>
-            <div className="font-mono font-black text-2xl text-sky-600 dark:text-sky-400 mt-1">
-              {stats.activeCount} <span className="text-xs font-normal">سلف</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">{stats.completedCount} سلفة مكتملة السداد</div>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 flex items-center justify-center">
-            <Users className="w-5 h-5" />
-          </div>
-        </Card>
-
-      </div>
-
-      {/* ─── 3. SEARCH & FILTER CONTROLS ───────────────────────────────────── */}
-      <Card className="rounded-3xl border bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        
-        <div className="p-4 border-b flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="البحث باسم الموظف، الرقم الوظيفي، أو سبب السلفة..."
-              className="pr-9 h-10 rounded-2xl text-xs bg-slate-50 dark:bg-slate-800 border-0"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                statusFilter === 'all' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground'
-              }`}
-            >
-              الكل ({normalizedList.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('active')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                statusFilter === 'active' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground'
-              }`}
-            >
-              السارية فقط ({stats.activeCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('completed')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                statusFilter === 'completed' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground'
-              }`}
-            >
-              المسددة بالكامل ({stats.completedCount})
-            </button>
-          </div>
-        </div>
-
-        {/* Table Content */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs" style={{ direction: 'rtl' }}>
-            <thead>
-              <tr className="bg-purple-700 text-white font-heading font-black border-b border-purple-800">
-                <th className="py-3.5 px-4"># الموظف</th>
-                <th className="py-3.5 px-3">مبلغ السلفة</th>
-                <th className="py-3.5 px-3">القسط الشهري والمدة</th>
-                <th className="py-3.5 px-3">سبب ومبرر السلفة</th>
-                <th className="py-3.5 px-3">المسدد حتى الآن</th>
-                <th className="py-3.5 px-3">المتبقي للسداد</th>
-                <th className="py-3.5 px-3">شهر البداية</th>
-                <th className="py-3.5 px-3">الحالة</th>
-                <th className="py-3.5 px-4 text-center">الخيارات والطباعة</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-12 text-center text-muted-foreground font-bold">
-                    لا توجد سلف مسجلة مطابقة للبحث
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((adv) => {
-                  const emp = employees.find(e => String(e.employee_number || e.id) === String(adv.employee_number));
-                  const total = Number(adv.total_amount) || 0;
-                  const paid = Number(adv.paid_amount) || 0;
-                  const remaining = Math.max(0, total - paid);
-                  const isCompleted = remaining <= 0 || adv.status === 'completed';
-                  const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
-
-                  return (
-                    <tr key={adv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      
-                      {/* Employee Name & Badge */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-foreground text-xs">
-                          {emp?.full_name || adv.employee_name}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          #{adv.employee_number} • {emp?.branch_name || 'فرع كيا (السليم)'}
-                        </div>
-                      </td>
-
-                      {/* Total Amount */}
-                      <td className="py-3.5 px-3 font-mono font-black text-purple-950 dark:text-purple-300 text-sm">
-                        {fmtNum(adv.total_amount)} ر.س
-                      </td>
-
-                      {/* Monthly Installment */}
-                      <td className="py-3.5 px-3">
-                        <div className="font-mono font-bold text-rose-600 dark:text-rose-400">
-                          {fmtNum(adv.monthly_installment)} ر.س / شهر
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          على {adv.total_installments} أشهر
-                        </div>
-                      </td>
-
-                      {/* Reason Column */}
-                      <td className="py-3.5 px-3 max-w-[160px]">
-                        <span className="text-xs text-foreground font-medium line-clamp-2">
-                          {adv.reason || 'سلفة شخصية'}
-                        </span>
-                      </td>
-
-                      {/* Paid with progress */}
-                      <td className="py-3.5 px-3">
-                        <div className="font-mono font-bold text-emerald-600">
-                          {fmtNum(paid)} ر.س ({percent}%)
-                        </div>
-                        <div className="w-20 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-1 overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${percent}%` }}></div>
-                        </div>
-                      </td>
-
-                      {/* Remaining */}
-                      <td className="py-3.5 px-3 font-mono font-black text-rose-600 text-sm">
-                        {fmtNum(remaining)} ر.س
-                      </td>
-
-                      {/* Start Month */}
-                      <td className="py-3.5 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                        {adv.start_month}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-3">
-                        {isCompleted ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px]">
-                            ✓ مسددة بالكامل
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold text-[10px]">
-                            🟢 سارية وقيد الاستقطاع
-                          </Badge>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          
-                          {/* Print Promissory Note A4 */}
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedAdvForRepay(adv);
-                              setRepayForm({
-                                amount: String(Math.min(adv.monthly_installment || 500, remaining)),
-                                payment_date: new Date().toISOString().split('T')[0],
-                                payment_method: 'cash',
-                                notes: 'سداد دفعة نقدية من السلفة',
-                                receipt_number: 'REC-' + Date.now().toString().slice(-5)
-                              });
-                              setRepaymentModalOpen(true);
-                            }}
-                            className="h-8 text-xs font-bold rounded-xl gap-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
-                            title="تسجيل سداد دفعة من السلفة في أي وقت"
-                          >
-                            <Coins className="w-3.5 h-3.5" />
-                            <span>تسجيل سداد 💵</span>
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onPrintAdvance(adv)}
-                            className="h-8 text-xs font-bold rounded-xl gap-1 border-purple-300 text-purple-900 dark:text-purple-300 hover:bg-purple-50 shadow-sm"
-                            title="طباعة سند وإقرار السلفة A4"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-purple-600" />
-                            <span>سند A4</span>
-                          </Button>
-
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => handleDelete(adv)}
-                            className="h-8 w-8 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-xl"
-                            title="حذف وإلغاء السلفة"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-      </Card>
-
-      {/* ─── REPAYMENT MODAL (تسجيل سداد مالي من السلفة) ───────────────────────── */}
-      <Dialog open={repaymentModalOpen} onOpenChange={setRepaymentModalOpen}>
-        <DialogContent className="max-w-md text-right" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="font-heading font-black text-lg text-foreground flex items-center gap-2">
-              <Coins className="w-5 h-5 text-emerald-600" />
-              <span>تسجيل سداد مالي من السلفة</span>
-            </DialogTitle>
-          </DialogHeader>
-
-          {selectedAdvForRepay && (
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (isSubmittingRepay) return;
-              setIsSubmittingRepay(true);
-              try {
-                const amtNum = Number(repayForm.amount);
-                if (!amtNum || amtNum <= 0) {
-                  throw new Error('يرجى إدخال مبلغ سداد صحيح أكبر من الصفر');
-                }
-
-                await recordAdvanceRepayment({
-                  advanceId: selectedAdvForRepay.id,
-                  amount: amtNum,
-                  paymentDate: repayForm.payment_date,
-                  paymentMethod: repayForm.payment_method,
-                  notes: repayForm.notes,
-                  receiptNumber: repayForm.receipt_number,
-                  recordedBy: user?.full_name || 'المحاسب المالي'
-                });
-
-                toast({ title: '✓ تم تسجيل وسداد الدفعة بنجاح وتحديث الرصيد سحابياً' });
-                setRepaymentModalOpen(false);
-                setSelectedAdvForRepay(null);
-                onRefresh();
-              } catch (err) {
-                toast({ title: 'خطأ في تسجيل السداد', description: err.message, variant: 'destructive' });
-              } finally {
-                setIsSubmittingRepay(false);
-              }
-            }} className="space-y-4 py-2 text-xs">
-              
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border space-y-1.5">
-                <div className="flex justify-between font-bold text-foreground">
-                  <span>الموظف:</span>
-                  <span>{selectedAdvForRepay.employee_name}</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>إجمالي السلفة:</span>
-                  <span className="font-mono">{fmtNum(selectedAdvForRepay.total_amount)} ر.س</span>
-                </div>
-                <div className="flex justify-between font-bold text-rose-600">
-                  <span>الرصيد المتبقي الحالي:</span>
-                  <span className="font-mono">{fmtNum(selectedAdvForRepay.remaining_balance || selectedAdvForRepay.total_amount)} ر.س</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">مبلغ السداد (ر.س) *</Label>
-                  <Input
-                    type="number"
-                    value={repayForm.amount}
-                    onChange={(e) => setRepayForm({ ...repayForm, amount: e.target.value })}
-                    max={Number(selectedAdvForRepay.remaining_balance || selectedAdvForRepay.total_amount)}
-                    min="1"
-                    className="h-9 text-xs font-mono font-bold"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">تاريخ السداد *</Label>
-                  <Input
-                    type="date"
-                    value={repayForm.payment_date}
-                    onChange={(e) => setRepayForm({ ...repayForm, payment_date: e.target.value })}
-                    className="h-9 text-xs font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">طريقة السداد *</Label>
-                  <Select value={repayForm.payment_method} onValueChange={(v) => setRepayForm({ ...repayForm, payment_method: v })}>
-                    <SelectTrigger className="h-9 text-xs rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">نقداً (كاش) 💵</SelectItem>
-                      <SelectItem value="bank_transfer">تحويل بنكي 🏦</SelectItem>
-                      <SelectItem value="manual_adjustment">خصم تسوية إدارية 🔀</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">رقم سند القبض / الإيصال</Label>
-                  <Input
-                    value={repayForm.receipt_number}
-                    onChange={(e) => setRepayForm({ ...repayForm, receipt_number: e.target.value })}
-                    placeholder="مثال: REC-99412"
-                    className="h-9 text-xs font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold">ملاحظات السداد</Label>
-                <Input
-                  value={repayForm.notes}
-                  onChange={(e) => setRepayForm({ ...repayForm, notes: e.target.value })}
-                  placeholder="ملاحظات أو سبب السداد الاستثنائي..."
-                  className="h-9 text-xs"
-                />
-              </div>
-
-              <DialogFooter className="gap-2 sm:justify-start pt-2">
-                <Button type="submit" disabled={isSubmittingRepay} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-9 px-4 gap-1.5 shadow-md">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{isSubmittingRepay ? 'جاري الحفظ...' : 'تأكيد وحفظ السداد المالي'}</span>
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setRepaymentModalOpen(false)} className="rounded-xl text-xs font-bold h-9">
-                  إلغاء
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
         </DialogContent>
       </Dialog>
 
@@ -3816,3 +3500,1521 @@ function AdvancesManagementHub({ employees, advancesList, onRefresh, onOpenNewAd
     </div>
   );
 }
+
+
+// ─── STAGE 5 COMPONENT: HISTORICAL CERTIFIED PAYSLIP WITH ACCOUNTANT STAMP ────
+function Stage5HistoricalArchive({ employees, branches, monthPrefix, allPayrolls, attendanceLogs, shifts, settings, fmtNum, onOpenPayslip }) {
+  const [selectedBranch, setSelectedBranch] = useState('all');
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(monthPrefix || '2026-08');
+  const [extractedData, setExtractedData] = useState(null);
+  const { toast } = useToast();
+
+  const branchEmployees = useMemo(() => {
+    if (selectedBranch === 'all') return employees;
+    return employees.filter(e => (e.branch_name || e.branch || '') === selectedBranch);
+  }, [employees, selectedBranch]);
+
+  useEffect(() => {
+    if (branchEmployees.length > 0) {
+      setSelectedEmpId(String(branchEmployees[0].employee_number || branchEmployees[0].id));
+    } else {
+      setSelectedEmpId('');
+    }
+  }, [branchEmployees]);
+
+  const handleExtract = () => {
+    if (!selectedEmpId) {
+      toast({ title: 'يرجى اختيار الموظف', variant: 'destructive' });
+      return;
+    }
+
+    const emp = employees.find(e => String(e.employee_number || e.id) === String(selectedEmpId));
+    if (!emp) return;
+
+    const result = computeEmployeePayroll(emp, attendanceLogs, shifts, { ...settings, monthPrefix: selectedMonth });
+    setExtractedData({
+      employee: emp,
+      month: selectedMonth,
+      payroll: result,
+      extractedAt: new Date().toISOString()
+    });
+
+    if (onOpenPayslip) {
+      onOpenPayslip(result);
+    }
+    toast({ title: `✓ تم استخراج وفتح قسيمة الراتب الرسمية A4 لـ: ${emp.full_name}` });
+  };
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      
+      {/* Search & Extraction Controls Card */}
+      <Card className="p-5 rounded-3xl border bg-card shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center justify-center font-bold">
+              <Award className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-heading font-black text-base text-foreground">
+                أرشيف مسيرات الرواتب المعتمدة والمختومة
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                استخراج وطباعة قسيمة الراتب الرسمية A4 المتوافقة مع البنوك ووزارة الموارد البشرية ونظام حماية الأجور (WPS)
+              </p>
+            </div>
+          </div>
+          <Badge className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 text-xs font-bold px-3 py-1">
+            WPS Compliant ✓
+          </Badge>
+        </div>
+
+        {/* 3 Selectors */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+          
+          {/* 1. Branch */}
+          <div className="space-y-1.5">
+            <Label className="font-bold text-foreground">1. اختر فرع الموظف:</Label>
+            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+              <SelectTrigger className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/60 h-11 font-bold">
+                <SelectValue placeholder="اختر الفرع..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كافة الفروع والأقسام</SelectItem>
+                <SelectItem value="مكتب الإدارة">مكتب الإدارة</SelectItem>
+                <SelectItem value="الفرع الرئيسي">الفرع الرئيسي</SelectItem>
+                <SelectItem value="فرع هونداي ( الرواف )">فرع هونداي ( الرواف )</SelectItem>
+                <SelectItem value="فرع كيا ( السليم )">فرع كيا ( السليم )</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 2. Employee */}
+          <div className="space-y-1.5">
+            <Label className="font-bold text-foreground">2. اختر اسم الموظف:</Label>
+            <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+              <SelectTrigger className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/60 h-11 font-bold">
+                <SelectValue placeholder="اختر الموظف..." />
+              </SelectTrigger>
+              <SelectContent>
+                {branchEmployees.map(e => (
+                  <SelectItem key={e.id} value={String(e.employee_number || e.id)}>
+                    {e.full_name} (#{e.employee_number})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 3. Month */}
+          <div className="space-y-1.5">
+            <Label className="font-bold text-foreground">3. الشهر المالي المعتمد:</Label>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/60 h-11 font-bold font-mono">
+                <SelectValue placeholder="اختر الشهر..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2026-08">أغسطس 2026 (August 2026)</SelectItem>
+                <SelectItem value="2026-07">يوليو 2026 (July 2026)</SelectItem>
+                <SelectItem value="2026-06">يونيو 2026 (June 2026)</SelectItem>
+                <SelectItem value="2026-05">مايو 2026 (May 2026)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 4. Extract Button */}
+          <div className="flex items-end">
+            <Button
+              onClick={handleExtract}
+              className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs gap-2 shadow-md shadow-emerald-600/20"
+            >
+              <Printer className="w-4 h-4" />
+              <span>استخراج وطباعة قسيمة الراتب A4</span>
+            </Button>
+          </div>
+
+        </div>
+      </Card>
+
+      {/* Extracted Payslip Document Banner */}
+      {extractedData && (
+        <div className="bg-white dark:bg-slate-900 border-2 border-emerald-500/30 rounded-3xl p-6 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+              <CheckCircle2 className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="font-heading font-black text-base text-foreground">
+                مسير راتب: {extractedData.employee.full_name} (#{extractedData.employee.employee_number})
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                صافي الراتب المستحق: <strong className="text-emerald-600 font-mono text-sm">{fmtNum(extractedData.payroll.netSalary)} ر.س</strong> • شهر: {extractedData.month}
+              </div>
+            </div>
+          </div>
+
+          <Button
+            onClick={() => onOpenPayslip && onOpenPayslip(extractedData.payroll)}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs h-11 px-6 rounded-2xl gap-2 shadow-md"
+          >
+            <Printer className="w-4 h-4 text-emerald-400" />
+            <span>فتح نافذة الطباعة الرسمية A4</span>
+          </Button>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// ─── DEDICATED ADVANCES & LOANS MANAGEMENT HUB COMPONENT ─────────────────────
+function AdvancesManagementHub({ employees, advancesList, onRefresh, onOpenNewAdvance, onPrintAdvance, fmtNum }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  // Active Hub View: 'advances' (جدول السلف) or 'repayments' (سجل وسداد السلف)
+  const [activeView, setActiveView] = useState('advances');
+
+  // ─── ADVANCES VIEW STATE ──────────────────────────────────────────────────
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'completed'
+
+  // Modal: Record Repayment from an Advance Row
+  const [repaymentModalOpen, setRepaymentModalOpen] = useState(false);
+  const [selectedAdvForRepay, setSelectedAdvForRepay] = useState(null);
+  const [isSubmittingRepay, setIsSubmittingRepay] = useState(false);
+  const [repayForm, setRepayForm] = useState({
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'cash',
+    notes: '',
+    receipt_number: ''
+  });
+
+  // ─── REPAYMENTS VIEW STATE ────────────────────────────────────────────────
+  const [repaySearch, setRepaySearch] = useState('');
+  const [repayBranch, setRepayBranch] = useState('all');
+  const [repayDateFrom, setRepayDateFrom] = useState('');
+  const [repayDateTo, setRepayDateTo] = useState('');
+  const [repayMethod, setRepayMethod] = useState('all');
+
+  // Modal: Edit Repayment
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedRepayForEdit, setSelectedRepayForEdit] = useState(null);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editRepayForm, setEditRepayForm] = useState({
+    amount: '',
+    payment_date: '',
+    payment_method: 'cash',
+    receipt_number: '',
+    notes: ''
+  });
+
+  // Modal: Record New / Past Repayment Directly
+  const [directRepayModalOpen, setDirectRepayModalOpen] = useState(false);
+  const [isSubmittingDirect, setIsSubmittingDirect] = useState(false);
+  const [directForm, setDirectForm] = useState({
+    employee_number: '',
+    advance_id: '',
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'cash',
+    receipt_number: '',
+    notes: 'سداد دفعة سابقة / تسوية سلفة'
+  });
+
+  // ─── DATA NORMALIZATION & COMPUTATIONS ────────────────────────────────────
+  const normalizedList = useMemo(() => {
+    return (advancesList || [])
+      .map(a => normalizeAdvance(a))
+      .filter(a => a && a.total_amount > 0);
+  }, [advancesList]);
+
+  // All Repayments (Historical, Opening, Salary Deductions, Direct Receipts)
+  const allRepayments = useMemo(() => {
+    return getAllRepayments(advancesList, employees);
+  }, [advancesList, employees]);
+
+  // Unique Branches from employees
+  const availableBranches = useMemo(() => {
+    const set = new Set();
+    (employees || []).forEach(e => {
+      const b = (e.branch_name || e.branch || '').trim();
+      if (b) set.add(b);
+    });
+    return Array.from(set).sort();
+  }, [employees]);
+
+  // Advances Stats
+  const advancesStats = useMemo(() => {
+    let totalGranted = 0;
+    let totalRepaid = 0;
+    let activeCount = 0;
+    let completedCount = 0;
+
+    normalizedList.forEach(adv => {
+      const amt = Number(adv.total_amount) || 0;
+      const paid = Number(adv.paid_amount) || 0;
+      totalGranted += amt;
+      totalRepaid += paid;
+      const rem = Math.max(0, amt - paid);
+      if (rem <= 0 || adv.status === 'completed') completedCount++;
+      else activeCount++;
+    });
+
+    const totalRemaining = Math.max(0, totalGranted - totalRepaid);
+    return { totalGranted, totalRepaid, totalRemaining, activeCount, completedCount, totalCount: normalizedList.length };
+  }, [normalizedList]);
+
+  // Filtered Advances
+  const filteredAdvances = useMemo(() => {
+    return normalizedList.filter(adv => {
+      const q = search.toLowerCase();
+      const matchSearch = !search ||
+        (adv.employee_name || '').toLowerCase().includes(q) ||
+        (adv.employee_number || '').toString().includes(q) ||
+        (adv.reason || '').toLowerCase().includes(q);
+
+      const rem = Math.max(0, (Number(adv.total_amount) || 0) - (Number(adv.paid_amount) || 0));
+      const isComp = rem <= 0 || adv.status === 'completed';
+
+      let matchStatus = true;
+      if (statusFilter === 'active') matchStatus = !isComp;
+      if (statusFilter === 'completed') matchStatus = isComp;
+
+      return matchSearch && matchStatus;
+    });
+  }, [normalizedList, search, statusFilter]);
+
+  // Filtered Repayments
+  const filteredRepayments = useMemo(() => {
+    return allRepayments.filter(r => {
+      const q = repaySearch.trim().toLowerCase();
+      const matchSearch = !q ||
+        (r.employee_name || '').toLowerCase().includes(q) ||
+        String(r.employee_number || '').includes(q) ||
+        (r.receipt_number || '').toLowerCase().includes(q) ||
+        (r.notes || '').toLowerCase().includes(q) ||
+        (r.advance_reason || '').toLowerCase().includes(q);
+
+      const matchBranch = repayBranch === 'all' || r.branch_name === repayBranch;
+      const matchDateFrom = !repayDateFrom || (r.payment_date && r.payment_date >= repayDateFrom);
+      const matchDateTo = !repayDateTo || (r.payment_date && r.payment_date <= repayDateTo);
+
+      let matchMethod = true;
+      if (repayMethod === 'cash') matchMethod = r.payment_method === 'cash' || (r.payment_method && (r.payment_method.includes('نقدي') || r.payment_method.includes('كاش')));
+      else if (repayMethod === 'bank_transfer') matchMethod = r.payment_method === 'bank_transfer' || (r.payment_method && r.payment_method.includes('تحويل'));
+      else if (repayMethod === 'payroll') matchMethod = r.is_payroll_deduction || (r.payment_method && (r.payment_method.includes('استقطاع') || r.payment_method.includes('خصم')));
+      else if (repayMethod === 'opening') matchMethod = r.is_opening || (r.payment_method && (r.payment_method.includes('سابق') || r.payment_method.includes('افتتاحي')));
+
+      return matchSearch && matchBranch && matchDateFrom && matchDateTo && matchMethod;
+    });
+  }, [allRepayments, repaySearch, repayBranch, repayDateFrom, repayDateTo, repayMethod]);
+
+  // Repayments Stats
+  const repaymentStats = useMemo(() => {
+    let totalPaid = 0;
+    const uniqueEmps = new Set();
+    filteredRepayments.forEach(r => {
+      totalPaid += Number(r.amount) || 0;
+      if (r.employee_number) uniqueEmps.add(String(r.employee_number));
+    });
+    return {
+      totalPaid,
+      totalCount: filteredRepayments.length,
+      uniqueEmpsCount: uniqueEmps.size,
+      avgAmount: filteredRepayments.length > 0 ? Math.round(totalPaid / filteredRepayments.length) : 0
+    };
+  }, [filteredRepayments]);
+
+  // Quick Date Range Helpers
+  const setDateRangePreset = (preset) => {
+    const now = new Date();
+    if (preset === 'all') {
+      setRepayDateFrom('');
+      setRepayDateTo('');
+    } else if (preset === 'this_month') {
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      setRepayDateFrom(`${y}-${m}-01`);
+      setRepayDateTo(now.toISOString().split('T')[0]);
+    } else if (preset === 'last_month') {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const y = prev.getFullYear();
+      const m = String(prev.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(y, prev.getMonth() + 1, 0).getDate();
+      setRepayDateFrom(`${y}-${m}-01`);
+      setRepayDateTo(`${y}-${m}-${lastDay}`);
+    } else if (preset === 'last_3_months') {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 3);
+      setRepayDateFrom(d.toISOString().split('T')[0]);
+      setRepayDateTo(now.toISOString().split('T')[0]);
+    }
+  };
+
+  // ─── ACTIONS ──────────────────────────────────────────────────────────────
+  const handleDeleteAdvance = async (adv) => {
+    if (!adv || !adv.id) return;
+    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء سلفة الموظف: ${adv.employee_name || ''} بمبلغ ${fmtNum(adv.total_amount)} ر.س نهائياً؟`)) {
+      return;
+    }
+
+    try {
+      await deleteAdvance(adv.id, adv);
+      toast({ title: '✓ تم حذف وإلغاء السلفة بنجاح من النظام والسحابة' });
+      onRefresh();
+    } catch (err) {
+      toast({ title: 'خطأ في حذف السلفة', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleOpenEditRepayment = (repay) => {
+    setSelectedRepayForEdit(repay);
+    setEditRepayForm({
+      amount: String(repay.amount || ''),
+      payment_date: repay.payment_date || new Date().toISOString().split('T')[0],
+      payment_method: repay.payment_method || 'cash',
+      receipt_number: repay.receipt_number || '',
+      notes: repay.notes || ''
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEditRepayment = async (e) => {
+    e.preventDefault();
+    if (isSubmittingEdit || !selectedRepayForEdit) return;
+    setIsSubmittingEdit(true);
+    try {
+      const amtNum = Number(editRepayForm.amount);
+      if (!amtNum || amtNum <= 0) throw new Error('يرجى إدخال مبلغ سداد صحيح أكبر من الصفر');
+
+      await updateAdvanceRepayment({
+        advanceId: selectedRepayForEdit.advance_id,
+        paymentId: selectedRepayForEdit.id,
+        amount: amtNum,
+        paymentDate: editRepayForm.payment_date,
+        paymentMethod: editRepayForm.payment_method,
+        notes: editRepayForm.notes,
+        receiptNumber: editRepayForm.receipt_number,
+        recordedBy: user?.full_name || 'المحاسب المالي'
+      });
+
+      toast({ title: '✓ تم تعديل بيانات سند السداد وتحديث رصيد السلفة بنجاح' });
+      setEditModalOpen(false);
+      setSelectedRepayForEdit(null);
+      onRefresh();
+    } catch (err) {
+      toast({ title: 'خطأ في تعديل السداد', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
+
+  const handleDeleteRepayment = async (repay) => {
+    if (!repay) return;
+    const confirmMsg = `هل أنت متأكد من حذف سند السداد رقم "${repay.receipt_number}" بمبلغ ${fmtNum(repay.amount)} ر.س للموظف ${repay.employee_name}؟\n\nسيتم إلغاء السداد وإعادة احتساب الرصيد المتبقي للسلفة فوراً.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteAdvanceRepayment({
+        advanceId: repay.advance_id,
+        paymentId: repay.id
+      });
+      toast({ title: '✓ تم حذف سند السداد واستعادة رصيد السلفة بنجاح' });
+      onRefresh();
+    } catch (err) {
+      toast({ title: 'خطأ في حذف سند السداد', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleSaveDirectRepayment = async (e) => {
+    e.preventDefault();
+    if (isSubmittingDirect) return;
+    setIsSubmittingDirect(true);
+    try {
+      if (!directForm.advance_id) throw new Error('يرجى اختيار السلفة المستهدفة بالسداد');
+      const amtNum = Number(directForm.amount);
+      if (!amtNum || amtNum <= 0) throw new Error('يرجى إدخال مبلغ سداد صحيح أكبر من الصفر');
+
+      await recordAdvanceRepayment({
+        advanceId: directForm.advance_id,
+        amount: amtNum,
+        paymentDate: directForm.payment_date,
+        paymentMethod: directForm.payment_method,
+        notes: directForm.notes,
+        receiptNumber: directForm.receipt_number || ('REC-' + Date.now().toString().slice(-6)),
+        recordedBy: user?.full_name || 'المحاسب المالي'
+      });
+
+      toast({ title: '✓ تم تسجيل السداد وحفظه بنجاح وتحديث أرصدة السلف' });
+      setDirectRepayModalOpen(false);
+      setDirectForm({
+        employee_number: '',
+        advance_id: '',
+        amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_method: 'cash',
+        receipt_number: '',
+        notes: 'سداد دفعة سابقة / تسوية سلفة'
+      });
+      onRefresh();
+    } catch (err) {
+      toast({ title: 'خطأ في تسجيل السداد', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsSubmittingDirect(false);
+    }
+  };
+
+  const selectedDirectEmployeeAdvances = useMemo(() => {
+    if (!directForm.employee_number) return [];
+    return normalizedList.filter(a => String(a.employee_number).trim() === String(directForm.employee_number).trim());
+  }, [directForm.employee_number, normalizedList]);
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      
+      {/* ─── 1. TOP TITLE BAR & SUB-TABS ───────────────────────────────────── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-3xl border shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-lg shadow-sky-500/20 shrink-0 font-bold">
+            <CreditCard className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-heading font-black text-foreground">
+                نظام إدارة السلف والقروض وسجل السداد
+              </h1>
+              <Badge className="bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 text-xs font-mono font-bold">
+                {normalizedList.length} سلفة • {allRepayments.length} سند سداد
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              متابعة السلف القائمة، جدول السدادات القديمة والجديدة، وإدارة سندات القبض والتسويات
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {activeView === 'advances' ? (
+            <Button
+              onClick={onOpenNewAdvance}
+              className="bg-sky-600 hover:bg-sky-600 text-white rounded-2xl text-xs font-black gap-2 h-10 px-5 shadow-md shadow-sky-500/20"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>تسجيل سلفة جديدة لموظف</span>
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setDirectRepayModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black gap-2 h-10 px-5 shadow-md shadow-emerald-500/20"
+            >
+              <Coins className="w-4 h-4" />
+              <span>تسجيل سند سداد جديد أو سابق 💵</span>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── 2. SUB-VIEW TABS SWITCHER ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-2xl border">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveView('advances')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeView === 'advances'
+                ? 'bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 shadow-sm border'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>جدول ومتابعة السلف والقروض</span>
+            <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-mono">
+              {normalizedList.length}
+            </Badge>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('repayments')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeView === 'repayments'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Coins className="w-4 h-4" />
+            <span>لوحة وسجل سداد السلف (القديم والجديد)</span>
+            <Badge className={`${activeView === 'repayments' ? 'bg-sky-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'} text-[10px] py-0 px-1.5 font-mono`}>
+              {allRepayments.length}
+            </Badge>
+          </button>
+        </div>
+
+        {activeView === 'repayments' && (
+          <div className="text-xs text-muted-foreground font-medium px-2">
+            تم العثور على <span className="font-bold text-foreground font-mono">{filteredRepayments.length}</span> سند سداد
+          </div>
+        )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          VIEW 1: ADVANCES TABLE (كشف وسجلات السلف)
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {activeView === 'advances' && (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">إجمالي مبالغ السلف</div>
+                <div className="font-mono font-black text-2xl text-sky-700 dark:text-sky-400 mt-1">
+                  {fmtNum(advancesStats.totalGranted)} <span className="text-xs font-normal">ر.س</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{advancesStats.totalCount} سلفة إجمالية</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 flex items-center justify-center">
+                <CreditCard className="w-5 h-5" />
+              </div>
+            </Card>
+
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">المبالغ المسددة والمستردة</div>
+                <div className="font-mono font-black text-2xl text-emerald-600 dark:text-emerald-400 mt-1">
+                  {fmtNum(advancesStats.totalRepaid)} <span className="text-xs font-normal">ر.س</span>
+                </div>
+                <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                  {advancesStats.totalGranted > 0 ? Math.round((advancesStats.totalRepaid / advancesStats.totalGranted) * 100) : 0}% نسبة الاسترداد
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </Card>
+
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">الرصيد المتبقي قيد السداد</div>
+                <div className="font-mono font-black text-2xl text-rose-600 dark:text-rose-400 mt-1">
+                  {fmtNum(advancesStats.totalRemaining)} <span className="text-xs font-normal">ر.س</span>
+                </div>
+                <div className="text-[10px] text-rose-500 font-bold mt-0.5">ذمم مدينة قيد الاستقطاع</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center">
+                <Clock className="w-5 h-5" />
+              </div>
+            </Card>
+
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">السلف النشطة الجارية</div>
+                <div className="font-mono font-black text-2xl text-sky-600 dark:text-sky-400 mt-1">
+                  {advancesStats.activeCount} <span className="text-xs font-normal">سلف</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{advancesStats.completedCount} سلفة مكتملة السداد</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 flex items-center justify-center">
+                <Users className="w-5 h-5" />
+              </div>
+            </Card>
+          </div>
+
+          {/* Advances Table Card */}
+          <Card className="rounded-3xl border bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            <div className="p-4 border-b flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="البحث باسم الموظف، الرقم الوظيفي، أو سبب السلفة..."
+                  className="pr-9 h-10 rounded-2xl text-xs bg-slate-50 dark:bg-slate-800 border-0"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    statusFilter === 'all' ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground'
+                  }`}
+                >
+                  الكل ({normalizedList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('active')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    statusFilter === 'active' ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground'
+                  }`}
+                >
+                  السارية فقط ({advancesStats.activeCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('completed')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    statusFilter === 'completed' ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground'
+                  }`}
+                >
+                  المسددة بالكامل ({advancesStats.completedCount})
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs" style={{ direction: 'rtl' }}>
+                <thead>
+                  <tr className="bg-sky-600 text-white font-heading font-black border-b border-sky-700">
+                    <th className="py-3.5 px-4">الموظف والفرع</th>
+                    <th className="py-3.5 px-3">مبلغ السلفة</th>
+                    <th className="py-3.5 px-3">القسط الشهري والمدة</th>
+                    <th className="py-3.5 px-3">سبب ومبرر السلفة</th>
+                    <th className="py-3.5 px-3">المسدد حتى الآن</th>
+                    <th className="py-3.5 px-3">المتبقي للسداد</th>
+                    <th className="py-3.5 px-3">شهر البداية</th>
+                    <th className="py-3.5 px-3">الحالة</th>
+                    <th className="py-3.5 px-4 text-center">الخيارات والطباعة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredAdvances.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-muted-foreground font-bold">
+                        لا توجد سلف مسجلة مطابقة للبحث
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAdvances.map((adv) => {
+                      const emp = employees.find(e => String(e.employee_number || e.id) === String(adv.employee_number));
+                      const total = Number(adv.total_amount) || 0;
+                      const paid = Number(adv.paid_amount) || 0;
+                      const remaining = Math.max(0, total - paid);
+                      const isCompleted = remaining <= 0 || adv.status === 'completed';
+                      const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
+                      return (
+                        <tr key={adv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-foreground text-xs">
+                              {emp?.full_name || adv.employee_name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono">
+                              {adv.employee_number} • {emp?.branch_name || adv.branch || 'الفرع الرئيسي'}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-3 font-mono font-black text-sky-950 dark:text-sky-300 text-sm">
+                            {fmtNum(adv.total_amount)} ر.س
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            <div className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                              {fmtNum(adv.monthly_installment)} ر.س / شهر
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              على {adv.total_installments} أشهر
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-3 max-w-[160px]">
+                            <span className="text-xs text-foreground font-medium line-clamp-2">
+                              {adv.reason || 'سلفة شخصية'}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            <div className="font-mono font-bold text-emerald-600">
+                              {fmtNum(paid)} ر.س ({percent}%)
+                            </div>
+                            <div className="w-20 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-1 overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${percent}%` }}></div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-3 font-mono font-black text-rose-600 text-sm">
+                            {fmtNum(remaining)} ر.س
+                          </td>
+
+                          <td className="py-3.5 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
+                            {adv.start_month}
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            {isCompleted ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px]">
+                                ✓ مسددة بالكامل
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold text-[10px]">
+                                🟢 سارية وقيد الاستقطاع
+                              </Badge>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedAdvForRepay(adv);
+                                  setRepayForm({
+                                    amount: String(Math.min(adv.monthly_installment || 500, remaining)),
+                                    payment_date: new Date().toISOString().split('T')[0],
+                                    payment_method: 'cash',
+                                    notes: 'سداد دفعة نقدية من السلفة',
+                                    receipt_number: 'REC-' + Date.now().toString().slice(-5)
+                                  });
+                                  setRepaymentModalOpen(true);
+                                }}
+                                className="h-8 text-xs font-bold rounded-xl gap-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
+                                title="تسجيل سداد دفعة من السلفة في أي وقت"
+                              >
+                                <Coins className="w-3.5 h-3.5" />
+                                <span>تسجيل سداد 💵</span>
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onPrintAdvance(adv)}
+                                className="h-8 text-xs font-bold rounded-xl gap-1 border-sky-300 text-sky-900 dark:text-sky-300 hover:bg-sky-50 shadow-sm"
+                                title="طباعة سند وإقرار السلفة A4"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-sky-600" />
+                                <span>سند A4</span>
+                              </Button>
+
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDeleteAdvance(adv)}
+                                className="h-8 w-8 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-xl"
+                                title="حذف وإلغاء السلفة"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          VIEW 2: DEDICATED REPAYMENTS DASHBOARD (لوحة وسجل سداد السلف القديم والجديد)
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {activeView === 'repayments' && (
+        <div className="space-y-5">
+          
+          {/* 1. Top KPI Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">إجمالي المبالغ المسددة المعروضة</div>
+                <div className="font-mono font-black text-2xl text-emerald-600 dark:text-emerald-400 mt-1">
+                  {fmtNum(repaymentStats.totalPaid)} <span className="text-xs font-normal">ر.س</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">من {repaymentStats.totalCount} حركة سداد</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center font-bold">
+                <Coins className="w-5 h-5" />
+              </div>
+            </Card>
+
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">إجمالي سندات وعمليات السداد</div>
+                <div className="font-mono font-black text-2xl text-sky-700 dark:text-sky-400 mt-1">
+                  {repaymentStats.totalCount} <span className="text-xs font-normal">سند / عملية</span>
+                </div>
+                <div className="text-[10px] text-sky-600 font-bold mt-0.5">سدادات قديمة وجديدة مسجلة</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 flex items-center justify-center font-bold">
+                <Receipt className="w-5 h-5" />
+              </div>
+            </Card>
+
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">الموظفون المسددون</div>
+                <div className="font-mono font-black text-2xl text-sky-600 dark:text-sky-400 mt-1">
+                  {repaymentStats.uniqueEmpsCount} <span className="text-xs font-normal">موظف</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">سددوا أقساط أو دفعات معتمدة</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 flex items-center justify-center font-bold">
+                <Users className="w-5 h-5" />
+              </div>
+            </Card>
+
+            <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-bold">متوسط مبلغ السند / الدفعة</div>
+                <div className="font-mono font-black text-2xl text-amber-600 dark:text-amber-400 mt-1">
+                  {fmtNum(repaymentStats.avgAmount)} <span className="text-xs font-normal">ر.س</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">معدل الدفعة المستردة الواحدة</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center font-bold">
+                <SlidersHorizontal className="w-5 h-5" />
+              </div>
+            </Card>
+          </div>
+
+          {/* 2. Advanced Filters Toolbar (فلترة بالتاريخ، واسم الموظف، والفرع التابع له) */}
+          <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-sky-600" />
+                <span className="text-xs font-bold text-foreground">فلترة وتصفية سجلات السداد المالي</span>
+              </div>
+
+              {/* Quick Date Presets */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-muted-foreground font-bold ml-1">فترات سريعة:</span>
+                <button
+                  type="button"
+                  onClick={() => setDateRangePreset('all')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                    !repayDateFrom && !repayDateTo ? 'bg-sky-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  الكل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateRangePreset('this_month')}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground transition-all"
+                >
+                  هذا الشهر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateRangePreset('last_month')}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground transition-all"
+                >
+                  الشهر الماضي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateRangePreset('last_3_months')}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground transition-all"
+                >
+                  آخر 3 أشهر
+                </button>
+                {(repaySearch || repayBranch !== 'all' || repayDateFrom || repayDateTo || repayMethod !== 'all') && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setRepaySearch('');
+                      setRepayBranch('all');
+                      setRepayDateFrom('');
+                      setRepayDateTo('');
+                      setRepayMethod('all');
+                    }}
+                    className="h-7 px-2 text-[11px] text-rose-600 hover:bg-rose-50 gap-1 rounded-lg"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>إعادة ضبط</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Inputs Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+              
+              {/* Search Employee Name / Number / Receipt */}
+              <div className="space-y-1 lg:col-span-2">
+                <Label className="text-[11px] font-bold text-muted-foreground">البحث باسم الموظف أو الرقم أو رقم السند</Label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    value={repaySearch}
+                    onChange={(e) => setRepaySearch(e.target.value)}
+                    placeholder="ابحث بالاسم، الرقم الوظيفي، أو رقم السند..."
+                    className="pr-8 h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-0"
+                  />
+                </div>
+              </div>
+
+              {/* Branch Filter */}
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground">الفرع التابع له الموظف</Label>
+                <Select value={repayBranch} onValueChange={setRepayBranch}>
+                  <SelectTrigger className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-0">
+                    <SelectValue placeholder="كافة الفروع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كافة الفروع ({availableBranches.length})</SelectItem>
+                    {availableBranches.map(b => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date From */}
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground">من تاريخ</Label>
+                <Input
+                  type="date"
+                  value={repayDateFrom}
+                  onChange={(e) => setRepayDateFrom(e.target.value)}
+                  className="h-9 text-xs rounded-xl font-mono bg-slate-50 dark:bg-slate-800 border-0"
+                />
+              </div>
+
+              {/* Date To */}
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground">إلى تاريخ</Label>
+                <Input
+                  type="date"
+                  value={repayDateTo}
+                  onChange={(e) => setRepayDateTo(e.target.value)}
+                  className="h-9 text-xs rounded-xl font-mono bg-slate-50 dark:bg-slate-800 border-0"
+                />
+              </div>
+
+            </div>
+          </Card>
+
+          {/* 3. Repayments Table */}
+          <Card className="rounded-3xl border bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs" style={{ direction: 'rtl' }}>
+                <thead>
+                  <tr className="bg-sky-600 text-white font-heading font-black border-b border-sky-700">
+                    <th className="py-3.5 px-4">رقم السند / الإيصال</th>
+                    <th className="py-3.5 px-3">تاريخ السداد</th>
+                    <th className="py-3.5 px-4">الموظف والفرع</th>
+                    <th className="py-3.5 px-3">مبلغ السداد</th>
+                    <th className="py-3.5 px-3">طريقة السداد</th>
+                    <th className="py-3.5 px-3">السلفة المرتبطة</th>
+                    <th className="py-3.5 px-3">البيان والملاحظات</th>
+                    <th className="py-3.5 px-4 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredRepayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-muted-foreground font-bold">
+                        <div className="space-y-2">
+                          <Receipt className="w-8 h-8 text-muted-foreground/50 mx-auto" />
+                          <p>لا توجد سندات أو عمليات سداد مطابقة لشروط الفلترة المحددة</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRepayments.map((repay) => {
+                      const methodBadge = () => {
+                        if (repay.is_opening) {
+                          return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold text-[10px]">رصيد سابق / افتتاحي</Badge>;
+                        }
+                        if (repay.is_payroll_deduction) {
+                          return <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-bold text-[10px]">خصم مسير رواتب</Badge>;
+                        }
+                        if (repay.payment_method === 'bank_transfer' || (repay.payment_method && repay.payment_method.includes('تحويل'))) {
+                          return <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-bold text-[10px]">تحويل بنكي 🏦</Badge>;
+                        }
+                        return <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px]">نقداً (كاش) 💵</Badge>;
+                      };
+
+                      return (
+                        <tr key={repay.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                          
+                          {/* Receipt Number */}
+                          <td className="py-3.5 px-4 font-mono font-bold text-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <Receipt className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                              <span className="text-xs">{repay.receipt_number}</span>
+                            </div>
+                          </td>
+
+                          {/* Payment Date */}
+                          <td className="py-3.5 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
+                            {repay.payment_date}
+                          </td>
+
+                          {/* Employee Name & Branch (No #) */}
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-foreground text-xs">
+                              {repay.employee_name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 mt-0.5">
+                              <span>{repay.employee_number}</span>
+                              <span>•</span>
+                              <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-700 dark:text-slate-300 font-sans">
+                                {repay.branch_name || 'الفرع الرئيسي'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Amount */}
+                          <td className="py-3.5 px-3 font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                            {fmtNum(repay.amount)} ر.س
+                          </td>
+
+                          {/* Method */}
+                          <td className="py-3.5 px-3">
+                            {methodBadge()}
+                          </td>
+
+                          {/* Linked Advance */}
+                          <td className="py-3.5 px-3">
+                            <div className="text-[11px] font-bold text-foreground">
+                              {fmtNum(repay.advance_total)} ر.س
+                            </div>
+                            <div className="text-[10px] font-mono text-muted-foreground">
+                              متبقي: {fmtNum(repay.advance_remaining)} ر.س
+                            </div>
+                          </td>
+
+                          {/* Notes & Recorded By */}
+                          <td className="py-3.5 px-3 max-w-[200px]">
+                            <div className="text-xs text-foreground font-medium truncate" title={repay.notes}>
+                              {repay.notes || 'سداد دفعة من السلفة'}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              بواسطة: {repay.recorded_by || 'المحاسب المالي'}
+                            </div>
+                          </td>
+
+                          {/* Actions: Edit & Delete */}
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleOpenEditRepayment(repay)}
+                                className="h-8 px-2.5 text-xs font-bold rounded-xl gap-1 border-sky-200 text-sky-700 hover:bg-sky-50 shadow-sm"
+                                title="تعديل بيانات ومبلغ السند"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>تعديل</span>
+                              </Button>
+
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDeleteRepayment(repay)}
+                                className="h-8 w-8 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-xl"
+                                title="حذف سند السداد واستعادة الرصيد"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+        </div>
+      )}
+
+      {/* ─── MODAL 1: RECORD REPAYMENT FROM AN ADVANCE ROW ───────────────────── */}
+      <Dialog open={repaymentModalOpen} onOpenChange={setRepaymentModalOpen}>
+        <DialogContent className="max-w-md text-right" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-heading font-black text-lg text-foreground flex items-center gap-2">
+              <Coins className="w-5 h-5 text-emerald-600" />
+              <span>تسجيل سداد مالي من السلفة</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedAdvForRepay && (
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (isSubmittingRepay) return;
+              setIsSubmittingRepay(true);
+              try {
+                const amtNum = Number(repayForm.amount);
+                if (!amtNum || amtNum <= 0) {
+                  throw new Error('يرجى إدخال مبلغ سداد صحيح أكبر من الصفر');
+                }
+
+                await recordAdvanceRepayment({
+                  advanceId: selectedAdvForRepay.id,
+                  amount: amtNum,
+                  paymentDate: repayForm.payment_date,
+                  paymentMethod: repayForm.payment_method,
+                  notes: repayForm.notes,
+                  receiptNumber: repayForm.receipt_number || ('REC-' + Date.now().toString().slice(-6)),
+                  recordedBy: user?.full_name || 'المحاسب المالي'
+                });
+
+                toast({ title: '✓ تم تسجيل وسداد الدفعة بنجاح وتحديث الرصيد سحابياً' });
+                setRepaymentModalOpen(false);
+                setSelectedAdvForRepay(null);
+                onRefresh();
+              } catch (err) {
+                toast({ title: 'خطأ في تسجيل السداد', description: err.message, variant: 'destructive' });
+              } finally {
+                setIsSubmittingRepay(false);
+              }
+            }} className="space-y-4 py-2 text-xs">
+              
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border space-y-1.5">
+                <div className="flex justify-between font-bold text-foreground">
+                  <span>الموظف:</span>
+                  <span>{selectedAdvForRepay.employee_name} ({selectedAdvForRepay.employee_number})</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>إجمالي السلفة:</span>
+                  <span className="font-mono">{fmtNum(selectedAdvForRepay.total_amount)} ر.س</span>
+                </div>
+                <div className="flex justify-between font-bold text-rose-600">
+                  <span>الرصيد المتبقي الحالي:</span>
+                  <span className="font-mono">{fmtNum(selectedAdvForRepay.remaining_balance !== undefined ? selectedAdvForRepay.remaining_balance : selectedAdvForRepay.total_amount)} ر.س</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">مبلغ السداد (ر.س) *</Label>
+                  <Input
+                    type="number"
+                    value={repayForm.amount}
+                    onChange={(e) => setRepayForm({ ...repayForm, amount: e.target.value })}
+                    max={Number(selectedAdvForRepay.remaining_balance !== undefined ? selectedAdvForRepay.remaining_balance : selectedAdvForRepay.total_amount)}
+                    min="1"
+                    className="h-9 text-xs font-mono font-bold"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">تاريخ السداد *</Label>
+                  <Input
+                    type="date"
+                    value={repayForm.payment_date}
+                    onChange={(e) => setRepayForm({ ...repayForm, payment_date: e.target.value })}
+                    className="h-9 text-xs font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">طريقة السداد *</Label>
+                  <Select value={repayForm.payment_method} onValueChange={(v) => setRepayForm({ ...repayForm, payment_method: v })}>
+                    <SelectTrigger className="h-9 text-xs rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">نقداً (كاش) 💵</SelectItem>
+                      <SelectItem value="bank_transfer">تحويل بنكي 🏦</SelectItem>
+                      <SelectItem value="manual_adjustment">خصم تسوية إدارية 🔀</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">رقم سند القبض / الإيصال</Label>
+                  <Input
+                    value={repayForm.receipt_number}
+                    onChange={(e) => setRepayForm({ ...repayForm, receipt_number: e.target.value })}
+                    placeholder="مثال: REC-99412"
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">ملاحظات السداد</Label>
+                <Input
+                  value={repayForm.notes}
+                  onChange={(e) => setRepayForm({ ...repayForm, notes: e.target.value })}
+                  placeholder="ملاحظات أو سبب السداد الاستثنائي..."
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:justify-start pt-2">
+                <Button type="submit" disabled={isSubmittingRepay} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-9 px-4 gap-1.5 shadow-md">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSubmittingRepay ? 'جاري الحفظ...' : 'تأكيد وحفظ السداد المالي'}</span>
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setRepaymentModalOpen(false)} className="rounded-xl text-xs font-bold h-9">
+                  إلغاء
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MODAL 2: EDIT REPAYMENT (تعديل سند سداد قديم أو جديد) ───────────── */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-md text-right" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-heading font-black text-lg text-foreground flex items-center gap-2">
+              <Edit3 className="w-5 h-5 text-sky-600" />
+              <span>تعديل بيانات سند السداد المالي</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedRepayForEdit && (
+            <form onSubmit={handleSaveEditRepayment} className="space-y-4 py-2 text-xs">
+              
+              <div className="p-3.5 rounded-2xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
+                <div className="flex justify-between font-bold text-foreground">
+                  <span>الموظف:</span>
+                  <span>{selectedRepayForEdit.employee_name} ({selectedRepayForEdit.employee_number})</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>الفرع:</span>
+                  <span>{selectedRepayForEdit.branch_name}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>إجمالي السلفة:</span>
+                  <span className="font-mono">{fmtNum(selectedRepayForEdit.advance_total)} ر.س</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">مبلغ السداد (ر.س) *</Label>
+                  <Input
+                    type="number"
+                    value={editRepayForm.amount}
+                    onChange={(e) => setEditRepayForm({ ...editRepayForm, amount: e.target.value })}
+                    min="1"
+                    className="h-9 text-xs font-mono font-bold"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">تاريخ السداد *</Label>
+                  <Input
+                    type="date"
+                    value={editRepayForm.payment_date}
+                    onChange={(e) => setEditRepayForm({ ...editRepayForm, payment_date: e.target.value })}
+                    className="h-9 text-xs font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">طريقة السداد *</Label>
+                  <Select value={editRepayForm.payment_method} onValueChange={(v) => setEditRepayForm({ ...editRepayForm, payment_method: v })}>
+                    <SelectTrigger className="h-9 text-xs rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">نقداً (كاش) 💵</SelectItem>
+                      <SelectItem value="bank_transfer">تحويل بنكي 🏦</SelectItem>
+                      <SelectItem value="سداد سابق / رصيد افتتاحي">سداد سابق / رصيد افتتاحي 📑</SelectItem>
+                      <SelectItem value="manual_adjustment">خصم تسوية إدارية 🔀</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">رقم سند القبض / الإيصال</Label>
+                  <Input
+                    value={editRepayForm.receipt_number}
+                    onChange={(e) => setEditRepayForm({ ...editRepayForm, receipt_number: e.target.value })}
+                    placeholder="REC-XXXXX"
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">بيان وملاحظات السداد</Label>
+                <Input
+                  value={editRepayForm.notes}
+                  onChange={(e) => setEditRepayForm({ ...editRepayForm, notes: e.target.value })}
+                  placeholder="ملاحظات أو مبرر التعديل..."
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:justify-start pt-2">
+                <Button type="submit" disabled={isSubmittingEdit} className="bg-sky-600 hover:bg-sky-600 text-white rounded-xl text-xs font-bold h-9 px-4 gap-1.5 shadow-md">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSubmittingEdit ? 'جاري التحديث...' : 'حفظ التعديلات وإعادة احتساب الرصيد'}</span>
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)} className="rounded-xl text-xs font-bold h-9">
+                  إلغاء
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MODAL 3: DIRECT NEW / PAST REPAYMENT (تسجيل سند سداد جديد أو قديم) ─ */}
+      <Dialog open={directRepayModalOpen} onOpenChange={setDirectRepayModalOpen}>
+        <DialogContent className="max-w-md text-right" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-heading font-black text-lg text-foreground flex items-center gap-2">
+              <Coins className="w-5 h-5 text-emerald-600" />
+              <span>تسجيل سند سداد جديد أو سابق</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveDirectRepayment} className="space-y-4 py-2 text-xs">
+            
+            {/* Pick Employee */}
+            <div className="space-y-1">
+              <Label className="text-xs font-bold">الموظف صاحب السلفة *</Label>
+              <Select
+                value={directForm.employee_number}
+                onValueChange={(val) => {
+                  const empAdvs = normalizedList.filter(a => String(a.employee_number).trim() === String(val).trim());
+                  const firstAdvId = empAdvs.length > 0 ? empAdvs[0].id : '';
+                  setDirectForm({
+                    ...directForm,
+                    employee_number: val,
+                    advance_id: firstAdvId,
+                    amount: empAdvs.length > 0 ? String(empAdvs[0].remaining_balance || empAdvs[0].monthly_installment || 500) : ''
+                  });
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs rounded-xl">
+                  <SelectValue placeholder="اختر الموظف..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {normalizedList.map(a => {
+                    const emp = employees.find(e => String(e.employee_number || e.id) === String(a.employee_number));
+                    return (
+                      <SelectItem key={a.id} value={String(a.employee_number)}>
+                        {emp?.full_name || a.employee_name} ({a.employee_number}) - متبقي: {fmtNum(a.remaining_balance)} ر.س
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Advance Selector if multiple */}
+            {selectedDirectEmployeeAdvances.length > 1 && (
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">اختر السلفة المحددة *</Label>
+                <Select
+                  value={directForm.advance_id}
+                  onValueChange={(val) => setDirectForm({ ...directForm, advance_id: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedDirectEmployeeAdvances.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        سلفة بمبلغ {fmtNum(a.total_amount)} ر.س (متبقي: {fmtNum(a.remaining_balance)} ر.س) - {a.reason}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Amount and Date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">مبلغ السداد (ر.س) *</Label>
+                <Input
+                  type="number"
+                  value={directForm.amount}
+                  onChange={(e) => setDirectForm({ ...directForm, amount: e.target.value })}
+                  min="1"
+                  className="h-9 text-xs font-mono font-bold"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">تاريخ السداد (سابق أو حالي) *</Label>
+                <Input
+                  type="date"
+                  value={directForm.payment_date}
+                  onChange={(e) => setDirectForm({ ...directForm, payment_date: e.target.value })}
+                  className="h-9 text-xs font-mono"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Payment Method and Receipt Number */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">طريقة السداد *</Label>
+                <Select
+                  value={directForm.payment_method}
+                  onValueChange={(val) => setDirectForm({ ...directForm, payment_method: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">نقداً (كاش) 💵</SelectItem>
+                    <SelectItem value="bank_transfer">تحويل بنكي 🏦</SelectItem>
+                    <SelectItem value="سداد سابق / رصيد افتتاحي">سداد سابق / رصيد افتتاحي 📑</SelectItem>
+                    <SelectItem value="manual_adjustment">خصم تسوية إدارية 🔀</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-bold">رقم سند القبض</Label>
+                <Input
+                  value={directForm.receipt_number}
+                  onChange={(e) => setDirectForm({ ...directForm, receipt_number: e.target.value })}
+                  placeholder="مثال: REC-10293"
+                  className="h-9 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1">
+              <Label className="text-xs font-bold">بيان وملاحظات السداد</Label>
+              <Input
+                value={directForm.notes}
+                onChange={(e) => setDirectForm({ ...directForm, notes: e.target.value })}
+                placeholder="بيان سبب أو طبيعة السداد..."
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:justify-start pt-2">
+              <Button
+                type="submit"
+                disabled={isSubmittingDirect || !directForm.advance_id}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-9 px-4 gap-1.5 shadow-md"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isSubmittingDirect ? 'جاري التسجيل...' : 'تسجيل وحفظ سند السداد'}</span>
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setDirectRepayModalOpen(false)} className="rounded-xl text-xs font-bold h-9">
+                إلغاء
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+    </div>
+  );
+}
+

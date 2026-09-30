@@ -71,15 +71,15 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16" dir="rtl">
       {/* Header */}
-      <div className="bg-gradient-to-l from-purple-900 via-purple-800 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-purple-700/40">
+      <div className="bg-gradient-to-l from-purple-900 via-purple-800 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-sky-600/40">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-2xl">🛡️</div>
+          <div className="w-12 h-12 rounded-2xl bg-sky-500/20 border border-purple-400/30 flex items-center justify-center text-2xl">🛡️</div>
           <div>
             <h1 className="text-xl font-black tracking-tight">لوحة تحكم مدير النظام</h1>
-            <p className="text-xs text-purple-200/80 mt-0.5">إدارة الأنظمة والمستخدمين والصلاحيات والمراقبة الكاملة</p>
+            <p className="text-xs text-sky-200/80 mt-0.5">إدارة الأنظمة والمستخدمين والصلاحيات والمراقبة الكاملة</p>
           </div>
-          <div className="mr-auto bg-purple-500/20 border border-purple-400/30 rounded-2xl px-4 py-2 text-center">
-            <div className="text-xs text-purple-300">حجم البيانات</div>
+          <div className="mr-auto bg-sky-500/20 border border-purple-400/30 rounded-2xl px-4 py-2 text-center">
+            <div className="text-xs text-sky-300">حجم البيانات</div>
             <div className="font-black font-mono text-sm">{(storageStats.total / 1024).toFixed(1)} KB</div>
           </div>
         </div>
@@ -89,7 +89,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { label: 'الموظفون', value: metrics.total, sub: metrics.active + ' نشط', color: 'border-slate-200 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200' },
-          { label: 'مستخدمو النظام', value: metrics.systemUsers, sub: 'حساب مسجل', color: 'border-purple-200 bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-200' },
+          { label: 'مستخدمو النظام', value: metrics.systemUsers, sub: 'حساب مسجل', color: 'border-sky-200 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200' },
           { label: 'طلبات معلقة', value: metrics.totalPending, sub: 'بانتظار اعتماد', color: 'border-amber-200 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200' },
           { label: 'وثائق ستنتهي', value: metrics.expiringDocs, sub: 'خلال 30 يوم', color: 'border-orange-200 bg-orange-50 dark:bg-orange-950/40 text-orange-800 dark:text-orange-200' },
           { label: 'وثائق منتهية', value: metrics.expiredDocs, sub: 'تحتاج تجديد', color: 'border-red-200 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-200' },
@@ -106,7 +106,7 @@ export default function AdminDashboard() {
       {/* Roles & Permissions Overview */}
       <Card className="p-5 rounded-2xl border">
         <h3 className="font-black text-sm text-foreground mb-4 flex items-center gap-2">
-          <Lock className="w-4 h-4 text-purple-500" /> مصفوفة الأدوار والصلاحيات
+          <Lock className="w-4 h-4 text-sky-500" /> مصفوفة الأدوار والصلاحيات
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {Object.entries(ROLE_META).map(([role, meta]) => {
@@ -128,7 +128,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { to: '/employees', icon: Users, label: 'إدارة الموظفين', color: 'text-slate-600' },
-          { to: '/users', icon: Shield, label: 'إدارة المستخدمين', color: 'text-purple-600' },
+          { to: '/users', icon: Shield, label: 'إدارة المستخدمين', color: 'text-sky-600' },
           { to: '/approvals', icon: CheckCircle2, label: 'مركز الاعتمادات', color: 'text-emerald-600' },
           { to: '/alerts', icon: Bell, label: 'مركز التنبيهات', color: 'text-red-600' },
           { to: '/attendance', icon: Clock, label: 'الحضور والبصمات', color: 'text-orange-600' },

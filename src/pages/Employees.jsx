@@ -79,9 +79,9 @@ export default function Employees() {
   ]);
   const [loading, setLoading] = useState(true);
 
-  // Filters & Search
+  // Filters & Search (Default to active employees only per user directive)
   const [search, setSearch] = useState('');
-  const [activeTabFilter, setActiveTabFilter] = useState('all'); // 'all' | 'saudi' | 'resident' | 'main' | 'hyundai' | 'kia' | 'mgmt'
+  const [activeTabFilter, setActiveTabFilter] = useState('active'); // 'active' (default) | 'all' | 'inactive' | 'saudi' | 'resident' | 'main' | 'hyundai' | 'kia' | 'mgmt'
   const [branchFilter, setBranchFilter] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
 
@@ -167,6 +167,10 @@ export default function Employees() {
         matchTab = emp.nationality === 'سعودي';
       } else if (activeTabFilter === 'resident') {
         matchTab = emp.nationality !== 'سعودي';
+      } else if (activeTabFilter === 'male') {
+        matchTab = emp.gender !== 'female';
+      } else if (activeTabFilter === 'female') {
+        matchTab = emp.gender === 'female';
       } else if (activeTabFilter === 'main') {
         matchTab = (emp.branch_name || '').includes('الرئيسي');
       } else if (activeTabFilter === 'hyundai') {
@@ -258,7 +262,7 @@ export default function Employees() {
 
   // Delete Employee
   const handleDelete = async (emp) => {
-    if (!confirm(`هل أنت متأكد من حذف الموظف ${emp.full_name} (#${emp.employee_number})؟`)) return;
+    if (!confirm(`هل أنت متأكد من حذف الموظف ${emp.full_name} (رقم ${emp.employee_number})؟`)) return;
     try {
       await base44.entities.Employee.delete(emp.id);
       toast({ title: '✓ تم حذف الموظف بنجاح' });
@@ -407,7 +411,10 @@ export default function Employees() {
 
           {/* Males */}
           <div 
-            className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between"
+            onClick={() => setActiveTabFilter(activeTabFilter === 'male' ? 'all' : 'male')}
+            className={`p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between cursor-pointer hover:scale-[1.02] transition-transform ${
+              activeTabFilter === 'male' ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50/20' : ''
+            }`}
           >
             <div>
               <div className="text-[11px] text-muted-foreground font-bold">ذكر</div>
@@ -420,7 +427,10 @@ export default function Employees() {
 
           {/* Females */}
           <div 
-            className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between"
+            onClick={() => setActiveTabFilter(activeTabFilter === 'female' ? 'all' : 'female')}
+            className={`p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between cursor-pointer hover:scale-[1.02] transition-transform ${
+              activeTabFilter === 'female' ? 'ring-2 ring-pink-500 border-pink-500 bg-pink-50/20' : ''
+            }`}
           >
             <div>
               <div className="text-[11px] text-muted-foreground font-bold">أنثى</div>
@@ -437,12 +447,37 @@ export default function Employees() {
       {/* ─── 2. MAIN TITLE BAR & ACTION BUTTONS ────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-3xl border shadow-sm">
         <div>
-          <h1 className="text-xl font-heading font-black text-foreground flex items-center gap-2">
-            قائمة الموظفين
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-xl font-heading font-black text-foreground flex items-center gap-2">
+              <Users className="w-5 h-5 text-sky-500" />
+              قائمة الموظفين
+            </h1>
             <Badge className="bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 text-xs font-mono font-bold">
               {filteredEmployees.length} موظف
             </Badge>
-          </h1>
+
+            {/* Active Quick Filter Indicator */}
+            {activeTabFilter !== 'all' && (
+              <div className="flex items-center gap-1.5 bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 px-2.5 py-1 rounded-xl text-xs font-bold">
+                <span>تصفية: {
+                  activeTabFilter === 'active' ? 'النشطين' :
+                  activeTabFilter === 'inactive' ? 'غير النشطين' :
+                  activeTabFilter === 'saudi' ? 'المواطنين' :
+                  activeTabFilter === 'resident' ? 'المقيمين' :
+                  activeTabFilter === 'male' ? 'الذكور' :
+                  activeTabFilter === 'female' ? 'الإناث' : activeTabFilter
+                }</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTabFilter('all')}
+                  className="hover:text-rose-500 font-black ms-1 text-sm"
+                  title="إلغاء التصفية"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             دليل الكوادر الوظيفية، العقود، والملفات الشخصية 360°
           </p>
@@ -496,71 +531,42 @@ export default function Employees() {
         </div>
       </div>
 
-      {/* ─── 3. FILTER TABS & SEARCH TOOLBAR ────────────────────────────────── */}
-      <div className="space-y-3">
-        {/* Quick Branch & Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-          {[
-            { id: 'all', label: `الكل (${stats.total})` },
-            { id: 'saudi', label: `🇸🇦 سعودي (${stats.saudi})` },
-            { id: 'resident', label: `🌍 مقيم (${stats.resident})` },
-            { id: 'main', label: 'الفرع الرئيسي' },
-            { id: 'hyundai', label: 'فرع هونداي (الرواف)' },
-            { id: 'kia', label: 'فرع كيا (السليم)' },
-            { id: 'mgmt', label: 'مكتب الإدارة' },
-          ].map(tab => (
+      {/* ─── 3. SEARCH & BRANCH TOOLBAR (Clean, Non-repetitive) ──────────────── */}
+      <Card className="p-3 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-500" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="البحث بالاسم، الرقم الوظيفي (1001)، الجوال، أو رقم الهوية..."
+            className="ps-10 rounded-2xl text-xs h-10 bg-slate-50 dark:bg-slate-800/60 border-0 focus-visible:ring-1 focus-visible:ring-sky-500"
+          />
+          {search && (
             <button
-              key={tab.id}
               type="button"
-              onClick={() => setActiveTabFilter(tab.id)}
-              className={`px-3.5 py-1.5 rounded-2xl text-xs font-bold shrink-0 transition-all ${
-                activeTabFilter === tab.id
-                  ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
-                  : 'bg-white dark:bg-slate-900 text-muted-foreground border hover:bg-slate-50 dark:hover:bg-slate-800'
-              }`}
+              onClick={() => setSearch('')}
+              className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold hover:text-foreground"
             >
-              {tab.label}
+              مسح
             </button>
-          ))}
+          )}
         </div>
 
-        {/* Search & Branch Select Bar */}
-        <Card className="p-3 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-500" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="البحث بالاسم، الرقم الوظيفي (#1001), الجوال، أو رقم الهوية..."
-              className="ps-10 rounded-2xl text-xs h-10 bg-slate-50 dark:bg-slate-800/60 border-0 focus-visible:ring-1 focus-visible:ring-sky-500"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold hover:text-foreground"
-              >
-                مسح
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="w-full sm:w-52 rounded-2xl text-xs h-10 bg-background">
-                <SelectValue placeholder="كافة الفروع" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كافة الفروع</SelectItem>
-                <SelectItem value="مكتب الإدارة">مكتب الإدارة</SelectItem>
-                <SelectItem value="الفرع الرئيسي">الفرع الرئيسي</SelectItem>
-                <SelectItem value="فرع هونداي ( الرواف )">فرع هونداي ( الرواف )</SelectItem>
-                <SelectItem value="فرع كيا ( السليم )">فرع كيا ( السليم )</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </Card>
-      </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Select value={branchFilter} onValueChange={setBranchFilter}>
+            <SelectTrigger className="w-full sm:w-52 rounded-2xl text-xs h-10 bg-background">
+              <SelectValue placeholder="كافة الفروع" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كافة الفروع</SelectItem>
+              <SelectItem value="مكتب الإدارة">مكتب الإدارة</SelectItem>
+              <SelectItem value="الفرع الرئيسي">الفرع الرئيسي</SelectItem>
+              <SelectItem value="فرع هونداي ( الرواف )">فرع هونداي ( الرواف )</SelectItem>
+              <SelectItem value="فرع كيا ( السليم )">فرع كيا ( السليم )</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </Card>
 
       {/* ─── 4. EMPLOYEE CARDS GRID VIEW (EKTEFA EXACT SPEC) ────────────────── */}
       {viewMode === 'grid' && (
@@ -584,26 +590,25 @@ export default function Employees() {
               return (
                 <Card
                   key={emp.id}
-                  className={`p-5 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col justify-between group relative overflow-hidden ${
-                    isInactive ? 'opacity-90 border-rose-200/70 bg-rose-50/10' : ''
+                  className={`p-4 sm:p-5 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between group relative overflow-hidden ${
+                    isInactive ? 'opacity-85 border-rose-200/70 bg-rose-50/10' : 'hover:border-sky-300'
                   }`}
                 >
-                  {/* Top Header inside card */}
+                  {/* Card Content */}
                   <div>
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      
-                      {/* Avatar with Status Pulse */}
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-heading font-black text-base shadow-md group-hover:scale-105 transition-transform ${
+                    {/* Header: Avatar + Name + Clean Number Badge */}
+                    <div className="flex items-start justify-between gap-3 mb-3.5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-heading font-black text-base shadow-sm transition-transform ${
                             isInactive 
                               ? 'bg-gradient-to-tr from-slate-600 to-rose-600' 
                               : 'bg-gradient-to-tr from-sky-600 via-teal-500 to-emerald-500'
                           }`}>
-                            {emp.full_name ? emp.full_name[0] : 'م'}
+                            {emp.full_name ? emp.full_name.charAt(0) : 'م'}
                           </div>
                           <span 
-                            className={`absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                            className={`absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${
                               isInactive 
                                 ? 'bg-rose-500 ring-1 ring-rose-300' 
                                 : 'bg-emerald-500 ring-1 ring-emerald-300'
@@ -619,60 +624,54 @@ export default function Employees() {
                           >
                             {emp.full_name}
                           </Link>
-                          <div className="text-xs text-muted-foreground truncate font-medium">
+                          <div className="text-xs text-muted-foreground truncate font-medium mt-0.5">
                             {emp.job_title || 'بائع قطع غيار'}
                           </div>
                         </div>
                       </div>
 
-                      {/* Employee # and Status Badges */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {isInactive && (
-                          <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
-                            متوقف عن العمل ⏸️
-                          </Badge>
-                        )}
-                        <Badge className="bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 font-mono font-black text-xs px-2.5 py-1 rounded-xl shrink-0">
-                          #{emp.employee_number}
+                      {/* Employee Number & Status Badges */}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Badge className="bg-slate-100 hover:bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-mono font-bold text-xs px-2.5 py-0.5 rounded-xl">
+                          {emp.employee_number}
                         </Badge>
+                        {isInactive && (
+                          <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-900">
+                            متوقف
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Meta Chips */}
-                    <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-                      
-                      {/* Branch */}
-                      <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span className="truncate text-foreground font-bold text-[11px]">{emp.branch_name || 'الفرع الرئيسي'}</span>
+                    {/* Integrated Metadata Box (Clean, sleek, harmonious layout) */}
+                    <div className="bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl p-3 border border-slate-100 dark:border-slate-800/60 space-y-2 mb-3.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+                          <Building2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                          <span className="text-foreground font-bold truncate text-[11.5px]">{emp.branch_name || 'الفرع الرئيسي'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
+                          <Globe className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                          <span className="text-foreground font-bold text-[11.5px]">{emp.nationality || 'سعودي'}</span>
+                        </div>
                       </div>
 
-                      {/* Shift */}
-                      <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        <span className="truncate text-foreground font-bold text-[11px]">{emp.shift || 'دوام رسمي'}</span>
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                        <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+                          <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span className="text-foreground font-medium truncate text-[11px]">{emp.shift || 'دوام رسمي'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
+                          <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="font-mono text-foreground font-bold text-[11px]" dir="ltr">{emp.phone || '—'}</span>
+                        </div>
                       </div>
-
-                      {/* Phone */}
-                      <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border flex items-center gap-2">
-                        <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span className="font-mono text-[11px] text-foreground font-bold truncate">{emp.phone || '—'}</span>
-                      </div>
-
-                      {/* Nationality */}
-                      <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border flex items-center gap-2">
-                        <Globe className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                        <span className="text-[11px] text-foreground font-bold truncate">{emp.nationality || 'سعودي'}</span>
-                      </div>
-
                     </div>
                   </div>
 
-                  {/* Card Actions Footer (Ektefa Pastel Buttons + 360 Link) */}
+                  {/* Card Actions Footer */}
                   <div className="pt-3 border-t border-border/70 flex items-center justify-between gap-2">
-                    
-                    {/* Direct Quick Tools */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {/* Quick Toggle Status Button */}
                       <Button
                         size="icon"
@@ -717,7 +716,7 @@ export default function Employees() {
                         size="icon"
                         variant="ghost"
                         onClick={() => handleOpenEdit(emp)}
-                        className="w-8 h-8 rounded-xl hover:bg-slate-100 text-slate-600"
+                        className="w-8 h-8 rounded-xl hover:bg-slate-100 text-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                         title="تعديل الموظف"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -728,7 +727,7 @@ export default function Employees() {
                         size="icon"
                         variant="ghost"
                         onClick={() => handleDelete(emp)}
-                        className="w-8 h-8 rounded-xl hover:bg-rose-50 text-rose-500"
+                        className="w-8 h-8 rounded-xl hover:bg-rose-50 text-rose-500 dark:hover:bg-rose-950/50"
                         title="حذف الموظف"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -739,13 +738,12 @@ export default function Employees() {
                     <Link to={`/employees/${emp.id}`}>
                       <Button
                         size="sm"
-                        className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold gap-1.5 h-8 px-3"
+                        className="bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white rounded-xl text-xs font-bold gap-1.5 h-8 px-3"
                       >
                         <span>ملفي 360°</span>
-                        <ChevronLeft className="w-3.5 h-3.5 text-sky-400" />
+                        <ChevronLeft className="w-3.5 h-3.5 text-sky-400 dark:text-white" />
                       </Button>
                     </Link>
-
                   </div>
                 </Card>
               );
@@ -761,7 +759,7 @@ export default function Employees() {
             <table className="w-full text-right text-xs" style={{ direction: 'rtl' }}>
               <thead>
                 <tr className="bg-sky-600 text-white font-heading font-black border-b border-sky-700">
-                  <th className="py-3 px-4"># الرقم</th>
+                  <th className="py-3 px-4">الرقم الوظيفي</th>
                   <th className="py-3 px-4">الموظف والبيانات</th>
                   <th className="py-3 px-3">المسمى الوظيفي</th>
                   <th className="py-3 px-3">الفرع</th>
@@ -775,7 +773,7 @@ export default function Employees() {
               <tbody className="divide-y divide-border/60">
                 {filteredEmployees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-black text-sky-600">#{emp.employee_number}</td>
+                    <td className="py-3 px-4 font-mono font-bold text-sky-700 dark:text-sky-400">{emp.employee_number}</td>
                     <td className="py-3 px-4">
                       <Link to={`/employees/${emp.id}`} className="font-bold text-foreground hover:text-sky-600 transition-colors">
                         {emp.full_name}

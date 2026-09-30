@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Users,
+  User,
+  UserCheck,
   Clock,
   Calendar,
   FileText,
@@ -47,7 +49,7 @@ import { getStoredEvaluations } from '@/lib/evaluationsEngine';
 import { getCompanyProfile } from '@/lib/companyProfile';
 import { hasRealBiometricPunches, calcActualMinutes } from '@/lib/payrollEngine';
 
-export default function EktefaStyleExecutiveDashboard() {
+export default function EktefaStyleExecutiveDashboard({ viewMode = 'specialized', onToggleMode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const company = getCompanyProfile();
@@ -271,71 +273,18 @@ export default function EktefaStyleExecutiveDashboard() {
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-16 font-sans select-none" dir="rtl">
       
-      {/* ─── 1. TOP GREETING & STATUS BAR (Ektefa Header Style) ─────────────── */}
-      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        
-        {/* Right: Personalized Greeting */}
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-slate-900 to-emerald-950 border border-emerald-500/30 text-white flex items-center justify-center p-2 shadow-md shrink-0">
-            <img 
-              src={company.logo_url || "/company-logo.svg"} 
-              alt="Logo" 
-              className="w-full h-full object-contain filter drop-shadow" 
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-heading font-black text-base sm:text-lg text-foreground">
-                👋 مرحباً بعودتك، {user?.full_name || user?.name || 'فهد ناصر محمد الجوعي'}
-              </h1>
-              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10.5px] font-bold">
-                {user?.role === 'owner' ? 'المدير العام 👑' : (user?.role === 'accountant' ? 'مدير المالية 💼' : 'مدير النظام 🛡️')}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-              <span>{todayDateFormatted}</span>
-              <span>•</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold">شركة درة السيارة لقطع غيار السيارات</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Left: Quick Refresh & Employee Directory */}
-        <div className="flex items-center gap-2 self-end sm:self-center">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => window.location.reload()}
-            className="rounded-xl text-xs h-9 px-3 gap-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-            title="تحديث البيانات اللحظية من قاعدة البيانات"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-            <span>تحديث</span>
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={() => navigate('/employees')}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs h-9 px-4 shadow-sm"
-          >
-            <span>دليل الموظفين ➔</span>
-          </Button>
-        </div>
-
-      </div>
-
-      {/* ─── 2. QUICK ACTION GRID BAR (8 High-Priority Actions - Ektefa Style) ─ */}
+      {/* ─── 1. QUICK ACTION GRID BAR (8 High-Priority Actions - Ektefa Style) ─ */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         
         {/* 1. Add Employee */}
         <Button
           onClick={() => navigate('/employees')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-emerald-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-100 hover:border-emerald-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-emerald-600 font-bold group-hover:scale-110 transition-transform">➕</span>
-            <span>إضافة موظف</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-emerald-950 dark:group-hover:text-white font-bold transition-colors">إضافة موظف</span>
           </span>
           <UserPlus className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0" />
         </Button>
@@ -344,11 +293,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/payroll')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-sky-50 dark:hover:bg-sky-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-sky-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-sky-50 dark:hover:bg-sky-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-sky-950 dark:hover:text-sky-100 hover:border-sky-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-sky-600 font-bold group-hover:scale-110 transition-transform">💵</span>
-            <span>تصدير مسير الراتب</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-sky-950 dark:group-hover:text-white font-bold transition-colors">تصدير مسير الراتب</span>
           </span>
           <Wallet className="w-4 h-4 text-slate-400 group-hover:text-sky-600 shrink-0" />
         </Button>
@@ -357,11 +306,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/shifts')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-indigo-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-indigo-950 dark:hover:text-indigo-100 hover:border-indigo-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-indigo-600 font-bold group-hover:scale-110 transition-transform">🕒</span>
-            <span>إضافة فترة عمل</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-indigo-950 dark:group-hover:text-white font-bold transition-colors">إضافة فترة عمل</span>
           </span>
           <Clock className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
         </Button>
@@ -370,11 +319,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/announcements')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-pink-50 dark:hover:bg-pink-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-pink-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-pink-50 dark:hover:bg-pink-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-pink-950 dark:hover:text-pink-100 hover:border-pink-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-pink-600 font-bold group-hover:scale-110 transition-transform">✉️</span>
-            <span>إرسال تعميم إداري</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-pink-950 dark:group-hover:text-white font-bold transition-colors">إرسال تعميم إداري</span>
           </span>
           <Megaphone className="w-4 h-4 text-slate-400 group-hover:text-pink-600 shrink-0" />
         </Button>
@@ -383,11 +332,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/attendance')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-orange-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-orange-50 dark:hover:bg-orange-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-orange-950 dark:hover:text-orange-100 hover:border-orange-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-orange-600 font-bold group-hover:scale-110 transition-transform">📅</span>
-            <span>طلب تصحيح بصمة</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-orange-950 dark:group-hover:text-white font-bold transition-colors">طلب تصحيح بصمة</span>
           </span>
           <Clock className="w-4 h-4 text-slate-400 group-hover:text-orange-600 shrink-0" />
         </Button>
@@ -396,11 +345,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/leave')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-teal-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-teal-950 dark:hover:text-teal-100 hover:border-teal-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-teal-600 font-bold group-hover:scale-110 transition-transform">🌴</span>
-            <span>تقديم واعتماد إجازة</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-teal-950 dark:group-hover:text-white font-bold transition-colors">تقديم واعتماد إجازة</span>
           </span>
           <Palmtree className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
         </Button>
@@ -409,11 +358,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/evaluations')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-amber-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-amber-950 dark:hover:text-amber-100 hover:border-amber-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-amber-600 font-bold group-hover:scale-110 transition-transform">🏆</span>
-            <span>رصد تقييم أداء</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-amber-950 dark:group-hover:text-white font-bold transition-colors">رصد تقييم أداء</span>
           </span>
           <Star className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0" />
         </Button>
@@ -422,11 +371,11 @@ export default function EktefaStyleExecutiveDashboard() {
         <Button
           onClick={() => navigate('/payroll?tab=advances')}
           variant="outline"
-          className="h-12 bg-white dark:bg-slate-900 hover:bg-purple-50 dark:hover:bg-purple-950/30 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-foreground hover:border-purple-500 transition-all group"
+          className="h-12 bg-white dark:bg-slate-900 hover:bg-purple-50 dark:hover:bg-purple-950/40 border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between px-3.5 shadow-sm text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-purple-950 dark:hover:text-purple-100 hover:border-purple-500 transition-all group"
         >
           <span className="flex items-center gap-2 truncate">
             <span className="text-purple-600 font-bold group-hover:scale-110 transition-transform">💳</span>
-            <span>إضافة وصرف سلفة</span>
+            <span className="text-slate-800 dark:text-slate-100 group-hover:text-purple-950 dark:group-hover:text-white font-bold transition-colors">إضافة وصرف سلفة</span>
           </span>
           <CreditCard className="w-4 h-4 text-slate-400 group-hover:text-purple-600 shrink-0" />
         </Button>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { base44 } from '@/api/base44Client';
+import { base44, initialData } from '@/api/base44Client';
 import { computeEmployeePayroll, getAdvances, getLockedMonthlyPayrolls, getLockedMonthlyPayroll, isMonthLocked } from '@/lib/payrollEngine';
 import { getUnifiedRequests, saveUnifiedRequest, REQUEST_TYPES } from '@/lib/requestsEngine';
 import { getCompanyProfile } from '@/lib/companyProfile';
@@ -11,6 +11,7 @@ import PayslipPrint from '@/components/PayslipPrint';
 import ExecutiveAnnouncementTicker from '@/components/ExecutiveAnnouncementTicker';
 import { getStoredEvaluations, getEvaluationTier, STANDARD_EVALUATION_CRITERIA, PURCHASING_EVALUATION_CRITERIA } from '@/lib/evaluationsEngine';
 import { printEvaluationDocument } from '@/lib/evaluationPrintEngine';
+import MobileEmployeeProfileCard from '@/components/MobileEmployeeProfileCard';
 import {
   Home,
   Clock,
@@ -54,7 +55,9 @@ import {
   CalendarCheck,
   Lock,
   ShieldAlert,
-  Info
+  Info,
+  X,
+  ChevronUp
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,7 +78,7 @@ export default function EmployeePortal() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'attendance' | 'requests' | 'payroll' | 'performance' | 'documents' | 'account'
-  const [currentEmp, setCurrentEmp] = useState(null);
+  const [currentEmp, setCurrentEmp] = useState(() => user || null);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [requestsList, setRequestsList] = useState([]);
@@ -89,6 +92,10 @@ export default function EmployeePortal() {
   const [selectedForPayslip, setSelectedForPayslip] = useState(null);
   const [contractModalOpen, setContractModalOpen] = useState(false);
   const [resignationModalOpen, setResignationModalOpen] = useState(false);
+  const [activeDrawerTab, setActiveDrawerTab] = useState(null); // null | 'attendance' | 'requests' | 'payroll' | 'performance' | 'documents' | 'account'
+  const documentsDrawerOpen = activeDrawerTab === 'documents';
+  const setDocumentsDrawerOpen = (open) => setActiveDrawerTab(open ? 'documents' : null);
+  const tabsBarRef = React.useRef(null);
 
   // Request Form State
   const [reqForm, setReqForm] = useState({
@@ -122,21 +129,26 @@ export default function EmployeePortal() {
     async function loadPortalData() {
       try {
         setLoading(true);
-        const [emps, logs, shs] = await Promise.all([
+        const [rawEmps, logs, shs] = await Promise.all([
           base44.entities.Employee.list(),
           base44.entities.AttendanceLog.list('-log_date', 3000),
           base44.entities.Shift.list()
         ]);
+
+        const emps = (rawEmps && rawEmps.length > 0) ? rawEmps : (initialData?.Employee || []);
 
         // Strict Match: Logged-in user employee record ONLY
         const clean = (v) => String(v || '').replace('emp_', '').trim();
         const matched = emps.find(e => 
           clean(e.id) === clean(user?.id) ||
           clean(e.employee_number) === clean(user?.employee_number) ||
+          (user?.national_id && e.national_id && String(e.national_id).trim() === String(user.national_id).trim()) ||
           (user?.email && e.email && e.email.toLowerCase() === user.email.toLowerCase())
-        ) || emps[0]; // Fallback if admin
+        ) || user || emps[0];
 
-        setCurrentEmp(matched);
+        if (matched) {
+          setCurrentEmp(matched);
+        }
         setShifts(shs || []);
 
         // Filter logs strictly for this employee only!
@@ -146,13 +158,17 @@ export default function EmployeePortal() {
 
         // Load unified requests for this employee only
         const allReqs = getUnifiedRequests();
-        const myReqs = allReqs.filter(r => clean(r.employee_number || r.employee_id) === empNum);
+        const myReqs = (allReqs || []).filter(r => clean(r.employee_number || r.employee_id) === empNum);
         setRequestsList(myReqs);
 
-        // Load unified contracts
-        const unifiedContracts = await initializeUnifiedContracts(emps);
-        const foundContract = unifiedContracts.find(c => clean(c.employee_number || c.employee_id) === empNum);
-        setEmpContract(foundContract || null);
+        // Load unified contracts safely
+        try {
+          const unifiedContracts = await initializeUnifiedContracts(emps);
+          const foundContract = (unifiedContracts || []).find(c => clean(c.employee_number || c.employee_id) === empNum);
+          setEmpContract(foundContract || null);
+        } catch (cErr) {
+          console.warn('Contracts loading error:', cErr);
+        }
 
       } catch (e) {
         console.error('Error loading portal data:', e);
@@ -187,6 +203,17 @@ export default function EmployeePortal() {
       window.removeEventListener('hr_contracts_updated', handleContractUpdate);
     };
   }, [user]);
+
+  // Close drawer on Escape key press (Desktop UX enhancement)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && activeDrawerTab) {
+        setActiveDrawerTab(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeDrawerTab]);
 
   // Today's attendance calculation
   const todayStr = new Date().toISOString().split('T')[0];
@@ -330,7 +357,7 @@ export default function EmployeePortal() {
     });
   };
 
-  if (loading || !currentEmp) {
+  if (loading && !currentEmp) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -339,6 +366,594 @@ export default function EmployeePortal() {
   }
 
   const isContractPendingSignature = empContract && !empContract.signed_by_employee;
+
+  // Metadata helper for the dynamic Drawer header
+  const getDrawerTabMeta = (tabId) => {
+    switch (tabId) {
+      case 'attendance':
+        return {
+          title: 'سجل الحضور والبصمات وساعاتي',
+          subtitle: 'الفترات الصباحية والمسائية، ساعات العمل الإجمالية، والعجز والإضافي',
+          icon: Clock,
+          gradient: 'from-teal-600 to-emerald-500'
+        };
+      case 'requests':
+        return {
+          title: 'مركز طلباتي ومتابعة القرارات الإدارية',
+          subtitle: 'الإجازات، السلف، الاستئذان، والخطابات ومتابعة حالات الموافقة',
+          icon: FileText,
+          gradient: 'from-blue-600 to-indigo-500'
+        };
+      case 'payroll':
+        return {
+          title: 'قسائم ومسيرات الرواتب الشهرية المعتمدة',
+          subtitle: 'استعراض وتحميل قسائم الرواتب المعتمدة رسمياً وتفاصيل المستحقات',
+          icon: Wallet,
+          gradient: 'from-sky-600 to-blue-500'
+        };
+      case 'performance':
+        return {
+          title: 'تقييم الأداء الوظيفي ومؤشرات الإنجاز',
+          subtitle: 'معايير التقييم المعتمدة، نقاط القوة والتميز، والشهادات الوظيفية',
+          icon: Star,
+          gradient: 'from-amber-500 to-orange-500'
+        };
+      case 'documents':
+        return {
+          title: 'الوثائق وعقد العمل المعتمد',
+          subtitle: 'عقد العمل الرسمي الموثق، إثباتات الهوية، والاشتراك التأميني',
+          icon: Scale,
+          gradient: 'from-emerald-600 to-teal-500'
+        };
+      case 'account':
+        return {
+          title: 'الملف التعريفي والبيانات البنكية',
+          subtitle: 'بيانات الحساب المعتمدة في نظام حماية الأجور (WPS) ومعلومات الوظيفة',
+          icon: User,
+          gradient: 'from-slate-700 to-slate-900'
+        };
+      default:
+        return {
+          title: 'درج الخدمات المعتمد',
+          subtitle: 'بوابة الموظف الموحدة',
+          icon: Sparkles,
+          gradient: 'from-teal-600 to-emerald-500'
+        };
+    }
+  };
+
+  // 1. Attendance Tab Content
+  const renderAttendanceContent = () => (
+    <Card className="p-5 sm:p-6 rounded-3xl border shadow-sm bg-card space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+        <div className="flex items-center gap-2">
+          <Clock className="w-5 h-5 text-emerald-600" />
+          <h3 className="font-heading font-black text-lg text-foreground">سجل الحضور والبصمات التفصيلي</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-muted-foreground">اختر الشهر:</span>
+          <Input
+            type="month"
+            value={attMonth}
+            onChange={(e) => setAttMonth(e.target.value)}
+            className="w-40 h-9 text-xs font-mono rounded-xl"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-xs" style={{ direction: 'rtl' }}>
+          <thead>
+            <tr className="bg-slate-100 dark:bg-slate-900 border-b font-heading font-bold text-foreground">
+              <th className="py-3 px-3">التاريخ</th>
+              <th className="py-3 px-2">اليوم</th>
+              <th className="py-3 px-3 text-emerald-700 dark:text-emerald-400">الفترة النهارية (دخول ➔ خروج)</th>
+              <th className="py-3 px-3 text-blue-700 dark:text-blue-400">الفترة المسائية (دخول ➔ خروج)</th>
+              <th className="py-3 px-2">المطلوب</th>
+              <th className="py-3 px-2 text-sky-700">إجمالي الفعلي</th>
+              <th className="py-3 px-3">الفارق (عجز / زيادة)</th>
+              <th className="py-3 px-2 text-center">الحالة</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {monthlyLogs.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="text-center py-8 text-muted-foreground text-xs">
+                  لا توجد سجلات بصمة مسجلة لهذا الشهر.
+                </td>
+              </tr>
+            ) : (
+              monthlyLogs.map(log => {
+                const dateObj = new Date(log.log_date);
+                const dayName = dateObj.toLocaleDateString('ar-SA', { weekday: 'long' });
+                return (
+                  <tr key={log.id || log.log_date} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                    <td className="py-3 px-3 font-mono font-bold">{log.log_date}</td>
+                    <td className="py-3 px-2 text-muted-foreground font-semibold">{dayName}</td>
+                    <td className="py-3 px-3 text-center">
+                      {log.period_1_in ? (
+                        <span dir="ltr" className="inline-flex items-center justify-center gap-1 font-mono text-emerald-700 dark:text-emerald-400 font-bold">
+                          <span>{log.period_1_in}</span>
+                          <span className="text-emerald-500 font-sans">➔</span>
+                          <span>{log.period_1_out || '--:--'}</span>
+                        </span>
+                      ) : (log.check_in ? (log.check_in.includes('T') ? log.check_in.slice(11, 16) : log.check_in.slice(0, 5)) : '—')}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      {log.period_2_in ? (
+                        <span dir="ltr" className="inline-flex items-center justify-center gap-1 font-mono text-blue-700 dark:text-blue-400 font-bold">
+                          <span>{log.period_2_in}</span>
+                          <span className="text-blue-500 font-sans">➔</span>
+                          <span>{log.period_2_out || '--:--'}</span>
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td className="py-3 px-2 font-mono text-muted-foreground">{log.required_hours || 9} س</td>
+                    <td className="py-3 px-2 font-mono font-black text-sky-700">
+                      {log.total_hours || 0} س
+                    </td>
+                    <td className="py-3 px-3 font-mono font-extrabold">
+                      {Number(log.shortfall_hours || 0) > 0 ? (
+                        <span className="text-rose-600">-{log.shortfall_hours} س 🔻</span>
+                      ) : Number(log.overtime_hours || 0) > 0 ? (
+                        <span className="text-blue-600">+{log.overtime_hours} س ⚡</span>
+                      ) : (
+                        <span className="text-emerald-600">0 د ✓</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-2 text-center">
+                      <Badge className={
+                        log.status === 'present' ? 'bg-emerald-100 text-emerald-800' :
+                        log.status === 'weekend' ? 'bg-slate-100 text-slate-700' :
+                        log.status === 'absent' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                      }>
+                        {log.status === 'present' ? 'حاضر' : log.status === 'weekend' ? 'عطلة أسبوعية' : log.status === 'absent' ? 'غياب' : 'إجازة'}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+
+  // 2. Requests Tab Content
+  const renderRequestsContent = () => (
+    <Card className="p-5 sm:p-6 rounded-3xl border shadow-sm bg-card space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+        <div>
+          <h3 className="font-heading font-black text-lg text-foreground">مركز طلباتي الموحد</h3>
+          <p className="text-xs text-muted-foreground">متابعة كافة الطلبات المقدمة ومراحل اعتمادها الإداري</p>
+        </div>
+        <Button
+          onClick={() => {
+            setRequestStep('select');
+            setNewRequestModal(true);
+          }}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-10 px-4 rounded-xl gap-2 shadow-md cursor-pointer"
+        >
+          <PlusCircle className="w-4 h-4" />
+          <span>تقديم طلب جديد</span>
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        {requestsList.length === 0 ? (
+          <div className="text-center py-12 space-y-3">
+            <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+            <div className="font-bold text-sm text-foreground">لا توجد طلبات مسجلة حتى الآن</div>
+            <p className="text-xs text-muted-foreground">يمكنك تقديم طلب إجازة، سلفة، تعديل بصمة، أو تعريف راتب مباشرة من هنا.</p>
+          </div>
+        ) : (
+          requestsList.map(req => (
+            <div key={req.id} className="p-5 rounded-2xl border bg-slate-50 dark:bg-slate-900/40 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border flex items-center justify-center font-bold text-emerald-600 shadow-sm">
+                    <FileCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-foreground">{req.details?.request_label || req.type}</div>
+                    <div className="text-[11px] text-muted-foreground font-mono">رقم الطلب: {req.request_number} • تاريخ التقديم: {new Date(req.created_at).toLocaleDateString('ar-SA')}</div>
+                  </div>
+                </div>
+                <Badge className={
+                  req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                  req.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                }>
+                  {req.status === 'approved' ? 'تم الاعتماد بنجاح ✓' : req.status === 'rejected' ? 'تم رفض الطلب ✗' : 'قيد المراجعة الإدارية ⏳'}
+                </Badge>
+              </div>
+
+              {req.reason && (
+                <div className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-xl border">
+                  <strong>سبب ومبرر الطلب:</strong> {req.reason}
+                </div>
+              )}
+
+              {/* Timeline */}
+              {req.timeline && req.timeline.length > 0 && (
+                <div className="space-y-1.5 pt-2">
+                  <div className="text-[11px] font-bold text-muted-foreground">سجل وخط سير المعالجة:</div>
+                  <div className="space-y-1">
+                    {req.timeline.map((item, tIdx) => (
+                      <div key={tIdx} className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        <span className="font-bold text-foreground">{item.title}</span>
+                        <span>بواسطة ({item.by})</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {new Date(item.at).toLocaleString('ar-SA')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+
+  // 3. Payroll Tab Content
+  const renderPayrollContent = () => (
+    <Card className="p-5 sm:p-6 rounded-3xl border shadow-sm bg-card space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 gap-3">
+        <div>
+          <h3 className="font-heading font-black text-lg text-foreground">قسائم ومسيرات الرواتب الشهرية</h3>
+          <p className="text-xs text-muted-foreground">استعراض وتحميل قسائم الرواتب المعتمدة رسمياً من المدير العام (الشهور السابقة المنتهية)</p>
+        </div>
+
+        {/* Approved Month Selector */}
+        {approvedPastMonths.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-muted-foreground">الشهر المعتمد:</span>
+            <Select value={selectedPayrollMonth} onValueChange={setSelectedPayrollMonth}>
+              <SelectTrigger className="w-56 h-9 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-900 border">
+                <SelectValue placeholder="اختر الشهر المعتمد..." />
+              </SelectTrigger>
+              <SelectContent dir="rtl">
+                {approvedPastMonths.map(m => (
+                  <SelectItem key={m.month_prefix} value={m.month_prefix} className="text-xs font-bold">
+                    ✓ {m.title || `شهر ${m.month_prefix}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {/* Verification Guard: Only show if officially approved by GM and past month */}
+      {approvedPastMonths.length === 0 || !approvedPayrollData?.payroll ? (
+        <div className="p-8 rounded-3xl border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-3.5">
+          <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="font-heading font-black text-base text-amber-950 dark:text-amber-200">
+              قسيمة الراتب بانتظار الاعتماد النهائي من الإدارة والمدير العام
+            </h3>
+            <p className="text-xs text-amber-800/80 dark:text-amber-300/80 max-w-md mx-auto leading-relaxed">
+              وفقاً للسياسات الإدارية المعتمدة، لا تصدر قسيمة الراتب للموظف إلا بعد مراجعتها وتدقيقها والتأكيد على إتمام الاعتماد الرسمي وإقفال المسير من قبل الإدارة والمدير العام بالتحديد. تظهر هنا رواتب الشهور السابقة المنتهية فقط فور اعتمادها.
+            </p>
+          </div>
+          <div className="pt-2 flex items-center justify-center gap-2">
+            <Badge className="bg-amber-200/70 text-amber-900 dark:bg-amber-900 dark:text-amber-200 text-[11px] font-bold px-3 py-1">
+              ⏳ مسير شهر {currentMonthPrefix} قيد العمل والتدقيق
+            </Badge>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          
+          {/* GM Official Approval Banner */}
+          <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/20 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
+                  <span>معتمد وموثق رسمياً من الإدارة والمدير العام بالتحديد</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" />
+                </div>
+                <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium mt-0.5">
+                  المعتمد: {approvedPayrollData.meta?.locked_by || 'فهد ناصر محمد الجوعي (المدير العام)'}
+                  {approvedPayrollData.meta?.locked_at && (
+                    <span> • بتاريخ {new Date(approvedPayrollData.meta.locked_at).toLocaleDateString('ar-SA')}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <Badge className="bg-emerald-600 text-white font-bold text-[10px] self-start sm:self-center px-2.5 py-1">
+              مسير معتمد ومقفل رسمياً ✓
+            </Badge>
+          </div>
+
+          {/* Main Official Payslip Card */}
+          <div className="p-6 rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white space-y-6 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+                  <span>مسير راتب شهر: {selectedPayrollMonth}</span>
+                  <span className="text-slate-400">({approvedPayrollData.meta?.title || `شهر ${selectedPayrollMonth}`})</span>
+                </div>
+                <div className="text-2xl sm:text-3xl font-heading font-black text-white mt-1">
+                  {approvedPayrollData.payroll.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-sm font-normal text-emerald-300 font-sans">ريال سعودي</span>
+                </div>
+                <div className="text-xs text-slate-300 mt-1">صافي الراتب المعتمد رسمياً للصرف</div>
+              </div>
+
+              <Button
+                onClick={() => setSelectedForPayslip(approvedPayrollData.payroll)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>معاينة وطباعة قسيمة الراتب A4</span>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-700/60 text-xs">
+              <div>
+                <div className="text-slate-400">الراتب الأساسي:</div>
+                <div className="font-mono font-bold text-white mt-0.5">{approvedPayrollData.payroll.basicSalary?.toLocaleString('en-US')} ر.س</div>
+              </div>
+              <div>
+                <div className="text-slate-400">إجمالي البدلات والإضافي:</div>
+                <div className="font-mono font-bold text-emerald-400 mt-0.5">+{approvedPayrollData.payroll.totalAdditions?.toLocaleString('en-US')} ر.س</div>
+              </div>
+              <div>
+                <div className="text-slate-400">إجمالي الاستقطاعات والسلف:</div>
+                <div className="font-mono font-bold text-rose-400 mt-0.5">-{approvedPayrollData.payroll.totalDeductions?.toLocaleString('en-US')} ر.س</div>
+              </div>
+              <div>
+                <div className="text-slate-400">طريقة الصرف:</div>
+                <div className="font-bold text-slate-200 mt-0.5">{currentEmp.iban ? 'تحويل بنكي' : 'تسليم نقدي (كاش)'}</div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>🔒 معتمد ومطابق لمتطلبات نظام حماية الأجور (WPS)</span>
+              <span className="font-mono">#{currentEmp.employee_number}</span>
+            </div>
+          </div>
+
+          {/* Informational Security Footnote */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-[11px] text-muted-foreground flex items-center gap-2">
+            <Info className="w-4 h-4 text-blue-500 shrink-0" />
+            <span>
+              <strong>ملاحظة نظام الرواتب:</strong> تظهر للموظف قسائم رواتب الشهور السابقة المنتهية والمعتمدة رسمياً فقط من المدير العام، ولا يتاح راتب الشهر الحالي إلا بعد اكتمال واعتماد المسير الإداري.
+            </span>
+          </div>
+
+        </div>
+      )}
+    </Card>
+  );
+
+  // 4. Performance Tab Content
+  const renderPerformanceContent = () => {
+    const allEvals = getStoredEvaluations();
+    const clean = (v) => String(v || '').replace('emp_', '').trim();
+    const empNum = clean(currentEmp?.employee_number || currentEmp?.id);
+    
+    // Find latest evaluation for this employee
+    const myEvals = allEvals.filter(ev => clean(ev.employee_number || ev.employee_id) === empNum);
+    const latestEval = myEvals[0] || null;
+
+    if (!latestEval) {
+      return (
+        <Card className="p-8 rounded-3xl border shadow-sm bg-card text-center space-y-3">
+          <Star className="w-12 h-12 text-amber-500/40 mx-auto" />
+          <h3 className="font-heading font-black text-base text-foreground">سجل تقييم الأداء الوظيفي</h3>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            لم يتم رصد تقرير تقييم أداء معتمد لشهرك الحالي حتى الآن. يتم رصد التقييمات الشهرية دورياً من قبل الإدارة العامة.
+          </p>
+        </Card>
+      );
+    }
+
+    const tier = getEvaluationTier(latestEval.total_score);
+    const isPurchasing = Boolean(latestEval.has_purchasing_duty);
+    const criteriaList = isPurchasing ? PURCHASING_EVALUATION_CRITERIA : STANDARD_EVALUATION_CRITERIA;
+    const scores = latestEval.scores || {};
+
+    return (
+      <Card className="p-5 sm:p-6 rounded-3xl border shadow-sm bg-card space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-heading font-black text-lg text-foreground">سجل تقييم الأداء الوظيفي (KPIs)</h3>
+              <Badge variant="outline" className="font-mono text-xs font-bold text-amber-600 bg-amber-500/10 border-amber-500/30">
+                شهر {latestEval.month}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              تفصيل معايير الأداء والنسب المرجحة المعتمدة رسمياً من الإدارة العامة
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge className={`${tier.badgeClass} text-xs font-bold px-3.5 py-1.5`}>
+              {tier.grade} ({latestEval.total_score}%)
+            </Badge>
+            <Button
+              size="sm"
+              onClick={() => {
+                printEvaluationDocument(latestEval, getCompanyProfile());
+                toast({ title: '✓ جاري تجهيز تقرير التقييم للطباعة...' });
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-9 gap-1.5 shadow-sm cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              <span>طباعة الشهادة A4</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Criteria Breakdown Grid */}
+        <div className="space-y-3">
+          <div className="text-xs font-bold text-foreground flex items-center justify-between">
+            <span>تفصيل المعايير والدرجات المحققة:</span>
+            <span className="text-muted-foreground font-mono">الوزن الإجمالي: 100%</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+            {criteriaList.map(c => {
+              const score = scores[c.id] || 0;
+              return (
+                <Card key={c.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-foreground text-xs">{c.name}</span>
+                    <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-600">
+                      {c.weight}%
+                    </Badge>
+                  </div>
+                  <div className="flex items-baseline justify-between pt-1">
+                    <span className="text-[10.5px] text-muted-foreground line-clamp-1">{c.desc}</span>
+                    <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 ms-2 shrink-0">
+                      {score}%
+                    </span>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {latestEval.strengths && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs space-y-1">
+              <strong className="text-emerald-800 dark:text-emerald-300">أبرز نقاط القوة والتميز:</strong>
+              <p className="text-muted-foreground">{latestEval.strengths}</p>
+            </div>
+          )}
+        </div>
+      </Card>
+    );
+  };
+
+  // 5. Documents Tab Content
+  const renderDocumentsContent = () => (
+    <div className="space-y-5">
+      {empContract ? (
+        <div className="p-6 rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white space-y-5 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold shrink-0">
+                <Scale className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-heading font-black text-base text-white">
+                    {empContract.category === 'qiwa' ? 'عقد عمل منصة قوى الرسمي' : 'عقد العمل الداخلي الموحد (نظام العمل)'}
+                  </span>
+                  <Badge className={
+                    empContract.category === 'qiwa'
+                      ? (empContract.qiwa_document_url ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold')
+                      : (empContract.signed_by_employee ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' : 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold')
+                  }>
+                    {empContract.category === 'qiwa'
+                      ? (empContract.qiwa_document_url ? '✓ عقد قوى موثق ومرفوع' : '⏳ مطلوب رفع عقد قوى (PDF)')
+                      : (empContract.signed_by_employee ? '✓ معتمد وموقع رقمياً' : '✍️ بانتظار توقيعك الإلكتروني')}
+                  </Badge>
+                </div>
+                <div className="text-xs text-slate-400 font-mono mt-0.5">
+                  {empContract.category === 'qiwa'
+                    ? `رقم العقد في قوى: ${empContract.qiwa_contract_number || 'مسجل في قوى'} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات`
+                    : `رقم العقد: ${empContract.contract_number} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات`}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                onClick={() => {
+                  setContractModalOpen(true);
+                }}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-10 px-5 rounded-xl gap-2 shadow-lg cursor-pointer"
+              >
+                <Eye className="w-4 h-4" />
+                <span>
+                  {empContract.category === 'qiwa'
+                    ? (empContract.qiwa_document_url ? 'استعراض أو تحديث عقد قوى' : 'رفع عقد منصة قوى الآن (PDF) 📤')
+                    : (empContract.signed_by_employee ? 'عرض وطباعة العقد A4' : 'قراءة وتوقيع العقد الآن ✍️')}
+                </span>
+              </Button>
+
+              <Button
+                onClick={() => {
+                  setResignationModalOpen(true);
+                }}
+                variant="outline"
+                className="bg-slate-800/80 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border-slate-700 text-xs h-10 px-4 rounded-xl gap-1.5 cursor-pointer"
+              >
+                <Clock className="w-4 h-4" />
+                <span>تقديم إشعار استقالة (30 يوم)</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+            <div>
+              <div className="text-slate-400">مدة العقد:</div>
+              <div className="font-bold text-white mt-1">سنة واحدة (تجدد تلقائياً)</div>
+            </div>
+            <div>
+              <div className="text-slate-400">تاريخ السريان:</div>
+              <div className="font-mono font-bold text-emerald-400 mt-1">{empContract.start_date || currentEmp.join_date}</div>
+            </div>
+            <div>
+              <div className="text-slate-400">مهلة إشعار ترك العمل:</div>
+              <div className="font-bold text-amber-400 mt-1">30 يوماً على الأقل (شهر)</div>
+            </div>
+            <div>
+              <div className="text-slate-400">الشرط الجزائي والتعويض:</div>
+              <div className="font-bold text-rose-400 mt-1">خصم شهر أو راتب شهرين</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="p-6 rounded-2xl border bg-slate-50 dark:bg-slate-900 text-center text-xs text-muted-foreground">
+          جاري إعداد وتجهيز العقد الموحد...
+        </div>
+      )}
+
+      {/* 2. National ID / Iqama Document */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="p-5 rounded-2xl border bg-slate-50 dark:bg-slate-900 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-xs text-foreground">الهوية الوطنية / الإقامة</span>
+            <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">سارية المفعول ✓</Badge>
+          </div>
+          <div className="text-xs font-mono text-muted-foreground">{currentEmp.national_id || '1113348641'}</div>
+          <div className="text-[11px] text-slate-500">تاريخ الانتهاء: 2027-12-30 (سارية وموثقة في السجلات)</div>
+        </div>
+
+        <div className="p-5 rounded-2xl border bg-slate-50 dark:bg-slate-900 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-xs text-foreground">التأمين الطبي / الاجتماعي</span>
+            <Badge className={currentEmp.is_insured ? 'bg-emerald-100 text-emerald-800 text-[10px]' : 'bg-slate-100 text-slate-700 text-[10px]'}>
+              {currentEmp.is_insured ? 'مؤمن ومسجل ✓' : 'بدون تأمين طبي'}
+            </Badge>
+          </div>
+          <div className="text-xs font-mono text-muted-foreground">{currentEmp.gosi_number || '—'}</div>
+          <div className="text-[11px] text-slate-500">حماية الأجور ونظام العمل المعتمد</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 6. Account Tab Content
+  const renderAccountContent = () => (
+    <div className="py-1">
+      <MobileEmployeeProfileCard employee={currentEmp} />
+    </div>
+  );
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto pb-24 text-right" dir="rtl">
@@ -407,52 +1022,164 @@ export default function EmployeePortal() {
           </div>
           <Button
             size="sm"
-            onClick={() => setContractModalOpen(true)}
-            className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl h-8 px-3 shrink-0 shadow-xs"
+            onClick={() => setDocumentsDrawerOpen(true)}
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl h-8 px-3 shrink-0 shadow-xs cursor-pointer"
           >
             توقيع الآن ➔
           </Button>
         </div>
       )}
 
-      {/* ─── 2. DESKTOP NAVIGATION TABS ───────────────────────────────────────── */}
-      <div className="hidden sm:flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-900 rounded-2xl border overflow-x-auto">
-        {[
-          { id: 'home', label: 'الرئيسية', icon: Home },
-          { id: 'attendance', label: 'حضوري وساعاتي', icon: Clock },
-          { id: 'requests', label: 'مركز طلباتي', icon: FileText, count: requestsList.length },
-          { id: 'payroll', label: 'قسائم الرواتب', icon: Wallet },
-          { id: 'performance', label: 'تقييم الأداء', icon: Star },
-          { id: 'documents', label: 'عقد العمل ووثائقي', icon: FolderOpen },
-          { id: 'account', label: 'ملفي وبياناتي', icon: User }
-        ].map(t => {
-          const Icon = t.icon;
-          const isActive = activeTab === t.id;
+      {/* ─── 2. STICKY NAVIGATION TABS & INLINE EXPANDING PANEL (ينبثق مباشرة من مكان الضغط) ─── */}
+      <div className="sticky top-2 z-30 space-y-2.5">
+        <div className="relative flex items-center group">
+          {/* Scroll Right Button (in RTL, Right scrolls toward start) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (tabsBarRef.current) {
+                tabsBarRef.current.scrollBy({ left: 160, behavior: 'smooth' });
+              }
+            }}
+            className="absolute -right-2 z-10 w-7 h-7 rounded-full bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-emerald-600 hover:border-emerald-500/50 active:scale-90 transition-all cursor-pointer"
+            title="تمرير لليمين"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          {/* Scrollable Tabs Track with Visible Custom Scrollbar */}
+          <div
+            ref={tabsBarRef}
+            onWheel={(e) => {
+              if (tabsBarRef.current && e.deltaY !== 0) {
+                tabsBarRef.current.scrollLeft += e.deltaY;
+              }
+            }}
+            className="flex items-center gap-1.5 sm:gap-2 p-1.5 pb-2.5 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-slate-200/90 dark:border-slate-800 overflow-x-auto tabs-scrollbar scroll-smooth select-none w-full shadow-sm"
+          >
+            {[
+              { id: 'home', label: 'الرئيسية', icon: Home, isHome: true },
+              { id: 'attendance', label: 'حضوري وساعاتي', icon: Clock },
+              { id: 'requests', label: 'مركز طلباتي', icon: FileText, count: requestsList.length },
+              { id: 'payroll', label: 'قسائم الرواتب', icon: Wallet },
+              { id: 'performance', label: 'تقييم الأداء', icon: Star },
+              { id: 'documents', label: 'عقد العمل ووثائقي', icon: FolderOpen },
+              { id: 'account', label: 'ملفي وبياناتي', icon: User }
+            ].map(t => {
+              const Icon = t.icon;
+              const isActive = t.isHome ? (!activeDrawerTab) : (activeDrawerTab === t.id);
+
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    if (t.isHome) {
+                      setActiveDrawerTab(null);
+                    } else {
+                      setActiveDrawerTab(prev => prev === t.id ? null : t.id);
+                    }
+                  }}
+                  className={`group/btn relative flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 cursor-pointer active:scale-95 hover:scale-[1.02] hover:-translate-y-0.5 ${
+                    isActive
+                      ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-sm border border-emerald-500/30 ring-1 ring-emerald-500/20 font-black'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="relative flex items-center">
+                    <Icon className={`w-4 h-4 transition-transform duration-200 ${
+                      isActive
+                        ? 'scale-110 text-emerald-600 dark:text-emerald-400'
+                        : 'group-hover/btn:scale-110 group-hover/btn:text-emerald-600 dark:group-hover/btn:text-emerald-400 text-slate-500 dark:text-slate-400'
+                    }`} />
+                    {t.id === 'documents' && isContractPendingSignature && (
+                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                    )}
+                  </div>
+
+                  <span>{t.label}</span>
+
+                  {t.count !== undefined && t.count > 0 && (
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full transition-colors ${
+                      isActive
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}>
+                      {t.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Scroll Left Button (in RTL, Left scrolls toward end) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (tabsBarRef.current) {
+                tabsBarRef.current.scrollBy({ left: -160, behavior: 'smooth' });
+              }
+            }}
+            className="absolute -left-2 z-10 w-7 h-7 rounded-full bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-emerald-600 hover:border-emerald-500/50 active:scale-90 transition-all cursor-pointer"
+            title="تمرير لليسار"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ─── INLINE POP-OUT PANEL (ينبثق مباشرة من نفس مكان التاب) ─── */}
+        {Boolean(activeDrawerTab) && (() => {
+          const drawerMeta = getDrawerTabMeta(activeDrawerTab);
+          const DrawerIcon = drawerMeta.icon;
+
           return (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                isActive
-                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-border/60'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{t.label}</span>
-              {t.count !== undefined && t.count > 0 && (
-                <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] flex items-center justify-center font-mono">
-                  {t.count}
-                </span>
-              )}
-            </button>
+            <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden transition-all duration-300 animate-in slide-in-from-top-2 fade-in">
+              {/* Minimal Panel Header */}
+              <div className="flex items-center justify-between px-5 sm:px-6 py-3 border-b border-border/60 bg-slate-50/70 dark:bg-slate-800/40">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${drawerMeta.gradient} text-white flex items-center justify-center shadow-xs shrink-0`}>
+                    <DrawerIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="font-heading font-black text-sm sm:text-base text-foreground">
+                      {drawerMeta.title}
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1">
+                      {drawerMeta.subtitle}
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveDrawerTab(null)}
+                  className="rounded-full w-7 h-7 p-0 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-slate-800 cursor-pointer"
+                  title="طي"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Direct Content (No repeated switcher, no duplicates) */}
+              <div className="p-4 sm:p-5 max-h-[75vh] overflow-y-auto no-scrollbar space-y-4">
+                {activeDrawerTab === 'attendance' && renderAttendanceContent()}
+                {activeDrawerTab === 'requests' && renderRequestsContent()}
+                {activeDrawerTab === 'payroll' && renderPayrollContent()}
+                {activeDrawerTab === 'performance' && renderPerformanceContent()}
+                {activeDrawerTab === 'documents' && renderDocumentsContent()}
+                {activeDrawerTab === 'account' && renderAccountContent()}
+              </div>
+            </div>
           );
-        })}
+        })()}
       </div>
 
-      {/* ─── 3. TAB 1: HOME (MATCHING REFERENCE MOCKUP) ────────────────────── */}
-      {activeTab === 'home' && (
-        <div className="space-y-4">
+      {/* ─── 3. HOME DASHBOARD (ALWAYS PRESERVED BELOW) ────────────────────── */}
+      <div className="space-y-4">
           
           {/* Quick Services Grid - Direct Match to 2-Column Mobile App Mockup */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
@@ -481,13 +1208,19 @@ export default function EmployeePortal() {
                 label: 'سجل الحضور',
                 icon: Clock,
                 iconClass: 'bg-teal-50 text-teal-600 dark:bg-teal-950/40',
-                onClick: () => setActiveTab('attendance')
+                onClick: () => {
+                  setActiveTab('attendance');
+                  setActiveDrawerTab('attendance');
+                }
               },
               {
                 label: 'قسيمة الراتب',
                 icon: Wallet,
                 iconClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40',
-                onClick: () => setActiveTab('payroll')
+                onClick: () => {
+                  setActiveTab('payroll');
+                  setActiveDrawerTab('payroll');
+                }
               },
               {
                 label: 'طلب سلفة',
@@ -503,20 +1236,29 @@ export default function EmployeePortal() {
                 label: 'عقد العمل',
                 icon: Scale,
                 iconClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40',
-                onClick: () => setContractModalOpen(true)
+                onClick: () => {
+                  setActiveTab('documents');
+                  setActiveDrawerTab('documents');
+                }
               },
               {
                 label: 'مركز طلباتي',
                 icon: FileText,
-                iconClass: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40',
+                iconClass: 'bg-sky-50 text-sky-600 dark:bg-sky-950/40',
                 count: requestsList.length,
-                onClick: () => setActiveTab('requests')
+                onClick: () => {
+                  setActiveTab('requests');
+                  setActiveDrawerTab('requests');
+                }
               },
               {
                 label: 'تقييم الأداء',
                 icon: Award,
                 iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40',
-                onClick: () => setActiveTab('performance')
+                onClick: () => {
+                  setActiveTab('performance');
+                  setActiveDrawerTab('performance');
+                }
               }
             ].map((item, idx) => {
               const Icon = item.icon;
@@ -537,7 +1279,7 @@ export default function EmployeePortal() {
                     </div>
                   </div>
                   {item.count !== undefined && item.count > 0 ? (
-                    <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                    <span className="w-5 h-5 rounded-full bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
                       {item.count}
                     </span>
                   ) : (
@@ -579,7 +1321,7 @@ export default function EmployeePortal() {
 
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <div className="text-[10.5px] text-slate-400 font-medium">المنجز</div>
-                <div className="text-sm sm:text-base font-bold font-mono text-purple-600 mt-0.5">
+                <div className="text-sm sm:text-base font-bold font-mono text-sky-600 mt-0.5">
                   {todayLog?.total_hours || 0} س
                 </div>
               </div>
@@ -665,588 +1407,6 @@ export default function EmployeePortal() {
           )}
 
         </div>
-      )}
-
-      {/* Back Button for Child Tabs */}
-      {activeTab !== 'home' && (
-        <div className="flex items-center justify-between pb-1">
-          <button
-            onClick={() => setActiveTab('home')}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3 py-1.5 shadow-xs transition-all"
-          >
-            <ChevronRight className="w-4 h-4" />
-            <span>العودة للخدمات الرئيسية</span>
-          </button>
-        </div>
-      )}
-
-      {/* ─── 4. TAB 2: MY ATTENDANCE ────────────────────────────────────────── */}
-      {activeTab === 'attendance' && (
-        <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-heading font-black text-lg text-foreground">سجل الحضور والبصمات التفصيلي</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground">اختر الشهر:</span>
-              <Input
-                type="month"
-                value={attMonth}
-                onChange={(e) => setAttMonth(e.target.value)}
-                className="w-40 h-9 text-xs font-mono rounded-xl"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs" style={{ direction: 'rtl' }}>
-              <thead>
-                <tr className="bg-slate-100 dark:bg-slate-900 border-b font-heading font-bold text-foreground">
-                  <th className="py-3 px-3">التاريخ</th>
-                  <th className="py-3 px-2">اليوم</th>
-                  <th className="py-3 px-3 text-emerald-700 dark:text-emerald-400">الفترة النهارية (دخول ➔ خروج)</th>
-                  <th className="py-3 px-3 text-blue-700 dark:text-blue-400">الفترة المسائية (دخول ➔ خروج)</th>
-                  <th className="py-3 px-2">المطلوب</th>
-                  <th className="py-3 px-2 text-purple-700">إجمالي الفعلي</th>
-                  <th className="py-3 px-3">الفارق (عجز / زيادة)</th>
-                  <th className="py-3 px-2 text-center">الحالة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {monthlyLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-8 text-muted-foreground text-xs">
-                      لا توجد سجلات بصمة مسجلة لهذا الشهر.
-                    </td>
-                  </tr>
-                ) : (
-                  monthlyLogs.map(log => {
-                    const dateObj = new Date(log.log_date);
-                    const dayName = dateObj.toLocaleDateString('ar-SA', { weekday: 'long' });
-                    return (
-                      <tr key={log.id || log.log_date} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td className="py-3 px-3 font-mono font-bold">{log.log_date}</td>
-                        <td className="py-3 px-2 text-muted-foreground font-semibold">{dayName}</td>
-                        <td className="py-3 px-3 font-mono text-emerald-700 dark:text-emerald-400 font-bold">
-                          {log.period_1_in ? `${log.period_1_in} ➔ ${log.period_1_out || '--:--'}` : (log.check_in ? (log.check_in.includes('T') ? log.check_in.slice(11, 16) : log.check_in.slice(0, 5)) : '—')}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-blue-700 dark:text-blue-400 font-bold">
-                          {log.period_2_in ? `${log.period_2_in} ➔ ${log.period_2_out || '--:--'}` : '—'}
-                        </td>
-                        <td className="py-3 px-2 font-mono text-muted-foreground">{log.required_hours || 9} س</td>
-                        <td className="py-3 px-2 font-mono font-black text-purple-700">
-                          {log.total_hours || 0} س
-                        </td>
-                        <td className="py-3 px-3 font-mono font-extrabold">
-                          {Number(log.shortfall_hours || 0) > 0 ? (
-                            <span className="text-rose-600">-{log.shortfall_hours} س 🔻</span>
-                          ) : Number(log.overtime_hours || 0) > 0 ? (
-                            <span className="text-blue-600">+{log.overtime_hours} س ⚡</span>
-                          ) : (
-                            <span className="text-emerald-600">0 د ✓</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-2 text-center">
-                          <Badge className={
-                            log.status === 'present' ? 'bg-emerald-100 text-emerald-800' :
-                            log.status === 'weekend' ? 'bg-slate-100 text-slate-700' :
-                            log.status === 'absent' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                          }>
-                            {log.status === 'present' ? 'حاضر' : log.status === 'weekend' ? 'عطلة أسبوعية' : log.status === 'absent' ? 'غياب' : 'إجازة'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* ─── 5. TAB 3: MY REQUESTS ──────────────────────────────────────────── */}
-      {activeTab === 'requests' && (
-        <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
-            <div>
-              <h2 className="font-heading font-black text-lg text-foreground">مركز طلباتي الموحد</h2>
-              <p className="text-xs text-muted-foreground">متابعة كافة الطلبات المقدمة ومراحل اعتمادها الإداري</p>
-            </div>
-            <Button
-              onClick={() => {
-                setRequestStep('select');
-                setNewRequestModal(true);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-10 px-4 rounded-xl gap-2 shadow-md"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>تقديم طلب جديد</span>
-            </Button>
-          </div>
-
-          <div className="space-y-4">
-            {requestsList.length === 0 ? (
-              <div className="text-center py-12 space-y-3">
-                <FileText className="w-12 h-12 text-slate-300 mx-auto" />
-                <div className="font-bold text-sm text-foreground">لا توجد طلبات مسجلة حتى الآن</div>
-                <p className="text-xs text-muted-foreground">يمكنك تقديم طلب إجازة، سلفة، تعديل بصمة، أو تعريف راتب مباشرة من هنا.</p>
-              </div>
-            ) : (
-              requestsList.map(req => (
-                <div key={req.id} className="p-5 rounded-2xl border bg-slate-50 dark:bg-slate-900/40 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border flex items-center justify-center font-bold text-emerald-600 shadow-sm">
-                        <FileCheck className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm text-foreground">{req.details?.request_label || req.type}</div>
-                        <div className="text-[11px] text-muted-foreground font-mono">رقم الطلب: {req.request_number} • تاريخ التقديم: {new Date(req.created_at).toLocaleDateString('ar-SA')}</div>
-                      </div>
-                    </div>
-                    <Badge className={
-                      req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                      req.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                    }>
-                      {req.status === 'approved' ? 'تم الاعتماد بنجاح ✓' : req.status === 'rejected' ? 'تم رفض الطلب ✗' : 'قيد المراجعة الإدارية ⏳'}
-                    </Badge>
-                  </div>
-
-                  {req.reason && (
-                    <div className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-xl border">
-                      <strong>سبب ومبرر الطلب:</strong> {req.reason}
-                    </div>
-                  )}
-
-                  {/* Timeline */}
-                  {req.timeline && req.timeline.length > 0 && (
-                    <div className="space-y-1.5 pt-2">
-                      <div className="text-[11px] font-bold text-muted-foreground">سجل وخط سير المعالجة:</div>
-                      <div className="space-y-1">
-                        {req.timeline.map((item, tIdx) => (
-                          <div key={tIdx} className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span className="font-bold text-foreground">{item.title}</span>
-                            <span>بواسطة ({item.by})</span>
-                            <span className="font-mono text-[10px] text-muted-foreground">
-                              {new Date(item.at).toLocaleString('ar-SA')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* ─── 6. TAB 4: MY PAYROLL (STRICTLY GM APPROVED PAST MONTHS ONLY) ─── */}
-      {activeTab === 'payroll' && (
-        <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 gap-3">
-            <div>
-              <h2 className="font-heading font-black text-lg text-foreground">قسائم ومسيرات الرواتب الشهرية</h2>
-              <p className="text-xs text-muted-foreground">استعراض وتحميل قسائم الرواتب المعتمدة رسمياً من المدير العام (الشهور السابقة المنتهية)</p>
-            </div>
-
-            {/* Approved Month Selector */}
-            {approvedPastMonths.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-muted-foreground">الشهر المعتمد:</span>
-                <Select value={selectedPayrollMonth} onValueChange={setSelectedPayrollMonth}>
-                  <SelectTrigger className="w-56 h-9 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-900 border">
-                    <SelectValue placeholder="اختر الشهر المعتمد..." />
-                  </SelectTrigger>
-                  <SelectContent dir="rtl">
-                    {approvedPastMonths.map(m => (
-                      <SelectItem key={m.month_prefix} value={m.month_prefix} className="text-xs font-bold">
-                        ✓ {m.title || `شهر ${m.month_prefix}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-
-          {/* Verification Guard: Only show if officially approved by GM and past month */}
-          {approvedPastMonths.length === 0 || !approvedPayrollData?.payroll ? (
-            <div className="p-8 rounded-3xl border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-3.5">
-              <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
-                <Lock className="w-7 h-7" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-heading font-black text-base text-amber-950 dark:text-amber-200">
-                  قسيمة الراتب بانتظار الاعتماد النهائي من الإدارة والمدير العام
-                </h3>
-                <p className="text-xs text-amber-800/80 dark:text-amber-300/80 max-w-md mx-auto leading-relaxed">
-                  وفقاً للسياسات الإدارية المعتمدة، لا تصدر قسيمة الراتب للموظف إلا بعد مراجعتها وتدقيقها والتأكيد على إتمام الاعتماد الرسمي وإقفال المسير من قبل الإدارة والمدير العام بالتحديد. تظهر هنا رواتب الشهور السابقة المنتهية فقط فور اعتمادها.
-                </p>
-              </div>
-              <div className="pt-2 flex items-center justify-center gap-2">
-                <Badge className="bg-amber-200/70 text-amber-900 dark:bg-amber-900 dark:text-amber-200 text-[11px] font-bold px-3 py-1">
-                  ⏳ مسير شهر {currentMonthPrefix} قيد العمل والتدقيق
-                </Badge>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              
-              {/* GM Official Approval Banner */}
-              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/20 shrink-0">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
-                      <span>معتمد وموثق رسمياً من الإدارة والمدير العام بالتحديد</span>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" />
-                    </div>
-                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium mt-0.5">
-                      المعتمد: {approvedPayrollData.meta?.locked_by || 'فهد ناصر محمد الجوعي (المدير العام)'}
-                      {approvedPayrollData.meta?.locked_at && (
-                        <span> • بتاريخ {new Date(approvedPayrollData.meta.locked_at).toLocaleDateString('ar-SA')}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <Badge className="bg-emerald-600 text-white font-bold text-[10px] self-start sm:self-center px-2.5 py-1">
-                  مسير معتمد ومقفل رسمياً ✓
-                </Badge>
-              </div>
-
-              {/* Main Official Payslip Card */}
-              <div className="p-6 rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white space-y-6 shadow-xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
-                      <span>مسير راتب شهر: {selectedPayrollMonth}</span>
-                      <span className="text-slate-400">({approvedPayrollData.meta?.title || `شهر ${selectedPayrollMonth}`})</span>
-                    </div>
-                    <div className="text-2xl sm:text-3xl font-heading font-black text-white mt-1">
-                      {approvedPayrollData.payroll.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-sm font-normal text-emerald-300 font-sans">ريال سعودي</span>
-                    </div>
-                    <div className="text-xs text-slate-300 mt-1">صافي الراتب المعتمد رسمياً للصرف</div>
-                  </div>
-
-                  <Button
-                    onClick={() => setSelectedForPayslip(approvedPayrollData.payroll)}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-11 px-5 rounded-2xl gap-2 shadow-lg"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>طباعة قسيمة الراتب الرسمية A4</span>
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-700/60 text-xs">
-                  <div>
-                    <div className="text-slate-400">الراتب الأساسي:</div>
-                    <div className="font-mono font-bold text-white mt-0.5">{approvedPayrollData.payroll.basicSalary?.toLocaleString('en-US')} ر.س</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400">إجمالي البدلات والإضافي:</div>
-                    <div className="font-mono font-bold text-emerald-400 mt-0.5">+{approvedPayrollData.payroll.totalAdditions?.toLocaleString('en-US')} ر.س</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400">إجمالي الاستقطاعات والسلف:</div>
-                    <div className="font-mono font-bold text-rose-400 mt-0.5">-{approvedPayrollData.payroll.totalDeductions?.toLocaleString('en-US')} ر.س</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400">طريقة الصرف:</div>
-                    <div className="font-bold text-slate-200 mt-0.5">{currentEmp.iban ? 'تحويل بنكي' : 'تسليم نقدي (كاش)'}</div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-                  <span>🔒 معتمد ومطابق لمتطلبات نظام حماية الأجور (WPS)</span>
-                  <span className="font-mono">#{currentEmp.employee_number}</span>
-                </div>
-              </div>
-
-              {/* Informational Security Footnote */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-[11px] text-muted-foreground flex items-center gap-2">
-                <Info className="w-4 h-4 text-blue-500 shrink-0" />
-                <span>
-                  <strong>ملاحظة نظام الرواتب:</strong> تظهر للموظف قسائم رواتب الشهور السابقة المنتهية والمعتمدة رسمياً فقط من المدير العام، ولا يتاح راتب الشهر الحالي إلا بعد اكتمال واعتماد المسير الإداري.
-                </span>
-              </div>
-
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* ─── 7. TAB 5: MY PERFORMANCE (تقييم الأداء الشهري ومؤشرات الإنجاز) ─── */}
-      {activeTab === 'performance' && (() => {
-        const allEvals = getStoredEvaluations();
-        const clean = (v) => String(v || '').replace('emp_', '').trim();
-        const empNum = clean(currentEmp?.employee_number || currentEmp?.id);
-        
-        // Find latest evaluation for this employee
-        const myEvals = allEvals.filter(ev => clean(ev.employee_number || ev.employee_id) === empNum);
-        const latestEval = myEvals[0] || null;
-
-        if (!latestEval) {
-          return (
-            <Card className="p-8 rounded-3xl border shadow-sm bg-card text-center space-y-3">
-              <Star className="w-12 h-12 text-amber-500/40 mx-auto" />
-              <h2 className="font-heading font-black text-base text-foreground">سجل تقييم الأداء الوظيفي</h2>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                لم يتم رصد تقرير تقييم أداء معتمد لشهرك الحالي حتى الآن. يتم رصد التقييمات الشهرية دورياً من قبل الإدارة العامة.
-              </p>
-            </Card>
-          );
-        }
-
-        const tier = getEvaluationTier(latestEval.total_score);
-        const isPurchasing = Boolean(latestEval.has_purchasing_duty);
-        const criteriaList = isPurchasing ? PURCHASING_EVALUATION_CRITERIA : STANDARD_EVALUATION_CRITERIA;
-        const scores = latestEval.scores || {};
-
-        return (
-          <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="font-heading font-black text-lg text-foreground">سجل تقييم الأداء الوظيفي (KPIs)</h2>
-                  <Badge variant="outline" className="font-mono text-xs font-bold text-amber-600 bg-amber-500/10 border-amber-500/30">
-                    شهر {latestEval.month}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  تفصيل معايير الأداء والنسب المرجحة المعتمدة رسمياً من الإدارة العامة
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Badge className={`${tier.badgeClass} text-xs font-bold px-3.5 py-1.5`}>
-                  {tier.grade} ({latestEval.total_score}%)
-                </Badge>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    printEvaluationDocument(latestEval, getCompanyProfile());
-                    toast({ title: '✓ جاري تجهيز تقرير التقييم للطباعة...' });
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold h-9 gap-1.5 shadow-sm"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>طباعة الشهادة A4</span>
-                </Button>
-              </div>
-            </div>
-
-            {/* Criteria Breakdown Grid */}
-            <div className="space-y-3">
-              <div className="text-xs font-bold text-foreground flex items-center justify-between">
-                <span>تفصيل المعايير والدرجات المحققة:</span>
-                <span className="text-muted-foreground font-mono">الوزن الإجمالي: 100%</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                {criteriaList.map(c => {
-                  const score = scores[c.id] || 0;
-                  return (
-                    <Card key={c.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-foreground text-xs">{c.name}</span>
-                        <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-600">
-                          {c.weight}%
-                        </Badge>
-                      </div>
-                      <div className="flex items-baseline justify-between pt-1">
-                        <span className="text-[10.5px] text-muted-foreground line-clamp-1">{c.desc}</span>
-                        <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 ms-2 shrink-0">
-                          {score}%
-                        </span>
-                      </div>
-                      {/* Progress Bar */}
-                      <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
-                        />
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Management Notes & Strengths */}
-            <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900 to-slate-900 border border-emerald-800/40 text-xs space-y-2.5">
-              <div className="font-bold text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>ملاحظات وتوجيهات المدير العام ({latestEval.evaluated_by || 'فهد ناصر محمد الجوعي'}):</span>
-              </div>
-              <p className="text-slate-200 leading-relaxed text-xs">
-                {latestEval.notes || 'أداء متميز وتفانٍ كامل في العمل وخدمة العملاء. الاستمرار في الحفاظ على هذا المستوى.'}
-              </p>
-              {latestEval.strengths && (
-                <div className="pt-1 text-[11px] text-slate-300">
-                  <strong className="text-emerald-300">أبرز نقاط القوة:</strong> {latestEval.strengths}
-                </div>
-              )}
-            </div>
-
-          </Card>
-        );
-      })()}
-
-      {/* ─── 8. TAB 6: MY DOCUMENTS & CONTRACTS ──────────────────────────────── */}
-      {activeTab === 'documents' && (
-        <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="flex items-center justify-between border-b pb-4">
-            <div>
-              <h2 className="font-heading font-black text-lg text-foreground">الوثائق وعقد العمل المعتمد</h2>
-              <p className="text-xs text-muted-foreground">عقد العمل الرسمي، الشروط واللائحة، وإثباتات الهوية</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            
-            {/* 1. Official Employment Contract Card */}
-            {empContract ? (
-              <div className="p-6 rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white space-y-5 shadow-xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold">
-                      <Scale className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-heading font-black text-base text-white">
-                          {empContract.category === 'qiwa' ? 'عقد عمل منصة قوى الرسمي' : 'عقد العمل الداخلي الموحد (نظام العمل)'}
-                        </span>
-                        <Badge className={
-                          empContract.category === 'qiwa'
-                            ? (empContract.qiwa_document_url ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold')
-                            : (empContract.signed_by_employee ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' : 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold')
-                        }>
-                          {empContract.category === 'qiwa'
-                            ? (empContract.qiwa_document_url ? '✓ عقد قوى موثق ومرفوع' : '⏳ مطلوب رفع عقد قوى (PDF)')
-                            : (empContract.signed_by_employee ? '✓ معتمد وموقع رقمياً' : '✍️ بانتظار توقيعك الإلكتروني')}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-slate-400 font-mono mt-0.5">
-                        {empContract.category === 'qiwa'
-                          ? `رقم العقد في قوى: ${empContract.qiwa_contract_number || 'مسجل في قوى'} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات`
-                          : `رقم العقد: ${empContract.contract_number} • صاحب العمل: شركة درة السيارة لقطع غيار السيارات`}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                      onClick={() => setContractModalOpen(true)}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs h-10 px-5 rounded-xl gap-2 shadow-lg"
-                    >
-                      <Eye className="w-4 h-4" />
-                      <span>
-                        {empContract.category === 'qiwa'
-                          ? (empContract.qiwa_document_url ? 'استعراض أو تحديث عقد قوى' : 'رفع عقد منصة قوى الآن (PDF) 📤')
-                          : (empContract.signed_by_employee ? 'عرض وطباعة العقد A4' : 'قراءة وتوقيع العقد الآن ✍️')}
-                      </span>
-                    </Button>
-
-                    <Button
-                      onClick={() => setResignationModalOpen(true)}
-                      variant="outline"
-                      className="bg-slate-800/80 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border-slate-700 text-xs h-10 px-4 rounded-xl gap-1.5"
-                    >
-                      <Clock className="w-4 h-4" />
-                      <span>تقديم إشعار استقالة (30 يوم)</span>
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                  <div>
-                    <div className="text-slate-400">مدة العقد:</div>
-                    <div className="font-bold text-white mt-1">سنة واحدة (تجدد تلقائياً)</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400">تاريخ السريان:</div>
-                    <div className="font-mono font-bold text-emerald-400 mt-1">{empContract.start_date || currentEmp.join_date}</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400">مهلة إشعار ترك العمل:</div>
-                    <div className="font-bold text-amber-400 mt-1">30 يوماً على الأقل (شهر)</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400">الشرط الجزائي والتعويض:</div>
-                    <div className="font-bold text-rose-400 mt-1">خصم شهر أو راتب شهرين</div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 rounded-2xl border bg-slate-50 dark:bg-slate-900 text-center text-xs text-muted-foreground">
-                جاري إعداد وتجهيز العقد الموحد...
-              </div>
-            )}
-
-            {/* 2. National ID / Iqama Document */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-5 rounded-2xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-foreground">الهوية الوطنية / الإقامة</span>
-                  <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">سارية المفعول ✓</Badge>
-                </div>
-                <div className="text-xs font-mono text-muted-foreground">{currentEmp.national_id || '1113348641'}</div>
-                <div className="text-[11px] text-slate-500">تاريخ الانتهاء: 2027-12-30 (سارية وموثقة في السجلات)</div>
-              </div>
-
-              <div className="p-5 rounded-2xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-foreground">التأمين الطبي / الاجتماعي</span>
-                  <Badge className={currentEmp.is_insured ? 'bg-emerald-100 text-emerald-800 text-[10px]' : 'bg-slate-100 text-slate-700 text-[10px]'}>
-                    {currentEmp.is_insured ? 'مؤمن ومسجل ✓' : 'بدون تأمين طبي'}
-                  </Badge>
-                </div>
-                <div className="text-xs font-mono text-muted-foreground">{currentEmp.gosi_number || '—'}</div>
-                <div className="text-[11px] text-slate-500">حماية الأجور ونظام العمل المعتمد</div>
-              </div>
-            </div>
-
-          </div>
-        </Card>
-      )}
-
-      {/* ─── 9. TAB 7: MY ACCOUNT ───────────────────────────────────────────── */}
-      {activeTab === 'account' && (
-        <Card className="p-6 rounded-3xl border shadow-sm bg-card space-y-6">
-          <div className="border-b pb-4">
-            <h2 className="font-heading font-black text-lg text-foreground">الملف التعريفي والبيانات البنكية</h2>
-            <p className="text-xs text-muted-foreground">بيانات الحساب المعتمدة في نظام حماية الأجور (WPS)</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-1">
-              <div className="text-muted-foreground">الاسم الكامل:</div>
-              <div className="font-bold text-foreground text-sm">{currentEmp.full_name}</div>
-            </div>
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-1">
-              <div className="text-muted-foreground">الرقم الوظيفي:</div>
-              <div className="font-mono font-bold text-foreground text-sm">#{currentEmp.employee_number}</div>
-            </div>
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-1">
-              <div className="text-muted-foreground">رقم الآيبان البنكي (IBAN):</div>
-              <div className="font-mono font-bold text-foreground text-sm">{currentEmp.iban || 'غير مسجل (صرف نقدي)'}</div>
-            </div>
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border space-y-1">
-              <div className="text-muted-foreground">الفرع المعتمد:</div>
-              <div className="font-bold text-foreground text-sm">{currentEmp.branch_name || currentEmp.branch || 'الفرع الرئيسي'}</div>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* ─── 10. NEW REQUEST MODAL (2-COLUMN SQUARE GRID & DEDICATED FORMS) ───── */}
       <Dialog open={newRequestModal} onOpenChange={setNewRequestModal}>
@@ -1339,7 +1499,7 @@ export default function EmployeePortal() {
                     title: 'تعديل الوردية',
                     subtitle: 'طلب تغيير شفت الدوام',
                     icon: Briefcase,
-                    iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60',
+                    iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-950/60 dark:text-sky-400 border border-sky-200/60 dark:border-sky-700/60',
                     onClick: () => {
                       setSelectedRequestType('shift_change');
                       setRequestStep('form');
@@ -1703,6 +1863,8 @@ export default function EmployeePortal() {
 
         </DialogContent>
       </Dialog>
+
+
 
       {/* ─── 11. CONTRACT VIEWER MODAL ───────────────────────────────────────── */}
       <ContractViewerModal

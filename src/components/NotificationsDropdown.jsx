@@ -25,7 +25,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-export default function NotificationsDropdown() {
+export default function NotificationsDropdown({ triggerClassName = '' }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -39,6 +39,22 @@ export default function NotificationsDropdown() {
   });
 
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'approvals' | 'alerts'
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  // Listen for real-time request events, cloud sync, and periodic polling
+  useEffect(() => {
+    const handleUpdate = () => setRefreshTick(t => t + 1);
+    window.addEventListener('hr_requests_updated', handleUpdate);
+    window.addEventListener('cloud_data_synced', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    const interval = setInterval(handleUpdate, 4000);
+    return () => {
+      window.removeEventListener('hr_requests_updated', handleUpdate);
+      window.removeEventListener('cloud_data_synced', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Load employees for document alerts
   useEffect(() => {
@@ -67,71 +83,145 @@ export default function NotificationsDropdown() {
   // Aggregate all live notifications
   const notifications = useMemo(() => {
     const list = [];
-    const role = user?.role || 'employee';
-    const isManager = ['owner', 'hr', 'accountant', 'system_admin'].includes(role);
+    const role = (user?.role || '').toLowerCase();
+    const isManager = [
+      'owner', 'hr', 'accountant', 'system_admin', 'general_manager', 'gm', 'admin', 'manager'
+    ].includes(role) || 
+    Boolean(user?.is_manager || user?.is_admin || (user?.full_name && user.full_name.includes('فهد')));
 
-    // 1. Advances Requests
+    // 1. Advances Requests (Merge from hr_advances_list, hr_flow_employee_advances, and hr_flow_unified_requests)
     try {
-      const advs = JSON.parse(localStorage.getItem('hr_advances_list') || localStorage.getItem('hr_flow_employee_advances') || '[]');
-      (advs || []).forEach(a => {
-        if (isManager && ['pending', 'hr_approved', 'accountant_approved'].includes(a.status)) {
+      const advs = JSON.parse(localStorage.getItem('hr_advances_list') || '[]');
+      const flowAdvs = JSON.parse(localStorage.getItem('hr_flow_employee_advances') || '[]');
+      const unified = JSON.parse(localStorage.getItem('hr_flow_unified_requests') || '[]');
+
+      const allAdvs = [...(Array.isArray(advs) ? advs : [])];
+      (Array.isArray(flowAdvs) ? flowAdvs : []).forEach(fa => {
+        if (!allAdvs.some(a => a.id === fa.id)) allAdvs.push(fa);
+      });
+      (Array.isArray(unified) ? unified : []).filter(u => ['advance', 'salary_advance', 'loan'].includes(u.type)).forEach(u => {
+        if (!allAdvs.some(a => a.id === u.id)) {
+          allAdvs.push({
+            id: u.id,
+            employee_name: u.employee_name,
+            amount: u.details?.amount || u.amount || 0,
+            reason: u.reason || u.details?.reason || 'طلب سلفة راتب',
+            status: u.status || 'pending',
+            date: u.created_at || new Date().toISOString()
+          });
+        }
+      });
+
+      allAdvs.forEach(a => {
+        const isPending = ['pending', 'hr_approved', 'accountant_approved', 'pending_gm_approval', 'under_review'].includes(a.status);
+        if (isManager && isPending) {
+          let badgeText = 'بانتظار الموافقة';
+          if (a.status === 'pending' || a.status === 'under_review') badgeText = 'طلب سلفة جديد';
+          else if (a.status === 'hr_approved') badgeText = 'بانتظار المحاسب';
+          else if (a.status === 'accountant_approved' || a.status === 'pending_gm_approval') badgeText = 'بانتظار اعتماد المدير العام';
+
           list.push({
             id: 'notif_adv_' + a.id,
             type: 'advance',
             category: 'approvals',
             title: 'طلب سلفة جديد',
-            desc: `${a.employee_name} — ${Number(a.amount || 0).toLocaleString('en-US')} ر.س (${a.reason || 'سلفة راتب'})`,
+            desc: `${a.employee_name || 'موظف'} — ${Number(a.amount || a.total_amount || 0).toLocaleString('en-US')} ر.س (${a.reason || 'سلفة راتب'})`,
             time: a.date || a.created_at || new Date().toISOString(),
-            link: '/approvals',
+            link: '/approvals?tab=advances',
             icon: CreditCard,
             iconColor: 'text-amber-500 bg-amber-500/10',
-            badge: a.status === 'pending' ? 'بانتظار HR' : (a.status === 'hr_approved' ? 'بانتظار المحاسب' : 'بانتظار المدير العام')
+            badge: badgeText
           });
         }
       });
-    } catch {}
+    } catch (e) {
+      console.error('Adv notif err:', e);
+    }
 
-    // 2. Leave Requests
+    // 2. Leave Requests (Merge from hr_leave_requests and hr_flow_unified_requests)
     try {
       const leaves = JSON.parse(localStorage.getItem('hr_leave_requests') || '[]');
-      (leaves || []).forEach(l => {
-        if (isManager && l.status === 'pending') {
+      const unified = JSON.parse(localStorage.getItem('hr_flow_unified_requests') || '[]');
+
+      const allLeaves = [...(Array.isArray(leaves) ? leaves : [])];
+      (Array.isArray(unified) ? unified : []).filter(u => ['annual_leave', 'leave_extension', 'return_from_leave', 'permission'].includes(u.type)).forEach(u => {
+        if (!allLeaves.some(l => l.id === u.id)) {
+          allLeaves.push({
+            id: u.id,
+            employee_name: u.employee_name,
+            leave_type: u.details?.request_label || (u.type === 'permission' ? `طلب استئذان (${u.details?.permissionHours || 2} س)` : 'طلب إجازة'),
+            start_date: u.details?.startDate || new Date().toISOString().split('T')[0],
+            end_date: u.details?.endDate || u.details?.startDate || new Date().toISOString().split('T')[0],
+            reason: u.reason || u.details?.reason || '',
+            status: u.status || 'pending',
+            created_at: u.created_at || new Date().toISOString()
+          });
+        }
+      });
+
+      allLeaves.forEach(l => {
+        if (isManager && (l.status === 'pending' || l.status === 'under_review')) {
           list.push({
             id: 'notif_leave_' + l.id,
             type: 'leave',
             category: 'approvals',
-            title: 'طلب إجازة جديد',
-            desc: `${l.employee_name} — ${l.leave_type} (من ${l.start_date} إلى ${l.end_date})`,
+            title: l.leave_type || 'طلب إجازة جديد',
+            desc: `${l.employee_name || 'موظف'} — ${l.leave_type || 'إجازة'} (من ${l.start_date || '—'} إلى ${l.end_date || '—'})`,
             time: l.created_at || new Date().toISOString(),
-            link: '/approvals',
+            link: '/approvals?tab=leaves',
             icon: Calendar,
             iconColor: 'text-emerald-500 bg-emerald-500/10',
             badge: 'طلب إجازة'
           });
         }
       });
-    } catch {}
+    } catch (e) {
+      console.error('Leave notif err:', e);
+    }
 
-    // 3. Punch Corrections
+    // 3. Punch Corrections (تعديلات البصمة - Merge from hr_correction_requests and hr_flow_unified_requests)
     try {
       const corrs = JSON.parse(localStorage.getItem('hr_correction_requests') || '[]');
-      (corrs || []).forEach(c => {
-        if (isManager && c.status === 'pending') {
+      const unified = JSON.parse(localStorage.getItem('hr_flow_unified_requests') || '[]');
+
+      const allCorrs = [...(Array.isArray(corrs) ? corrs : [])];
+      (Array.isArray(unified) ? unified : []).filter(u => ['punch_correction', 'attendance_correction'].includes(u.type)).forEach(u => {
+        if (!allCorrs.some(c => c.id === u.id)) {
+          const corrDate = u.details?.startDate || u.details?.targetDate || u.details?.log_date || (u.created_at || '').split('T')[0];
+          const checkIn = u.details?.checkInTime || '09:00';
+          const checkOut = u.details?.checkOutTime || '17:00';
+          allCorrs.push({
+            id: u.id,
+            employee_name: u.employee_name,
+            log_date: corrDate,
+            check_in: checkIn,
+            check_out: checkOut,
+            reason: u.reason || u.details?.reason || 'طلب تصحيح بصمة',
+            status: u.status || 'pending',
+            created_at: u.created_at || new Date().toISOString()
+          });
+        }
+      });
+
+      allCorrs.forEach(c => {
+        if (isManager && (c.status === 'pending' || c.status === 'under_review' || c.status === 'pending_gm_approval')) {
           list.push({
             id: 'notif_corr_' + c.id,
             type: 'correction',
             category: 'approvals',
             title: 'طلب تعديل بصمة',
-            desc: `${c.employee_name} — تاريخ ${c.log_date} (${c.reason || 'نسيان تسجيل'})`,
+            desc: `${c.employee_name || 'موظف'} — تاريخ ${c.log_date || '—'} (دخول ${c.check_in || '—'} / خروج ${c.check_out || '—'})`,
             time: c.created_at || new Date().toISOString(),
-            link: '/approvals',
+            link: '/approvals?tab=corrections',
             icon: Clock,
             iconColor: 'text-sky-500 bg-sky-500/10',
             badge: 'تعديل بصمة'
           });
         }
       });
-    } catch {}
+    } catch (e) {
+      console.error('Correction notif err:', e);
+    }
 
     // 4. Document Expiry Alerts (Critical & High)
     if (isManager && employees.length > 0) {
@@ -152,14 +242,23 @@ export default function NotificationsDropdown() {
       });
     }
 
+    // Deduplicate by ID
+    const uniqueMap = new Map();
+    list.forEach(item => {
+      if (!uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, item);
+      }
+    });
+    const uniqueList = Array.from(uniqueMap.values());
+
     // Sort: Unread first, then by date
-    return list.sort((a, b) => {
+    return uniqueList.sort((a, b) => {
       const aRead = readIds.includes(a.id);
       const bRead = readIds.includes(b.id);
       if (aRead !== bRead) return aRead ? 1 : -1;
       return new Date(b.time) - new Date(a.time);
     });
-  }, [user, employees, readIds]);
+  }, [user, employees, readIds, refreshTick]);
 
   const filteredNotifs = useMemo(() => {
     if (activeFilter === 'all') return notifications;
@@ -182,7 +281,7 @@ export default function NotificationsDropdown() {
     <DropdownMenu open={open} onOpenChange={setOpen} dir="rtl">
       <DropdownMenuTrigger asChild>
         <button
-          className="relative h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none"
+          className={`relative h-8 w-8 rounded-xl flex items-center justify-center transition-colors focus:outline-none ${triggerClassName || 'text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800'}`}
           title="مركز الإشعارات والتنبيهات"
         >
           <Bell className={`w-4 h-4 transition-transform ${unreadCount > 0 ? 'text-amber-500 animate-bounce' : ''}`} />

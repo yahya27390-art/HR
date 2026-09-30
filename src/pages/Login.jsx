@@ -1,56 +1,36 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { 
-  Building2, 
   User, 
   Lock, 
   Eye, 
   EyeOff, 
-  ShieldCheck, 
-  Sparkles,
-  ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
+  AlertCircle,
   Clock,
-  KeyRound,
-  FileText,
-  Calendar,
-  Wallet,
-  Star,
-  Check,
-  Smartphone,
-  ChevronRight
+  LogIn,
+  ShieldCheck,
+  Sparkles,
+  Building2,
+  Globe
 } from "lucide-react";
-import { safeReturnTo } from "@/lib/authReturnTo";
 import { useCompanyProfile } from "@/lib/companyProfile";
 
 export default function Login() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
   const { profile: company } = useCompanyProfile();
 
-  // Read domain from URL param or saved storage or fallback to doratcars
   const [domain, setDomain] = useState(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlDomain = urlParams.get("domain") || urlParams.get("tenant") || urlParams.get("company");
-    if (urlDomain) return urlDomain;
-    const saved = localStorage.getItem("green_arrow_last_domain");
-    return saved || "doratcars";
+    return localStorage.getItem('hr_saas_tenant_domain') || 'dorat-sayarah';
   });
-
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberWorkspace, setRememberWorkspace] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Active feature slide for the hero showcase
-  const [activeSlide, setActiveSlide] = useState(0);
-
-  // Check if redirected due to timeout
   const [isTimeout, setIsTimeout] = useState(false);
 
   useEffect(() => {
@@ -60,31 +40,23 @@ export default function Login() {
     }
   }, []);
 
-  // Auto slide ticker for hero showcase
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveSlide(prev => (prev + 1) % 3);
-    }, 4500);
-    return () => clearInterval(timer);
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     const cleanDomain = (domain || "").trim().toLowerCase();
-    const cleanUser = (username || "").trim();
+    const cleanEmail = (email || "").trim();
     const cleanPass = (password || "").trim();
 
     if (!cleanDomain) {
-      setError("يرجى إدخال نطاق الشركة المشتركة.");
+      setError("يرجى إدخال نطاق المنشأة (Workspace Domain).");
       setLoading(false);
       return;
     }
 
-    if (!cleanUser) {
-      setError("يرجى إدخال اسم المستخدم أو رقم الهوية الوطنية أو الرقم الوظيفي.");
+    if (!cleanEmail) {
+      setError("يرجى إدخال اسم المستخدم أو رقم الهوية.");
       setLoading(false);
       return;
     }
@@ -95,407 +67,312 @@ export default function Login() {
       return;
     }
 
+    localStorage.setItem('hr_saas_tenant_domain', cleanDomain);
+
     try {
-      if (rememberWorkspace) {
-        localStorage.setItem("green_arrow_last_domain", cleanDomain);
+      const result = await login(cleanEmail, cleanPass);
+      if (result && result.error) {
+        setError(result.error.message || "بيانات الدخول غير صحيحة، يرجى التحقق والمحاولة مجدداً.");
+        return;
       }
 
-      await base44.auth.loginViaNationalIdOrUsername(cleanDomain, cleanUser, cleanPass);
-
-      // Successful login redirect
       const urlParams = new URLSearchParams(window.location.search);
-      const returnTo = safeReturnTo(urlParams.get("returnTo"));
-      window.location.href = returnTo || "/";
+      const returnTo = urlParams.get("returnTo");
+      if (returnTo && returnTo.startsWith("/")) {
+        navigate(returnTo, { replace: true });
+      } else if (result?.employee?.role === 'employee' || result?.role === 'employee') {
+        navigate("/portal", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (err) {
       console.error("Login failed:", err);
-      setError(err.message || "فشل تسجيل الدخول. يرجى التحقق من صحة النطاق والبيانات.");
+      setError(err.message || "فشل تسجيل الدخول. يرجى التأكد من البيانات.");
     } finally {
       setLoading(false);
     }
   };
 
+  const companyLogo = company?.logo_url || "/company-logo.png";
+  const companyTitle = company?.name || "شركة درة السيارة";
+
   return (
-    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-[#F8FAFC] dark:bg-slate-950 font-sans selection:bg-emerald-500 selection:text-white" dir="rtl">
-      
-      {/* ─── LEFT PANEL: THE LUXURY HERO SHOWCASE (Ektefa Inspired Style) ──── */}
-      <div className="w-full lg:w-1/2 p-4 sm:p-8 lg:p-12 flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-amber-500/10 via-emerald-500/5 to-sky-500/10 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 border-b lg:border-b-0 lg:border-l border-slate-250 dark:border-slate-800">
+    <div 
+      className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-8 bg-[#EDF4FA] dark:bg-slate-950 font-sans selection:bg-sky-500 selection:text-white relative overflow-hidden"
+      dir="ltr"
+    >
+      {/* Soft Ambient Background Elements */}
+      <div className="absolute top-10 left-10 w-72 h-72 bg-sky-200/50 dark:bg-sky-900/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 right-10 w-80 h-80 bg-blue-200/40 dark:bg-blue-900/20 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Main Container Card (Identical to Behance / Dribbble design reference) */}
+      <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl shadow-sky-500/10 border border-slate-100 dark:border-slate-800 overflow-hidden relative z-10 flex flex-col md:flex-row items-stretch">
         
-        {/* Background Ambient Glow & Patterns */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-amber-400/20 dark:bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-emerald-400/20 dark:bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        {/* Decorative Floating Circle Overlapping Bottom Corner */}
+        <div className="absolute -bottom-10 -right-10 w-44 h-44 bg-sky-200/40 dark:bg-sky-900/30 rounded-full pointer-events-none z-0" />
 
-        {/* Top Tagline */}
-        <div className="relative z-10 text-center pt-4 lg:pt-8 space-y-2">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-heading font-black text-slate-800 dark:text-slate-100 tracking-tight">
-            سهل ... متكامل ... سحابي ...
-          </h2>
-          <p className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 font-mono" dir="ltr">
-            Simple ... Unified ... Cloud ...
-          </p>
-        </div>
-
-        {/* Center: 3D Floating Isometric Feature Cards Showcase */}
-        <div className="relative z-10 my-8 lg:my-auto max-w-md mx-auto w-full flex flex-col items-center justify-center min-h-[360px]">
+        {/* ─── LEFT SIDE: ARTISTIC FLAT-VECTOR ILLUSTRATION ───────────────── */}
+        <div className="w-full md:w-1/2 p-6 sm:p-10 flex flex-col items-center justify-center relative overflow-hidden bg-gradient-to-br from-white via-sky-50/40 to-sky-100/30 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 min-h-[340px] md:min-h-[460px]">
           
-          {/* Card 1: Requests & Self Service */}
-          <div className={`w-full bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-200/80 dark:border-slate-800 transition-all duration-700 transform ${
-            activeSlide === 0 ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 absolute pointer-events-none'
-          }`}>
-            <div className="flex items-center justify-between border-b pb-3 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-heading font-black text-xs text-foreground">بوابة الخدمة الذاتية والطلبات</h4>
-                  <p className="text-[10px] text-muted-foreground">14 نوع طلب معتمد إلكترونياً</p>
-                </div>
-              </div>
-              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                اعتماد فوري ✓
-              </Badge>
-            </div>
+          {/* Organic Vector Waves & Blobs (SVG) */}
+          <svg 
+            viewBox="0 0 400 450" 
+            className="w-full h-full max-w-[340px] max-h-[380px] drop-shadow-sm select-none"
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              {/* Main Wave Gradient */}
+              <linearGradient id="waveGrad" x1="0" y1="0" x2="300" y2="400" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#60A5FA" />
+                <stop offset="100%" stopColor="#38BDF8" />
+              </linearGradient>
 
-            <div className="space-y-2">
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700 dark:text-slate-300">🌴 طلب إجازة سنوية</span>
-                <span className="text-[10px] text-emerald-600 font-bold font-mono">30 يوماً رصيد</span>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700 dark:text-slate-300">💳 طلب سلفة راتب شهرية</span>
-                <span className="text-[10px] text-blue-600 font-bold font-mono">حسم أقساط ميسر</span>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700 dark:text-slate-300">📜 شهادة تعريف بالراتب A4</span>
-                <span className="text-[10px] text-purple-600 font-bold">طباعة مصدقة فوراً</span>
-              </div>
-            </div>
-          </div>
+              {/* Soft Cloud Gradient */}
+              <linearGradient id="cloudGrad" x1="50" y1="50" x2="350" y2="250" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#E0F2FE" />
+                <stop offset="100%" stopColor="#BAE6FD" stopOpacity="0.6" />
+              </linearGradient>
 
-          {/* Card 2: Biometrics Attendance & Friday Overtime */}
-          <div className={`w-full bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-200/80 dark:border-slate-800 transition-all duration-700 transform ${
-            activeSlide === 1 ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 absolute pointer-events-none'
-          }`}>
-            <div className="flex items-center justify-between border-b pb-3 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-600 flex items-center justify-center font-bold">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-heading font-black text-xs text-foreground">الحضور الذكي ودوام الجمعات</h4>
-                  <p className="text-[10px] text-muted-foreground">مزامنة سحابية لحظية للبصمات</p>
-                </div>
-              </div>
-              <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 text-[10px] font-bold">
-                ربط الفروع 🌐
-              </Badge>
-            </div>
+              {/* Phone Screen Gradient */}
+              <linearGradient id="screenGrad" x1="0" y1="0" x2="0" y2="280" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#F0F9FF" />
+                <stop offset="100%" stopColor="#E0F2FE" />
+              </linearGradient>
+            </defs>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-center">
-                <div className="text-[10px] text-muted-foreground">دخول الفترة النهارية</div>
-                <div className="font-mono font-black text-emerald-600 text-base mt-0.5">08:00 ص</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-center">
-                <div className="text-[10px] text-muted-foreground">خروج الفترة المسائية</div>
-                <div className="font-mono font-black text-blue-600 text-base mt-0.5">10:00 م</div>
-              </div>
-            </div>
-            <div className="mt-3 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 text-center text-[10.5px] font-bold text-amber-800 dark:text-amber-300">
-              ⚡ احتساب بدل حضور الجمعات والإضافي تلقائياً في مسير الراتب
-            </div>
-          </div>
-
-          {/* Card 3: Performance Evaluations (KPIs) */}
-          <div className={`w-full bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-200/80 dark:border-slate-800 transition-all duration-700 transform ${
-            activeSlide === 2 ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 absolute pointer-events-none'
-          }`}>
-            <div className="flex items-center justify-between border-b pb-3 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center font-bold">
-                  <Star className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-heading font-black text-xs text-foreground">منظومة تقييم الأداء ومشتريات الفروع</h4>
-                  <p className="text-[10px] text-muted-foreground">مصفوفة معايير الأوزان المرجحة (100%)</p>
-                </div>
-              </div>
-              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                ⭐ ممتاز مرتفع
-              </Badge>
-            </div>
-
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-muted-foreground">الانضباط والزي والمهام</span>
-                <span className="font-bold text-emerald-600 font-mono">98%</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-muted-foreground">خدمة العملاء والواتساب وتقييمات جوجل</span>
-                <span className="font-bold text-blue-600 font-mono">95%</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-muted-foreground">تارجت المبيعات ومشتريات الفرع</span>
-                <span className="font-bold text-purple-600 font-mono">96%</span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Carousel Indicators */}
-        <div className="relative z-10 flex items-center justify-center gap-2 py-3">
-          {[0, 1, 2].map(idx => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => setActiveSlide(idx)}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                activeSlide === idx 
-                  ? 'w-8 bg-slate-800 dark:bg-emerald-400' 
-                  : 'w-2 bg-slate-300 dark:bg-slate-700'
-              }`}
+            {/* Background Soft Organic Blob */}
+            <path 
+              d="M60 180 C40 120, 100 80, 180 85 C260 90, 340 110, 350 170 C360 230, 310 270, 260 280 C210 290, 80 240, 60 180 Z" 
+              fill="url(#cloudGrad)"
             />
-          ))}
+
+            {/* Left Big Smooth Wave Curve (Signature shape from reference image) */}
+            <path 
+              d="M0 160 C50 180, 100 240, 95 320 C90 390, 130 430, 160 450 L0 450 Z" 
+              fill="url(#waveGrad)"
+            />
+
+            {/* Small Floating Pastel Bubbles */}
+            <circle cx="50" cy="110" r="14" fill="#BAE6FD" opacity="0.6" />
+            <circle cx="340" cy="130" r="18" fill="#BAE6FD" opacity="0.5" />
+            <circle cx="360" cy="280" r="10" fill="#93C5FD" opacity="0.4" />
+            <circle cx="90" cy="410" r="6" fill="#FFFFFF" opacity="0.7" />
+
+            {/* Botanical Foliage / Stem on the Left */}
+            <path 
+              d="M130 330 Q120 230, 145 140" 
+              stroke="#93C5FD" 
+              strokeWidth="3" 
+              strokeLinecap="round" 
+              fill="none" 
+            />
+            {/* Leaves along stem */}
+            <path d="M128 290 C105 285, 100 270, 108 260 C118 260, 126 275, 128 290 Z" fill="#60A5FA" opacity="0.8" />
+            <path d="M132 265 C150 255, 155 240, 146 235 C136 237, 131 250, 132 265 Z" fill="#93C5FD" />
+            <path d="M125 235 C102 230, 98 215, 106 205 C116 206, 123 220, 125 235 Z" fill="#60A5FA" opacity="0.8" />
+            <path d="M133 210 C152 200, 156 185, 147 180 C138 182, 132 195, 133 210 Z" fill="#93C5FD" />
+            <path d="M128 180 C108 175, 105 160, 112 150 C122 152, 127 165, 128 180 Z" fill="#60A5FA" opacity="0.8" />
+            <path d="M138 155 C155 145, 158 132, 150 128 C142 130, 137 142, 138 155 Z" fill="#93C5FD" />
+            <path d="M145 140 C140 120, 148 110, 153 112 C156 120, 152 132, 145 140 Z" fill="#60A5FA" />
+
+            {/* Smartphone Graphic (Centerpiece) */}
+            <g transform="translate(140, 125)">
+              {/* Outer Shadow & Chassis */}
+              <rect x="0" y="0" width="130" height="230" rx="22" fill="#1E293B" />
+              {/* Inner Screen */}
+              <rect x="4" y="4" width="122" height="222" rx="18" fill="url(#screenGrad)" />
+              {/* Top Speaker Notch */}
+              <rect x="45" y="10" width="40" height="4" rx="2" fill="#CBD5E1" />
+
+              {/* Seated Employee / Professional Character Inside Phone */}
+              {/* Head & Hair */}
+              <circle cx="65" cy="85" r="14" fill="#FCD34D" opacity="0.3" />
+              {/* Hair */}
+              <path d="M52 82 C52 70, 78 70, 78 82 C74 76, 56 76, 52 82 Z" fill="#C2410C" />
+              {/* Face */}
+              <ellipse cx="65" cy="84" rx="10" ry="11" fill="#FDBA74" />
+              {/* Neck */}
+              <rect x="62" y="94" width="6" height="6" fill="#FB923C" />
+              
+              {/* White Shirt Torso */}
+              <path d="M50 100 L80 100 L82 145 L48 145 Z" fill="#FFFFFF" />
+              {/* Tie */}
+              <path d="M63 100 L67 100 L66 128 L64 128 Z" fill="#DC2626" />
+              {/* Suit Collar details */}
+              <path d="M50 100 L62 108 L62 100 Z" fill="#E2E8F0" />
+              <path d="M80 100 L68 108 L68 100 Z" fill="#E2E8F0" />
+
+              {/* Arms folded / resting */}
+              <path d="M50 102 C42 115, 45 138, 56 142 L58 134 C50 130, 48 116, 54 106 Z" fill="#CBD5E1" />
+              <path d="M80 102 C88 115, 85 138, 74 142 L72 134 C80 130, 82 116, 76 106 Z" fill="#CBD5E1" />
+              
+              {/* Trousers (Seated) */}
+              <path d="M48 145 L82 145 L86 195 L72 195 L68 160 L62 160 L58 195 L44 195 Z" fill="#334155" />
+              {/* Shoes */}
+              <ellipse cx="49" cy="198" rx="8" ry="4" fill="#0F172A" />
+              <ellipse cx="81" cy="198" rx="8" ry="4" fill="#0F172A" />
+            </g>
+
+            {/* Gentle Ground Dots / Leaves */}
+            <circle cx="100" cy="370" r="3" fill="#93C5FD" />
+            <circle cx="285" cy="385" r="4" fill="#60A5FA" />
+            <path d="M295 380 Q305 375, 308 382" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" fill="none" />
+          </svg>
+
         </div>
 
-        {/* Bottom Trust Note */}
-        <div className="relative z-10 text-center text-[11px] text-slate-500 dark:text-slate-400">
-          منظومة إدارة الموارد البشرية المتوافقة بالكامل مع نظام العمل السعودي واللوائح التنفيذية
+        {/* ─── RIGHT SIDE: CLEAN MINIMALIST LOGIN FORM ────────────────────── */}
+        <div className="w-full md:w-1/2 p-8 sm:p-12 lg:p-14 flex flex-col justify-center relative z-10 bg-white dark:bg-slate-900">
+          
+          <div className="max-w-xs mx-auto w-full space-y-6">
+
+            {/* Circular Avatar / Badge (Just like in the reference) */}
+            <div className="text-center space-y-3">
+              <div className="w-16 h-16 rounded-full bg-sky-100 dark:bg-sky-950/60 border-2 border-sky-200 dark:border-sky-800 mx-auto flex items-center justify-center p-2 shadow-sm relative group">
+                <img 
+                  src={companyLogo} 
+                  alt={companyTitle} 
+                  className="w-full h-full object-contain drop-shadow-sm rounded-full"
+                />
+              </div>
+
+              {/* WELCOME Greeting */}
+              <div className="space-y-1">
+                <h1 className="text-2xl font-black text-slate-700 dark:text-slate-100 tracking-wider font-heading uppercase">
+                  WELCOME
+                </h1>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+                  {companyTitle} • نظام الموارد البشرية
+                </p>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-200 flex items-center gap-2 shadow-sm text-right" dir="rtl">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="text-[11px]">{error}</span>
+              </div>
+            )}
+
+            {/* Session Timeout */}
+            {isTimeout && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 text-[11px] text-amber-800 dark:text-amber-200 text-center">
+                انتهت الجلسة، يرجى تسجيل الدخول مجدداً.
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+              
+              {/* SaaS Workspace / Domain Input */}
+              <div className="space-y-1">
+                <div className="relative flex items-center border-b border-slate-250 dark:border-slate-700 focus-within:border-sky-500 transition-colors pb-1">
+                  <Building2 className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2.5 shrink-0" />
+                  <input
+                    type="text"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                    placeholder="Workspace / نطاق المنشأة"
+                    className="w-full bg-transparent text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none py-1.5 font-mono"
+                    autoComplete="organization"
+                    required
+                  />
+                  <span className="text-[10px] font-mono text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-full border border-sky-200/60 shrink-0 select-none">
+                    .saas
+                  </span>
+                </div>
+              </div>
+
+              {/* Username / ID Input */}
+              <div className="space-y-1">
+                <div className="relative flex items-center border-b border-slate-250 dark:border-slate-700 focus-within:border-sky-500 transition-colors pb-1">
+                  <User className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2.5 shrink-0" />
+                  <input
+                    type="text"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Username / رقم الهوية"
+                    className="w-full bg-transparent text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none py-1.5"
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Password Input */}
+              <div className="space-y-1">
+                <div className="relative flex items-center border-b border-slate-250 dark:border-slate-700 focus-within:border-sky-500 transition-colors pb-1">
+                  <Lock className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2.5 shrink-0" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password / كلمة المرور"
+                    className="w-full bg-transparent text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none py-1.5 font-mono"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
+                    title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {/* Forgot Password Link */}
+                <div className="text-right pt-1">
+                  <a 
+                    href="mailto:support@greenarrow.sa?subject=استعادة كلمة المرور" 
+                    className="text-[10.5px] text-slate-400 hover:text-sky-600 transition-colors"
+                  >
+                    Forgot Password?
+                  </a>
+                </div>
+              </div>
+
+              {/* Pill Button (LOGIN) */}
+              <div className="pt-2">
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-11 bg-gradient-to-r from-[#58A6FF] to-[#3B82F6] hover:from-[#3B82F6] hover:to-[#2563EB] text-white font-bold rounded-full shadow-md shadow-sky-500/20 text-xs tracking-widest uppercase transition-all duration-200"
+                >
+                  {loading ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>Verifying...</span>
+                    </div>
+                  ) : (
+                    <span>LOGIN</span>
+                  )}
+                </Button>
+              </div>
+
+              {/* Discreet Note for Employees */}
+              <div className="text-center pt-2">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500" dir="rtl">
+                  💡 للموظفين: يتم الدخول برقم الهوية أو الإقامة مباشرة.
+                </p>
+              </div>
+
+            </form>
+
+          </div>
+
         </div>
 
       </div>
 
-      {/* ─── RIGHT PANEL: THE CLEAN LUXURY LOGIN FORM ──────────────────────── */}
-      <div className="w-full lg:w-1/2 p-6 sm:p-10 lg:p-16 flex flex-col justify-between bg-white dark:bg-slate-950 relative">
-        
-        {/* Background Subtle Watermark Pattern (Ektefa Geometric Theme) */}
-        <div className="absolute top-0 left-0 w-48 h-48 opacity-[0.03] dark:opacity-[0.05] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
-
-        {/* Top Header Logo */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <img 
-              src={company.logo_url || "/company-logo.png"} 
-              alt="شعار شركة درة السيارة" 
-              className="h-14 w-auto max-w-[58px] object-contain shrink-0 drop-shadow-md" 
-            />
-            <div>
-              <h1 className="font-heading font-black text-base text-foreground tracking-tight flex items-center gap-1.5">
-                <span>شركة درة السيارة</span>
-                <span className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded-md font-mono">HR</span>
-              </h1>
-              <p className="text-[10px] text-muted-foreground font-mono">
-                DORAT AL-SAYARAH ENTERPRISE PORTAL
-              </p>
-            </div>
-          </div>
-
-          <Badge variant="outline" className="text-[10.5px] font-bold text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 py-1">
-            v2.6 Cloud
-          </Badge>
-        </div>
-
-        {/* Center Main Form */}
-        <div className="w-full max-w-md mx-auto my-8 space-y-6">
-          
-          {/* Dual Language Welcome Header (Like Ektefa) */}
-          <div className="flex items-baseline justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div className="text-right">
-              <h3 className="text-base font-heading font-black text-foreground">
-                يرجى إدخال تفاصيل الدخول
-              </h3>
-            </div>
-            <div className="text-left font-mono text-xs text-muted-foreground" dir="ltr">
-              Login to continue.
-            </div>
-          </div>
-
-          {/* Session Inactivity Timeout Notice */}
-          {isTimeout && (
-            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-sm animate-fade-in">
-              <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-              <div className="space-y-0.5">
-                <div className="font-bold">تم إنهاء الجلسة تلقائياً لدواعي الأمان</div>
-                <div className="text-[11px] opacity-90">نظراً لعدم وجود نشاط وحفاظاً على سرية البيانات، يرجى تسجيل الدخول مجدداً.</div>
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-200 flex items-center gap-2.5 shadow-sm animate-fade-in">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            
-            {/* 1. Company Domain (Dual Header) */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span>نطاق الشركة</span>
-                <span className="text-[11px] text-muted-foreground font-mono" dir="ltr">Company Domain</span>
-              </div>
-              <div className="relative">
-                <Input
-                  type="text"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  placeholder="doratcars"
-                  className="h-11 rounded-xl bg-white dark:bg-slate-900 border-slate-250 dark:border-slate-800 text-xs font-mono font-bold text-foreground focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* 2. Username / National ID (Dual Header) */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span>اسم المستخدم (رقم الهوية / الإقامة / الوظيفي)</span>
-                <span className="text-[11px] text-muted-foreground font-mono" dir="ltr">Username / National ID</span>
-              </div>
-              <div className="relative">
-                <Input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="أدخل رقم الهوية أو الإقامة"
-                  className="h-11 rounded-xl bg-white dark:bg-slate-900 border-slate-250 dark:border-slate-800 text-xs font-mono text-foreground focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-sm"
-                  autoComplete="username"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* 3. Password (Dual Header) */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span>كلمة المرور</span>
-                <span className="text-[11px] text-muted-foreground font-mono" dir="ltr">Password</span>
-              </div>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="h-11 rounded-xl bg-white dark:bg-slate-900 border-slate-250 dark:border-slate-800 text-xs font-mono pe-10 focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-sm"
-                  autoComplete="current-password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Cloudflare / Security Verification Badge (Like in Ektefa) */}
-            <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-[10px]">
-                  ✓
-                </div>
-                <span className="font-bold text-[11px]">تم التحقق من الأمان بنجاح • Success!</span>
-              </div>
-              <div className="text-[9.5px] font-mono text-muted-foreground flex items-center gap-1" dir="ltr">
-                <span>Cloudflare Zero Trust</span>
-              </div>
-            </div>
-
-            {/* Terms of Service Disclaimer (Like in Ektefa) */}
-            <div className="text-center text-[10.5px] text-slate-500 dark:text-slate-400 leading-relaxed pt-1">
-              <div>
-                دخولك على نظام درة السيارة يعني موافقتك على <span className="text-sky-600 dark:text-sky-400 font-bold underline cursor-pointer">شروط وأحكام</span> استخدام الخدمة.
-              </div>
-              <div className="font-mono text-[9px] text-slate-400 mt-0.5" dir="ltr">
-                By logging into the system, you agree to the Terms and Conditions.
-              </div>
-            </div>
-
-            {/* Action Submit Button: "دخول | Login" */}
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 bg-gradient-to-r from-sky-600 via-sky-500 to-sky-600 hover:from-sky-500 hover:to-sky-400 text-white font-heading font-black rounded-xl shadow-lg shadow-sky-500/25 transition-all text-sm flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>جاري التحقق من الصلاحيات...</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span>دخول | Login</span>
-                  <ChevronRight className="w-4 h-4" />
-                </div>
-              )}
-            </Button>
-
-            {/* Forgot Password Links (Dual Language) */}
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <a
-                href="mailto:support@greenarrow.sa?subject=استعادة كلمة المرور - درة السيارة"
-                className="text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 font-medium transition-colors"
-              >
-                هل فقدت كلمة المرور؟
-              </a>
-              <span className="text-muted-foreground font-mono text-[11px]" dir="ltr">
-                Forgot Password?
-              </span>
-            </div>
-
-          </form>
-
-        </div>
-
-        {/* ─── BOTTOM TRUST & GOVERNMENT COMPLIANCE ICONS (Like Ektefa) ─────── */}
-        <div className="pt-6 border-t border-slate-150 dark:border-slate-800 space-y-3">
-          
-          {/* Mobile App Download Badges (Mock Icons) */}
-          <div className="flex items-center justify-center gap-3">
-            <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 text-xs shadow-sm" title="App Store">
-              
-            </span>
-            <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 text-xs shadow-sm" title="Google Play">
-              ▶
-            </span>
-            <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 text-xs shadow-sm" title="Huawei AppGallery">
-              🛍️
-            </span>
-          </div>
-
-          {/* Government Compliance Integration Badges */}
-          <div className="flex items-center justify-center gap-4 text-[10.5px] font-bold text-slate-600 dark:text-slate-400 flex-wrap">
-            <span className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              منصة قوى (Qiwa)
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              حماية الأجور (مدد)
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-              التأمينات (GOSI)
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-              منصة مقيم
-            </span>
-          </div>
-
-        </div>
-
+      {/* Subtle Bottom Credit / System Info */}
+      <div className="mt-6 text-center text-[10.5px] text-slate-400 dark:text-slate-600 flex items-center justify-center gap-1.5">
+        <ShieldCheck className="w-3.5 h-3.5 text-sky-500/70" />
+        <span>بوابة آمنة ومشفرة • درة السيارة للموارد البشرية © {new Date().getFullYear()}</span>
       </div>
 
     </div>

@@ -80,66 +80,89 @@ export default function MyRequests() {
     if (!advForm.amount || isNaN(Number(advForm.amount))) { toast({ title: 'الرجاء إدخال مبلغ صحيح', variant: 'destructive' }); return; }
     const installmentsCount = Number(advForm.installments) || 1;
     const amountVal = Number(advForm.amount);
-    const req = {
-      id: 'adv_' + Date.now(),
-      employee_id: empData?.id || user?.id,
-      employee_number: user?.employee_number || empData?.employee_number,
-      employee_name: user?.full_name || empData?.full_name || 'موظف',
-      amount: amountVal,
-      installments: installmentsCount,
-      monthly_deduction: Math.round(amountVal / installmentsCount),
-      reason: advForm.reason || 'سلفة شخصية',
-      status: 'pending',
-      date: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      repayment_type: installmentsCount > 1 ? 'installments' : 'lump_sum',
+    const empName = user?.full_name || empData?.full_name || 'موظف';
+    const empNum = user?.employee_number || empData?.employee_number || '1000';
+    const empId = empData?.id || user?.id;
+
+    const payload = {
+      type: 'advance',
+      employee_id: empId,
+      employee_number: empNum,
+      employee_name: empName,
+      branch_name: user?.branch_name || user?.branch || empData?.branch || '',
+      reason: advForm.reason || 'طلب سلفة راتب',
+      details: {
+        amount: amountVal,
+        installments: installmentsCount,
+        monthly_deduction: Math.round(amountVal / installmentsCount),
+        reason: advForm.reason || 'طلب سلفة راتب',
+        request_label: `طلب سلفة مالية (${amountVal} ر.س)`
+      }
     };
-    const existing = JSON.parse(localStorage.getItem('hr_advances_list')||'[]');
-    const nextAdv = [req, ...existing]; localStorage.setItem('hr_advances_list', JSON.stringify(nextAdv)); localStorage.setItem('hr_flow_employee_advances', JSON.stringify(nextAdv)); await cloudSave('hr_advances_list', nextAdv);
+
+    saveUnifiedRequest(payload, user);
     setAdvModal(false); setAdvForm(defaultAdvForm);
     setMyRequests(loadMyRequests());
+    window.dispatchEvent(new CustomEvent('hr_requests_updated'));
     toast({ title: '✅ تم إرسال طلب السلفة بنجاح' });
   };
 
   const submitLeave = async () => {
     if (!leaveForm.start_date || !leaveForm.end_date) { toast({ title: 'الرجاء تحديد التاريخ', variant: 'destructive' }); return; }
-    const req = {
-      id: 'lv_' + Date.now(),
-      employee_id: empData?.id || user?.id,
-      employee_number: user?.employee_number,
-      employee_name: user?.full_name,
-      leave_type: leaveForm.leave_type,
-      start_date: leaveForm.start_date,
-      end_date: leaveForm.end_date,
-      reason: leaveForm.reason,
-      status: 'pending',
-      created_at: new Date().toISOString(),
+    const empName = user?.full_name || empData?.full_name || 'موظف';
+    const empNum = user?.employee_number || empData?.employee_number || '1000';
+    const empId = empData?.id || user?.id;
+
+    const payload = {
+      type: 'annual_leave',
+      employee_id: empId,
+      employee_number: empNum,
+      employee_name: empName,
+      branch_name: user?.branch_name || user?.branch || empData?.branch || '',
+      reason: leaveForm.reason || leaveForm.leave_type || 'طلب إجازة',
+      details: {
+        startDate: leaveForm.start_date,
+        endDate: leaveForm.end_date,
+        leaveSubType: leaveForm.leave_type,
+        reason: leaveForm.reason,
+        request_label: `طلب إجازة (${leaveForm.leave_type})`
+      }
     };
-    const existing = JSON.parse(localStorage.getItem('hr_leave_requests')||'[]');
-    const nextLv = [req, ...existing]; localStorage.setItem('hr_leave_requests', JSON.stringify(nextLv)); await cloudSave('hr_leave_requests', nextLv);
+
+    saveUnifiedRequest(payload, user);
     setLeaveModal(false); setLeaveForm(defaultLeaveForm);
     setMyRequests(loadMyRequests());
+    window.dispatchEvent(new CustomEvent('hr_requests_updated'));
     toast({ title: '✅ تم إرسال طلب الإجازة بنجاح' });
   };
 
   const submitCorrection = async () => {
     if (!corrForm.log_date) { toast({ title: 'الرجاء تحديد تاريخ البصمة', variant: 'destructive' }); return; }
-    const req = {
-      id: 'cr_' + Date.now(),
-      employee_id: empData?.id || user?.id,
-      employee_number: user?.employee_number,
-      employee_name: user?.full_name,
-      log_date: corrForm.log_date,
-      check_in: corrForm.check_in,
-      check_out: corrForm.check_out,
-      reason: corrForm.reason,
-      status: 'pending',
-      created_at: new Date().toISOString(),
+    const empName = user?.full_name || empData?.full_name || 'موظف';
+    const empNum = user?.employee_number || empData?.employee_number || '1000';
+    const empId = empData?.id || user?.id;
+
+    const payload = {
+      type: 'punch_correction',
+      employee_id: empId,
+      employee_number: empNum,
+      employee_name: empName,
+      branch_name: user?.branch_name || user?.branch || empData?.branch || '',
+      reason: corrForm.reason || 'طلب تعديل بصمة',
+      details: {
+        startDate: corrForm.log_date,
+        log_date: corrForm.log_date,
+        checkInTime: corrForm.check_in || '09:00',
+        checkOutTime: corrForm.check_out || '17:00',
+        reason: corrForm.reason,
+        request_label: 'طلب تعديل بصمة'
+      }
     };
-    const existing = JSON.parse(localStorage.getItem('hr_correction_requests')||'[]');
-    const nextCr = [req, ...existing]; localStorage.setItem('hr_correction_requests', JSON.stringify(nextCr)); await cloudSave('hr_correction_requests', nextCr);
+
+    saveUnifiedRequest(payload, user);
     setCorrModal(false); setCorrForm(defaultCorrForm);
     setMyRequests(loadMyRequests());
+    window.dispatchEvent(new CustomEvent('hr_requests_updated'));
     toast({ title: '✅ تم إرسال طلب تعديل البصمة' });
   };
 

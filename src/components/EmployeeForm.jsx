@@ -72,7 +72,9 @@ const empty = {
   gender: 'male',
   company: 'درة السيارة لقطع غيار السيارات',
   is_insured: true,
-  gosi_number: ''
+  gosi_number: '',
+  annual_leave_entitlement: 21,
+  opening_consumed_leaves: 0
 };
 
 export default function EmployeeForm({ open, onOpenChange, employee, departments: propsDepts, onSaved }) {
@@ -102,6 +104,8 @@ export default function EmployeeForm({ open, onOpenChange, employee, departments
           branch_name: employee.branch_name || employee.branch || 'مكتب الإدارة',
           shift: employee.shift || 'فترة عمل غير سعودي',
           leave_policy: employee.leave_policy || 'الاجازة السنوية',
+          annual_leave_entitlement: employee.annual_leave_entitlement !== undefined && employee.annual_leave_entitlement !== null ? employee.annual_leave_entitlement : 21,
+          opening_consumed_leaves: employee.opening_consumed_leaves !== undefined && employee.opening_consumed_leaves !== null ? employee.opening_consumed_leaves : 0,
           employee_id: employee.employee_number || employee.employee_id || '',
           employee_number: employee.employee_number || employee.employee_id || '',
           hire_date: employee.join_date || employee.hire_date || '',
@@ -151,9 +155,16 @@ export default function EmployeeForm({ open, onOpenChange, employee, departments
         branch_name: form.branch_name || form.branch || 'مكتب الإدارة',
         shift: form.shift || 'فترة عمل غير سعودي',
         leave_policy: form.leave_policy || 'الاجازة السنوية',
+        annual_leave_entitlement: Number(form.annual_leave_entitlement) >= 0 ? Number(form.annual_leave_entitlement) : 21,
+        opening_consumed_leaves: Number(form.opening_consumed_leaves) || 0,
         salary: Number(form.salary) || 0,
         housing_allowance: Number(form.housing_allowance) || 0,
         transport_allowance: Number(form.transport_allowance) || 0,
+        electricity_allowance: Number(form.electricity_allowance || employee?.electricity_allowance) || 0,
+        phone_allowance: Number(form.phone_allowance || employee?.phone_allowance || form.purchases_allowance || employee?.purchases_allowance) || 0,
+        purchases_allowance: Number(form.purchases_allowance || employee?.purchases_allowance || form.phone_allowance || employee?.phone_allowance) || 0,
+        other_allowance: Number(form.other_allowance || employee?.other_allowance) || 0,
+        allowance_notes: form.allowance_notes || employee?.allowance_notes || '',
         is_insured: form.is_insured !== false && form.is_insured !== 'false',
         gosi_number: form.gosi_number || '',
         employee_number: String(form.employee_number || form.employee_id || '1000'),
@@ -267,6 +278,29 @@ export default function EmployeeForm({ open, onOpenChange, employee, departments
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="font-bold">استحقاق الإجازة السنوية</Label>
+              <Input
+                type="number"
+                min="0"
+                value={form.annual_leave_entitlement ?? 21}
+                onChange={(e) => set('annual_leave_entitlement', e.target.value)}
+                placeholder="21"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-bold">الرصيد المستهلك السابق</Label>
+              <Input
+                type="number"
+                min="0"
+                value={form.opening_consumed_leaves ?? 0}
+                onChange={(e) => set('opening_consumed_leaves', e.target.value)}
+                placeholder="0"
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">

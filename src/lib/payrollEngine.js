@@ -189,6 +189,222 @@ export async function recordAdvanceRepayment({ advanceId, amount, paymentDate, p
   }
 }
 
+/**
+ * Extract and normalize all repayments across all advances (historical, manual, deductions, opening)
+ */
+export function getAllRepayments(advancesList = [], employeesList = []) {
+  try {
+    const list = Array.isArray(advancesList) && advancesList.length > 0 ? advancesList : getAdvances();
+    const repayments = [];
+
+    list.forEach(adv => {
+      const norm = normalizeAdvance(adv);
+      if (!norm || norm.total_amount <= 0) return;
+
+      const emp = Array.isArray(employeesList) 
+        ? employeesList.find(e => String(e.employee_number || e.id).trim() === String(norm.employee_number).trim())
+        : null;
+
+      const branchName = emp?.branch_name || norm.branch_name || norm.branch || 'غير محدد';
+      const empName = emp?.full_name || norm.employee_name || 'موظف';
+      const empNum = String(norm.employee_number || emp?.employee_number || '').trim();
+
+      const history = Array.isArray(norm.history) ? norm.history : [];
+      let totalHistoryAmount = 0;
+
+      history.forEach((h, hIdx) => {
+        const amt = Number(h.amount !== undefined ? h.amount : h.deducted_amount) || 0;
+        if (amt > 0) {
+          totalHistoryAmount += amt;
+          const hId = h.id || `rep_${norm.id}_${hIdx}`;
+          repayments.push({
+            id: hId,
+            advance_id: norm.id,
+            employee_name: empName,
+            employee_number: empNum,
+            branch_name: branchName,
+            amount: amt,
+            payment_date: h.payment_date || (h.date ? h.date.slice(0, 10) : (h.month ? `${h.month}-28` : norm.disbursement_date || '2026-08-30')),
+            payment_method: h.payment_method || (h.deducted_amount ? `استقطاع راتب (${h.month || ''})` : 'cash'),
+            receipt_number: h.receipt_number || (h.month ? `PAYROLL-${h.month}` : `REC-${String(norm.id).slice(-4)}-${hIdx + 1}`),
+            notes: h.notes || (h.deducted_amount ? `خصم قسط شهري من مسير رواتب شهر ${h.month}` : 'سداد دفعة من السلفة'),
+            recorded_by: h.recorded_by || 'المحاسب المالي',
+            recorded_at: h.recorded_at || h.date || new Date().toISOString(),
+            is_payroll_deduction: !!h.deducted_amount,
+            is_opening: false,
+            advance_total: norm.total_amount,
+            advance_remaining: norm.remaining_balance,
+            advance_reason: norm.reason
+          });
+        }
+      });
+
+      // If paid_amount > totalHistoryAmount, surface the opening/past unaccounted repayment
+      const unaccountedPaid = (Number(norm.paid_amount) || 0) - totalHistoryAmount;
+      if (unaccountedPaid > 0) {
+        repayments.push({
+          id: `rep_init_${norm.id}`,
+          advance_id: norm.id,
+          employee_name: empName,
+          employee_number: empNum,
+          branch_name: branchName,
+          amount: unaccountedPaid,
+          payment_date: norm.disbursement_date || (norm.start_month ? `${norm.start_month}-01` : '2026-08-30'),
+          payment_method: 'سداد سابق / رصيد افتتاحي',
+          receipt_number: `REC-INIT-${empNum || String(norm.id).slice(-4)}`,
+          notes: 'تسوية سداد سلفة سابقة (رصيد مسدد سابقاً)',
+          recorded_by: 'الرصيد الافتتاحي',
+          recorded_at: norm.created_at || '2026-08-30T00:00:00.000Z',
+          is_payroll_deduction: false,
+          is_opening: true,
+          advance_total: norm.total_amount,
+          advance_remaining: norm.remaining_balance,
+          advance_reason: norm.reason
+        });
+      }
+    });
+
+    // Sort descending by date
+    return repayments.sort((a, b) => (b.payment_date || '').localeCompare(a.payment_date || ''));
+  } catch (e) {
+    console.error('Failed to get all repayments:', e);
+    return [];
+  }
+}
+
+/**
+ * Update an existing advance repayment record and recalculate balances
+ */
+export async function updateAdvanceRepayment({ advanceId, paymentId, amount, paymentDate, paymentMethod, notes, receiptNumber, recordedBy }) {
+  try {
+    const list = getAdvances();
+    const idx = list.findIndex(a => String(a.id) === String(advanceId));
+    if (idx === -1) {
+      throw new Error('السلفة المرتبطة غير موجودة بالنظام');
+    }
+
+    const adv = list[idx];
+    const newAmount = Number(amount) || 0;
+    if (newAmount <= 0) {
+      throw new Error('مبلغ السداد يجب أن يكون أكبر من الصفر');
+    }
+
+    let history = Array.isArray(adv.history) ? [...adv.history] : [];
+    const isOpening = String(paymentId).startsWith('rep_init_');
+
+    if (isOpening) {
+      history.push({
+        id: paymentId,
+        amount: newAmount,
+        payment_date: paymentDate || adv.disbursement_date || '2026-08-30',
+        payment_method: paymentMethod || 'سداد سابق / رصيد افتتاحي',
+        receipt_number: receiptNumber || `REC-INIT-${adv.employee_number || '0'}`,
+        notes: notes || 'تسوية سداد سلفة سابقة',
+        recorded_by: recordedBy || 'المحاسب المالي',
+        recorded_at: new Date().toISOString()
+      });
+    } else {
+      const hIdx = history.findIndex((h, index) => (h.id || `rep_${adv.id}_${index}`) === paymentId);
+      if (hIdx !== -1) {
+        history[hIdx] = {
+          ...history[hIdx],
+          amount: newAmount,
+          deducted_amount: history[hIdx].deducted_amount !== undefined ? newAmount : undefined,
+          payment_date: paymentDate || history[hIdx].payment_date,
+          payment_method: paymentMethod || history[hIdx].payment_method,
+          receipt_number: receiptNumber || history[hIdx].receipt_number,
+          notes: notes !== undefined ? notes : history[hIdx].notes,
+          updated_at: new Date().toISOString(),
+          updated_by: recordedBy || 'المحاسب المالي'
+        };
+      } else {
+        history.push({
+          id: paymentId || ('rep_' + Date.now()),
+          amount: newAmount,
+          payment_date: paymentDate || new Date().toISOString().split('T')[0],
+          payment_method: paymentMethod || 'cash',
+          receipt_number: receiptNumber || ('REC-' + Date.now().toString().slice(-6)),
+          notes: notes || 'سداد دفعة من السلفة',
+          recorded_by: recordedBy || 'المحاسب المالي',
+          recorded_at: new Date().toISOString()
+        });
+      }
+    }
+
+    const newPaidAmount = history.reduce((sum, h) => sum + (Number(h.amount !== undefined ? h.amount : h.deducted_amount) || 0), 0);
+    const newRemaining = Math.max(0, (Number(adv.total_amount) || 0) - newPaidAmount);
+
+    const updated = {
+      ...adv,
+      paid_amount: newPaidAmount,
+      remaining_balance: newRemaining,
+      status: newRemaining <= 0 ? 'completed' : 'active',
+      history,
+      updated_at: new Date().toISOString(),
+      updated_by: recordedBy || 'المحاسب المالي'
+    };
+
+    list[idx] = updated;
+    localStorage.setItem('hr_advances_list', JSON.stringify(list));
+    localStorage.setItem('hr_flow_employee_advances', JSON.stringify(list));
+
+    await cloudSave('hr_advances_list', list);
+    await cloudSave('hr_flow_employee_advances', list);
+    return updated;
+  } catch (e) {
+    console.error('Error updating advance repayment:', e);
+    throw e;
+  }
+}
+
+/**
+ * Delete an advance repayment record and recalculate balances
+ */
+export async function deleteAdvanceRepayment({ advanceId, paymentId }) {
+  try {
+    const list = getAdvances();
+    const idx = list.findIndex(a => String(a.id) === String(advanceId));
+    if (idx === -1) {
+      throw new Error('السلفة المرتبطة غير موجودة بالنظام');
+    }
+
+    const adv = list[idx];
+    let history = Array.isArray(adv.history) ? [...adv.history] : [];
+    const isOpening = String(paymentId).startsWith('rep_init_');
+
+    if (!isOpening) {
+      history = history.filter((h, index) => {
+        const hId = h.id || `rep_${adv.id}_${index}`;
+        return hId !== paymentId;
+      });
+    }
+
+    const newPaidAmount = history.reduce((sum, h) => sum + (Number(h.amount !== undefined ? h.amount : h.deducted_amount) || 0), 0);
+    const newRemaining = Math.max(0, (Number(adv.total_amount) || 0) - newPaidAmount);
+
+    const updated = {
+      ...adv,
+      paid_amount: newPaidAmount,
+      remaining_balance: newRemaining,
+      status: newRemaining <= 0 ? 'completed' : 'active',
+      history,
+      updated_at: new Date().toISOString(),
+      updated_by: 'المحاسب المالي (حذف سداد)'
+    };
+
+    list[idx] = updated;
+    localStorage.setItem('hr_advances_list', JSON.stringify(list));
+    localStorage.setItem('hr_flow_employee_advances', JSON.stringify(list));
+
+    await cloudSave('hr_advances_list', list);
+    await cloudSave('hr_flow_employee_advances', list);
+    return updated;
+  } catch (e) {
+    console.error('Error deleting advance repayment:', e);
+    throw e;
+  }
+}
+
 export function normalizeAdvance(adv) {
   if (!adv) return null;
   const amt = Number(adv.total_amount || adv.amount) || 0;
@@ -325,41 +541,227 @@ export function extractTimes(str) {
   });
 }
 
+/**
+ * Intelligent parser for biometrics punches during the day:
+ * Adopts FIRST punch and LAST punch of each shift (morning 08:00-12:00 and evening 16:00-21:00).
+ * Ignores all intermediate punches between first and last punch!
+ */
+export function parseRawPunchesToPeriods(rawString, isSplitShift = true) {
+  if (!rawString) {
+    return {
+      period_1_in: '',
+      period_1_out: '',
+      period_2_in: '',
+      period_2_out: '',
+      timestamp_raw: '',
+      total_hours: 0,
+      actual_minutes: 0
+    };
+  }
+
+  // If already structured with '&' (e.g. "07:58:00 -- 12:17:00 & 16:23:00 -- 21:18:00")
+  if (rawString.includes('&')) {
+    const parts = rawString.split('&');
+    const p1Times = extractTimes(parts[0]);
+    const p2Times = extractTimes(parts[1]);
+    const p1In = p1Times[0] || '';
+    const p1Out = p1Times.length > 1 ? p1Times[p1Times.length - 1] : '';
+    const p2In = p2Times[0] || '';
+    const p2Out = p2Times.length > 1 ? p2Times[p2Times.length - 1] : '';
+
+    let dur1 = 0, dur2 = 0;
+    if (p1In && p1Out) {
+      const mIn = parseTimeToMinutes(p1In), mOut = parseTimeToMinutes(p1Out);
+      if (mIn !== null && mOut !== null) dur1 = mOut >= mIn ? mOut - mIn : (mOut + 1440) - mIn;
+    }
+    if (p2In && p2Out) {
+      const mIn = parseTimeToMinutes(p2In), mOut = parseTimeToMinutes(p2Out);
+      if (mIn !== null && mOut !== null) dur2 = mOut >= mIn ? mOut - mIn : (mOut + 1440) - mIn;
+    }
+    const totalMinutes = dur1 + dur2;
+    return {
+      period_1_in: p1In,
+      period_1_out: p1Out,
+      period_2_in: p2In,
+      period_2_out: p2Out,
+      timestamp_raw: rawString,
+      total_hours: Math.round((totalMinutes / 60) * 100) / 100,
+      actual_minutes: totalMinutes
+    };
+  }
+
+  // Extract all distinct times in HH:MM format and sort chronologically
+  const allTimes = extractTimes(rawString);
+  const uniqueTimes = Array.from(new Set(allTimes)).sort();
+
+  if (uniqueTimes.length === 0) {
+    return {
+      period_1_in: '',
+      period_1_out: '',
+      period_2_in: '',
+      period_2_out: '',
+      timestamp_raw: '',
+      total_hours: 0,
+      actual_minutes: 0
+    };
+  }
+
+  // If not a split shift, first is IN, last is OUT, intermediate ignored!
+  if (!isSplitShift) {
+    const p1In = uniqueTimes[0];
+    const p1Out = uniqueTimes.length > 1 ? uniqueTimes[uniqueTimes.length - 1] : '';
+    let totalMinutes = 0;
+    if (p1In && p1Out) {
+      const mIn = parseTimeToMinutes(p1In), mOut = parseTimeToMinutes(p1Out);
+      if (mIn !== null && mOut !== null) totalMinutes = mOut >= mIn ? mOut - mIn : (mOut + 1440) - mIn;
+    }
+    const formattedRaw = p1Out ? `${p1In}:00 -- ${p1Out}:00` : `${p1In}:00 --`;
+    return {
+      period_1_in: p1In,
+      period_1_out: p1Out,
+      period_2_in: '',
+      period_2_out: '',
+      timestamp_raw: formattedRaw,
+      total_hours: Math.round((totalMinutes / 60) * 100) / 100,
+      actual_minutes: totalMinutes
+    };
+  }
+
+  // DUAL / SPLIT SHIFT: Separate punches into Morning (< 14:30) and Evening (>= 14:30)
+  // Shift 1: 08:00 - 12:00 / 13:00
+  // Shift 2: 16:00 - 20:00 / 21:00
+  const mTimes = [];
+  const eTimes = [];
+
+  uniqueTimes.forEach(t => {
+    const mins = parseTimeToMinutes(t);
+    if (mins !== null) {
+      if (mins < 870) { // Before 14:30 -> Morning Shift
+        mTimes.push(t);
+      } else { // 14:30 onwards -> Evening Shift
+        eTimes.push(t);
+      }
+    }
+  });
+
+  let p1In = '';
+  let p1Out = '';
+  let p2In = '';
+  let p2Out = '';
+
+  // Morning shift: First is Check In 1, Last is Check Out 1. All middle punches ignored!
+  if (mTimes.length >= 2) {
+    p1In = mTimes[0];
+    p1Out = mTimes[mTimes.length - 1];
+  } else if (mTimes.length === 1) {
+    p1In = mTimes[0];
+    p1Out = '';
+  }
+
+  // Evening shift: First is Check In 2, Last is Check Out 2. All middle punches ignored!
+  if (eTimes.length >= 2) {
+    p2In = eTimes[0];
+    p2Out = eTimes[eTimes.length - 1];
+  } else if (eTimes.length === 1) {
+    const mins = parseTimeToMinutes(eTimes[0]);
+    if (mins !== null && mins >= 1110) { // 18:30 onwards -> Check Out punch
+      p2In = '';
+      p2Out = eTimes[0];
+    } else { // Before 18:30 -> Check In punch
+      p2In = eTimes[0];
+      p2Out = '';
+    }
+  }
+
+  let dur1 = 0, dur2 = 0;
+  if (p1In && p1Out) {
+    const mIn = parseTimeToMinutes(p1In), mOut = parseTimeToMinutes(p1Out);
+    if (mIn !== null && mOut !== null) dur1 = mOut >= mIn ? mOut - mIn : (mOut + 1440) - mIn;
+  }
+  if (p2In && p2Out) {
+    const mIn = parseTimeToMinutes(p2In), mOut = parseTimeToMinutes(p2Out);
+    if (mIn !== null && mOut !== null) dur2 = mOut >= mIn ? mOut - mIn : (mOut + 1440) - mIn;
+  }
+  const totalMinutes = dur1 + dur2;
+
+  // Format the standardized timestamp_raw string exactly matching official biometrics
+  let formattedRaw = '';
+  if (mTimes.length > 0 && eTimes.length > 0) {
+    const p1Str = `${p1In ? p1In + ':00' : ''} -- ${p1Out ? p1Out + ':00' : ''}`.trim();
+    const p2Str = `${p2In ? p2In + ':00' : ''} -- ${p2Out ? p2Out + ':00' : ''}`.trim();
+    formattedRaw = `${p1Str} & ${p2Str}`;
+  } else if (mTimes.length > 0) {
+    formattedRaw = `${p1In ? p1In + ':00' : ''} -- ${p1Out ? p1Out + ':00' : ''}`.trim();
+  } else if (eTimes.length > 0) {
+    formattedRaw = `${p2In ? p2In + ':00' : ''} -- ${p2Out ? p2Out + ':00' : ''}`.trim();
+  }
+
+  return {
+    period_1_in: p1In,
+    period_1_out: p1Out,
+    period_2_in: p2In,
+    period_2_out: p2Out,
+    timestamp_raw: formattedRaw,
+    total_hours: Math.round((totalMinutes / 60) * 100) / 100,
+    actual_minutes: totalMinutes
+  };
+}
+
 export function calcActualMinutes(log) {
   if (!log) return 0;
 
-  if (log.total_hours && Number(log.total_hours) > 0) {
-    return Math.round(Number(log.total_hours) * 60);
+  let notesData = {};
+  if (typeof log.notes === 'string' && log.notes.startsWith('{')) {
+    try { notesData = JSON.parse(log.notes); } catch {}
   }
+  
+  const isPeriod2Cancelled = log.period_2_cancelled === true || notesData.period_2_cancelled === true;
+  const p1In = log.period_1_in !== undefined && log.period_1_in !== null ? log.period_1_in : (notesData.period_1_in || '');
+  const p1Out = log.period_1_out !== undefined && log.period_1_out !== null ? log.period_1_out : (notesData.period_1_out || '');
+  const p2In = isPeriod2Cancelled ? '' : (log.period_2_in !== undefined && log.period_2_in !== null ? log.period_2_in : (notesData.period_2_in || ''));
+  const p2Out = isPeriod2Cancelled ? '' : (log.period_2_out !== undefined && log.period_2_out !== null ? log.period_2_out : (notesData.period_2_out || ''));
 
-  const raw = log.timestamp_raw || log.punches_raw || '';
-  const times = extractTimes(raw);
-
-  if (times.length >= 4) {
-    const m1In = parseTimeToMinutes(times[0]);
-    const m1Out = parseTimeToMinutes(times[1]);
-    const m2In = parseTimeToMinutes(times[2]);
-    const m2Out = parseTimeToMinutes(times[3]);
-
+  // 1. Direct multi-period calculation if period_1 or period_2 are explicitly present
+  if (p1In && p1Out) {
+    const m1In = parseTimeToMinutes(p1In);
+    const m1Out = parseTimeToMinutes(p1Out);
     let dur1 = 0;
     if (m1In !== null && m1Out !== null) {
       dur1 = m1Out >= m1In ? m1Out - m1In : (m1Out + 1440) - m1In;
     }
     let dur2 = 0;
-    if (m2In !== null && m2Out !== null) {
-      dur2 = m2Out >= m2In ? m2Out - m2In : (m2Out + 1440) - m2In;
+    if (p2In && p2Out) {
+      const m2In = parseTimeToMinutes(p2In);
+      const m2Out = parseTimeToMinutes(p2Out);
+      if (m2In !== null && m2Out !== null) {
+        dur2 = m2Out >= m2In ? m2Out - m2In : (m2Out + 1440) - m2In;
+      }
     }
     const total = dur1 + dur2;
     if (total > 0 && total <= 1440) return total;
   }
 
-  if (times.length === 2) {
-    const inM = parseTimeToMinutes(times[0]);
-    const outM = parseTimeToMinutes(times[1]);
-    if (inM !== null && outM !== null) {
-      const dur = outM >= inM ? outM - inM : (outM + 1440) - inM;
-      if (dur > 0 && dur <= 1440) return dur;
+  // 1b. Direct multi-period calculation if only period_2 is present (attended second shift only)
+  if (!isPeriod2Cancelled && p2In && p2Out) {
+    const m2In = parseTimeToMinutes(p2In);
+    const m2Out = parseTimeToMinutes(p2Out);
+    if (m2In !== null && m2Out !== null) {
+      const dur2 = m2Out >= m2In ? m2Out - m2In : (m2Out + 1440) - m2In;
+      if (dur2 > 0 && dur2 <= 1440) return dur2;
     }
+  }
+
+  // 2. Parse from raw punches using the first-and-last shift algorithm (ignoring middle punches)
+  const raw = log.timestamp_raw || log.punches_raw || '';
+  if (raw && !isPeriod2Cancelled) {
+    const parsed = parseRawPunchesToPeriods(raw, true);
+    if (parsed.actual_minutes > 0) {
+      return parsed.actual_minutes;
+    }
+  }
+
+  if (log.total_hours && Number(log.total_hours) > 0) {
+    return Math.round(Number(log.total_hours) * 60);
   }
 
   if (log.check_in && log.check_out) {
@@ -640,9 +1042,35 @@ export function getAdvances() {
   try {
     const list1 = JSON.parse(localStorage.getItem('hr_flow_employee_advances') || '[]');
     const list2 = JSON.parse(localStorage.getItem('hr_advances_list') || '[]');
+    const unified = JSON.parse(localStorage.getItem('hr_flow_unified_requests') || '[]');
+
+    const unifiedAdvs = (Array.isArray(unified) ? unified : [])
+      .filter(u => ['advance', 'salary_advance', 'loan'].includes(u.type) && ['approved', 'disbursed', 'active'].includes(u.status))
+      .map(u => ({
+        id: u.id,
+        employee_id: u.employee_id,
+        employee_number: String(u.employee_number || '').trim(),
+        employee_name: u.employee_name,
+        total_amount: Number(u.details?.amount || u.amount || 0),
+        amount: Number(u.details?.amount || u.amount || 0),
+        total_installments: Number(u.details?.installments || u.installments || 1),
+        installments: Number(u.details?.installments || u.installments || 1),
+        monthly_installment: Math.round(Number(u.details?.amount || u.amount || 0) / Number(u.details?.installments || u.installments || 1)),
+        monthly_deduction: Math.round(Number(u.details?.amount || u.amount || 0) / Number(u.details?.installments || u.installments || 1)),
+        paid_amount: Number(u.paid_amount || 0),
+        remaining_balance: Number(u.remaining_balance !== undefined ? u.remaining_balance : (u.details?.amount || u.amount || 0)),
+        start_month: u.start_month || (u.created_at ? u.created_at.slice(0, 7) : '2026-08'),
+        reason: u.reason || u.details?.reason || 'طلب سلفة راتب',
+        status: u.status === 'disbursed' ? 'disbursed' : 'active',
+        source: 'employee_request',
+        is_employee_request: true,
+        created_at: u.created_at || new Date().toISOString()
+      }));
+
     const combined = [
       ...(Array.isArray(list1) ? list1 : []),
       ...(Array.isArray(list2) ? list2 : []),
+      ...unifiedAdvs,
       ...DEFAULT_MASTER_ADVANCES
     ];
     
@@ -778,7 +1206,31 @@ export function recordAdvanceInstallmentPayment(advanceId, monthPrefix, paidAmou
 
 export function getAdjustments() {
   try {
-    return JSON.parse(localStorage.getItem('hr_flow_payroll_adjustments') || '[]');
+    const list = JSON.parse(localStorage.getItem('hr_flow_payroll_adjustments') || '[]');
+    const unified = JSON.parse(localStorage.getItem('hr_flow_unified_requests') || '[]');
+    
+    const combined = Array.isArray(list) ? [...list] : [];
+    (Array.isArray(unified) ? unified : []).forEach(u => {
+      if (['bonus', 'reward', 'penalty', 'deduction', 'sales_incentive'].includes(u.type) && u.status === 'approved') {
+        if (!combined.some(a => a.id === u.id)) {
+          combined.push({
+            id: u.id,
+            type: ['bonus', 'reward', 'sales_incentive'].includes(u.type) ? 'bonus' : 'penalty',
+            category: u.type,
+            employee_id: u.employee_id,
+            employee_number: String(u.employee_number || '').trim(),
+            employee_name: u.employee_name,
+            month_prefix: (u.created_at || '').slice(0, 7) || '2026-08',
+            amount: Number(u.details?.amount || u.amount || 0),
+            reason: u.reason || u.details?.reason || (['bonus', 'reward', 'sales_incentive'].includes(u.type) ? 'مكافأة معتمدة' : 'خصم معتمد'),
+            status: 'approved',
+            approved_by: u.approved_by || 'المدير العام',
+            created_at: u.created_at || new Date().toISOString()
+          });
+        }
+      }
+    });
+    return combined;
   } catch {
     return [];
   }
@@ -855,16 +1307,83 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   const shift = (allShifts || []).find(s =>
     s.name === shiftName || s.id === shiftName || (s.name && shiftName && s.name.includes(shiftName))
   ) || null;
-  const shiftHours = getShiftRequiredHours(shift);
-  const is9HourShift = shiftHours === 9 || 
-    shiftName.includes('9 ساعات') || 
+  const is9HourShift = shiftName.includes('9 ساعات') || 
+    shiftName.includes('غير سعودي') ||
     shiftName.includes('إضافي 100') ||
     (shift && shift.working_hours === 9) ||
     (shift && (shift.has_overtime || shift.id === 'sh_non_saudi_overtime'));
+  const shiftHours = is9HourShift ? 9 : (shift ? getShiftRequiredHours(shift) : (shiftName.includes('8 ساعات') ? 8 : 8));
 
   const empNum = String(emp.employee_number || '').trim();
   const empId = String(emp.id || '').trim();
   const empName = (emp.full_name || '').trim();
+
+  // ─── LOAD APPROVED REQUESTS & PERMISSIONS FOR THIS EMPLOYEE ───
+  let approvedLeaves = [];
+  let approvedPermissions = [];
+  let approvedCorrections = [];
+  try {
+    const rawLeaves = JSON.parse(localStorage.getItem('hr_leave_requests') || '[]');
+    const rawCorrs = JSON.parse(localStorage.getItem('hr_correction_requests') || '[]');
+    const rawUnified = JSON.parse(localStorage.getItem('hr_flow_unified_requests') || '[]');
+
+    const allLeavesList = [...(Array.isArray(rawLeaves) ? rawLeaves : [])];
+    (Array.isArray(rawUnified) ? rawUnified : []).forEach(u => {
+      if (['annual_leave', 'leave_extension', 'return_from_leave', 'permission'].includes(u.type)) {
+        if (!allLeavesList.some(l => l.id === u.id)) {
+          allLeavesList.push({
+            id: u.id,
+            employee_number: String(u.employee_number || '').trim(),
+            employee_id: String(u.employee_id || '').trim(),
+            leave_type: u.details?.leaveSubType || u.details?.request_label || (u.type === 'permission' ? 'استئذان' : 'إجازة'),
+            start_date: u.details?.startDate || (u.created_at || '').split('T')[0],
+            end_date: u.details?.endDate || u.details?.startDate || (u.created_at || '').split('T')[0],
+            status: u.status,
+            type: u.type,
+            permission_hours: Number(u.details?.permissionHours) || 2,
+            reason: u.reason || u.details?.reason || ''
+          });
+        }
+      }
+    });
+
+    const isEmpMatch = (record) => {
+      const rNum = String(record.employee_number || '').trim();
+      const rId = String(record.employee_id || '').trim();
+      return (rNum && (rNum === empNum || rNum === empId || `emp_${rNum}` === empId)) ||
+             (rId && (rId === empId || rId === empNum || rId === `emp_${empNum}`));
+    };
+
+    allLeavesList.filter(l => isEmpMatch(l) && (l.status === 'approved' || l.status === 'active')).forEach(l => {
+      if (l.type === 'permission' || (l.leave_type && l.leave_type.includes('استئذان'))) {
+        approvedPermissions.push(l);
+      } else {
+        approvedLeaves.push(l);
+      }
+    });
+
+    // Approved Punch Corrections
+    const allCorrsList = [...(Array.isArray(rawCorrs) ? rawCorrs : [])];
+    (Array.isArray(rawUnified) ? rawUnified : []).forEach(u => {
+      if (['punch_correction', 'attendance_correction'].includes(u.type)) {
+        if (!allCorrsList.some(c => c.id === u.id)) {
+          allCorrsList.push({
+            id: u.id,
+            employee_number: String(u.employee_number || '').trim(),
+            employee_id: String(u.employee_id || '').trim(),
+            log_date: u.details?.startDate || u.details?.targetDate || u.details?.log_date || (u.created_at || '').split('T')[0],
+            check_in: u.details?.checkInTime || '09:00',
+            check_out: u.details?.checkOutTime || '17:00',
+            status: u.status
+          });
+        }
+      }
+    });
+
+    approvedCorrections = allCorrsList.filter(c => isEmpMatch(c) && c.status === 'approved');
+  } catch (e) {
+    console.warn('Error fetching employee leaves/corrections for payroll:', e);
+  }
 
   const empLogs = (allLogs || []).filter(l => {
     const lUser = String(l.user_id || l.employee_id || '').trim();
@@ -892,6 +1411,77 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
       }
     }
   });
+
+  // Synthesize logs for any approved leaves covering dates with no punches
+  approvedLeaves.forEach(lv => {
+    if (!lv.start_date) return;
+    const s = new Date(lv.start_date);
+    const e = new Date(lv.end_date || lv.start_date);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      const dStr = d.toISOString().split('T')[0];
+      if (monthPrefix && !dStr.startsWith(monthPrefix)) continue;
+      const isUnpaid = (lv.leave_type || '').includes('بدون راتب') || lv.details?.leaveSubType === 'unpaid';
+      if (!dateMap[dStr]) {
+        dateMap[dStr] = {
+          log_date: dStr,
+          status: isUnpaid ? 'unpaid_leave' : 'annual_leave',
+          status_label: lv.leave_type || (isUnpaid ? 'إجازة بدون راتب' : 'إجازة سنوية'),
+          check_in: null,
+          check_out: null,
+          total_hours: 0,
+          actual_minutes: 0,
+          is_exempt: !isUnpaid,
+          is_unpaid: isUnpaid
+        };
+      } else {
+        dateMap[dStr] = {
+          ...dateMap[dStr],
+          status: isUnpaid ? 'unpaid_leave' : 'annual_leave',
+          status_label: lv.leave_type || (isUnpaid ? 'إجازة بدون راتب' : 'إجازة سنوية'),
+          is_exempt: !isUnpaid,
+          is_unpaid: isUnpaid
+        };
+      }
+    }
+  });
+
+  // Apply approved punch corrections over dateMap
+  approvedCorrections.forEach(corr => {
+    if (!corr.log_date) return;
+    if (monthPrefix && !corr.log_date.startsWith(monthPrefix)) return;
+    const inTime = corr.check_in || '09:00';
+    const outTime = corr.check_out || '17:00';
+    const inParts = inTime.split(':').map(Number);
+    const outParts = outTime.split(':').map(Number);
+    const inM = (inParts[0] || 0) * 60 + (inParts[1] || 0);
+    const outM = (outParts[0] || 0) * 60 + (outParts[1] || 0);
+    const durMins = outM >= inM ? outM - inM : (outM + 1440) - inM;
+
+    if (!dateMap[corr.log_date]) {
+      dateMap[corr.log_date] = {
+        log_date: corr.log_date,
+        check_in: inTime,
+        check_out: outTime,
+        status: 'present',
+        status_label: 'حاضر (تصحيح معتمد)',
+        total_hours: Math.round((durMins / 60) * 10) / 10,
+        actual_minutes: durMins,
+        has_approved_correction: true
+      };
+    } else {
+      dateMap[corr.log_date] = {
+        ...dateMap[corr.log_date],
+        check_in: inTime,
+        check_out: outTime,
+        status: 'present',
+        status_label: 'حاضر (تصحيح معتمد)',
+        total_hours: Math.round((durMins / 60) * 10) / 10,
+        actual_minutes: durMins,
+        has_approved_correction: true
+      };
+    }
+  });
+
   const uniqueLogs = Object.values(dateMap).sort((a, b) => (a.log_date || '').localeCompare(b.log_date || ''));
 
   let totalRequiredMinutes = 0, totalActualMinutes = 0;
@@ -902,11 +1492,15 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
 
   const dailyDetails = uniqueLogs.map(log => {
     const isFri = isFriday(log);
-    const exempt = isDayExempt(log) || (isExecutive && !isFri);
-    const hasAtt = hasRealBiometricPunches(log) || (isExecutive && !!log.check_in);
+    const exempt = isDayExempt(log) || log.is_exempt || (isExecutive && !isFri);
+    const hasAtt = hasRealBiometricPunches(log) || !!log.has_approved_correction || (isExecutive && !!log.check_in);
     const status = (log.status || 'present').toLowerCase();
-    const isUnpaidLeave = status === 'unpaid_leave' || status === 'إجازة بدون راتب' || status === 'اجازة بدون راتب';
+    const isUnpaidLeave = status === 'unpaid_leave' || log.is_unpaid || status === 'إجازة بدون راتب' || status === 'اجازة بدون راتب';
     
+    // Check approved permission for this day
+    const dayPermission = approvedPermissions.find(p => p.start_date === log.log_date || p.log_date === log.log_date);
+    const approvedPermHours = dayPermission ? (Number(dayPermission.permission_hours) || 2) : 0;
+
     let actualMins = calcActualMinutes(log);
 
     // For Executive Manager with check-in, full hours credited
@@ -940,7 +1534,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
       requiredMins = 0;
       shortfallMins = 0;
       actualMins = actualMins || 0;
-      if (status.includes('إجازة') || status === 'on_leave' || status === 'leave') leaveDays++;
+      if (status.includes('إجازة') || status.includes('leave') || status === 'on_leave') leaveDays++;
       else if (isExecutive) presentDays++;
     } else if (hasAtt) {
       // 4. REGULAR WORKING DAY WITH ATTENDANCE
@@ -952,7 +1546,12 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
 
       if (actual < requiredMins) {
         // Late / Delay on attended work day
-        const delay = requiredMins - actual;
+        let delay = requiredMins - actual;
+        // EXCUSE DELAY WITH APPROVED PERMISSION HOURS
+        if (approvedPermHours > 0) {
+          const excusedMins = approvedPermHours * 60;
+          delay = Math.max(0, delay - excusedMins);
+        }
         shortfallMins = delay;
         totalDelayMinutes += delay;
       } else if (actual > requiredMins) {
@@ -984,12 +1583,32 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     const hasOT = !isFri && is9HourShift && hasAtt && !exempt && (actualMins >= 510 || (actualMins >= (shiftHours * 60) - 30));
     if (hasOT) overtimeDays++;
 
-    // Robust Multi-Period Punch Extraction (Morning & Evening Periods)
-    const rawPunches = extractTimes(log.timestamp_raw || log.punches_raw || '');
-    let p1In = log.period_1_in || (rawPunches[0] || (log.check_in ? (log.check_in.includes('T') ? log.check_in.slice(11, 16) : log.check_in.slice(0, 5)) : ''));
-    let p1Out = log.period_1_out || (rawPunches.length >= 4 ? rawPunches[1] : (rawPunches.length === 2 ? rawPunches[1] : (log.check_out ? (log.check_out.includes('T') ? log.check_out.slice(11, 16) : log.check_out.slice(0, 5)) : '')));
-    let p2In = log.period_2_in || (rawPunches.length >= 4 ? rawPunches[2] : '');
-    let p2Out = log.period_2_out || (rawPunches.length >= 4 ? rawPunches[3] : '');
+    let notesData = {};
+    if (typeof log.notes === 'string' && log.notes.startsWith('{')) {
+      try { notesData = JSON.parse(log.notes); } catch {}
+    }
+    const isPeriod2Cancelled = log.period_2_cancelled === true || notesData.period_2_cancelled === true || (log.period_2_in === '' && log.period_2_out === '' && (log.period_1_in || notesData.period_1_in));
+
+    // Robust Multi-Period Punch Extraction (Morning & Evening Periods: First & Last Punch)
+    const isSplit = is9HourShift || shiftName.includes('فترتين') || shiftName.includes('غير سعودي');
+    const parsedRaw = parseRawPunchesToPeriods(log.timestamp_raw || log.punches_raw || '', isSplit);
+
+    let p1In = (log.period_1_in !== undefined && log.period_1_in !== null) 
+      ? log.period_1_in 
+      : (notesData.period_1_in !== undefined ? notesData.period_1_in : (parsedRaw.period_1_in || (log.check_in ? (log.check_in.includes('T') ? log.check_in.slice(11, 16) : log.check_in.slice(0, 5)) : '')));
+    let p1Out = (log.period_1_out !== undefined && log.period_1_out !== null) 
+      ? log.period_1_out 
+      : (notesData.period_1_out !== undefined ? notesData.period_1_out : (parsedRaw.period_1_out || (log.check_out ? (log.check_out.includes('T') ? log.check_out.slice(11, 16) : log.check_out.slice(0, 5)) : '')));
+    let p2In = isPeriod2Cancelled 
+      ? '' 
+      : ((log.period_2_in !== undefined && log.period_2_in !== null) 
+        ? log.period_2_in 
+        : (notesData.period_2_in !== undefined ? notesData.period_2_in : parsedRaw.period_2_in));
+    let p2Out = isPeriod2Cancelled 
+      ? '' 
+      : ((log.period_2_out !== undefined && log.period_2_out !== null) 
+        ? log.period_2_out 
+        : (notesData.period_2_out !== undefined ? notesData.period_2_out : parsedRaw.period_2_out));
 
     const displayCheckIn = (hasAtt || isExecutive) ? (p1In || log.check_in || '') : '';
     const displayCheckOut = (hasAtt || isExecutive) ? (p2Out || p1Out || log.check_out || (isExecutive ? '16:00' : '')) : '';
@@ -1031,6 +1650,8 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
       isUnpaidLeave,
       isExempt: exempt,
       hasAttendance: hasAtt,
+      hasApprovedCorrection: !!log.has_approved_correction,
+      approvedPermissionHours: approvedPermHours,
       requiredMinutes: requiredMins,
       actualMinutes: hasAtt ? (actualMins || 0) : 0,
       shortfallMinutes: shortfallMins,
@@ -1244,7 +1865,9 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     advanceRemaining,
     advanceNote,
     advanceOverrideStatus,
-    activeAdvance,
+    approvedLeaves,
+    approvedPermissions,
+    approvedCorrections,
     totalAdditions,
     totalDeductions,
     netSalary,

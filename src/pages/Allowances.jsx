@@ -69,7 +69,25 @@ export default function Allowances() {
         base44.entities.Department.list().catch(() => [])
       ]);
 
-      const activeEmployees = (empData || []).filter(e => e.status !== 'inactive' && e.status !== 'terminated');
+      const activeEmployees = (empData || []).filter(e => e.status !== 'inactive' && e.status !== 'terminated').map(e => {
+        try {
+          const raw = localStorage.getItem('hr_allowances_backup_' + e.id);
+          if (raw) {
+            const b = JSON.parse(raw);
+            return {
+              ...e,
+              housing_allowance: Number(e.housing_allowance || b.housing_allowance) || 0,
+              transport_allowance: Number(e.transport_allowance || b.transport_allowance) || 0,
+              electricity_allowance: Number(e.electricity_allowance || b.electricity_allowance) || 0,
+              phone_allowance: Number(e.phone_allowance || b.phone_allowance || b.purchases_allowance) || 0,
+              purchases_allowance: Number(e.purchases_allowance || b.purchases_allowance || b.phone_allowance) || 0,
+              other_allowance: Number(e.other_allowance || b.other_allowance) || 0,
+              allowance_notes: e.allowance_notes || b.allowance_notes || ''
+            };
+          }
+        } catch (err) {}
+        return e;
+      });
       setEmployees(activeEmployees);
       setBranches(branchData || []);
       setDepartments(deptData || []);
@@ -195,9 +213,14 @@ export default function Allowances() {
         transport_allowance: Number(transport) || 0,
         electricity_allowance: Number(electricity) || 0,
         phone_allowance: Number(phone) || 0,
+        purchases_allowance: Number(phone) || 0,
         other_allowance: Number(other) || 0,
         allowance_notes: notes || ''
       };
+
+      try {
+        localStorage.setItem('hr_allowances_backup_' + emp.id, JSON.stringify(updatedRecord));
+      } catch (err) {}
 
       await base44.entities.Employee.update(emp.id, updatedRecord);
 
@@ -356,15 +379,15 @@ export default function Allowances() {
         </Card>
 
         {/* 5. Phone Allowance */}
-        <Card className="p-4 rounded-3xl border bg-gradient-to-br from-purple-50/80 to-purple-100/50 dark:from-purple-950/40 dark:to-purple-900/20 border-purple-200 dark:border-purple-800/60 shadow-sm">
-          <div className="flex items-center justify-between text-purple-700 dark:text-purple-300">
+        <Card className="p-4 rounded-3xl border bg-gradient-to-br from-purple-50/80 to-purple-100/50 dark:from-purple-950/40 dark:to-purple-900/20 border-sky-200 dark:border-sky-700/60 shadow-sm">
+          <div className="flex items-center justify-between text-sky-700 dark:text-sky-300">
             <span className="text-[11px] font-bold">بدل المشتريات 🛒</span>
             <ShoppingBag className="w-4 h-4 opacity-80" />
           </div>
-          <div className="mt-2 text-xl font-black font-mono text-purple-900 dark:text-purple-200">
+          <div className="mt-2 text-xl font-black font-mono text-sky-900 dark:text-sky-200">
             {fmtSAR(metrics.totalPhone)} <span className="text-[10px] font-sans font-normal text-muted-foreground">ر.س</span>
           </div>
-          <div className="text-[10px] text-purple-700/80 dark:text-purple-300/80 mt-1 font-semibold">
+          <div className="text-[10px] text-sky-700/80 dark:text-sky-300/80 mt-1 font-semibold">
             الهاتف وشبكة العمل
           </div>
         </Card>
@@ -442,7 +465,7 @@ export default function Allowances() {
                 <SelectItem value="has_housing" className="text-sky-700 font-bold">🏠 لديهم بدل سكن</SelectItem>
                 <SelectItem value="has_transport" className="text-emerald-700 font-bold">🚗 لديهم بدل مواصلات</SelectItem>
                 <SelectItem value="has_electricity" className="text-amber-700 font-bold">⚡ لديهم بدل كهرباء</SelectItem>
-                <SelectItem value="has_phone" className="text-purple-700 font-bold">🛒 لديهم بدل مشتريات</SelectItem>
+                <SelectItem value="has_phone" className="text-sky-700 font-bold">🛒 لديهم بدل مشتريات</SelectItem>
                 <SelectItem value="has_other" className="text-rose-700 font-bold">➕ لديهم بدلات أخرى</SelectItem>
                 <SelectItem value="no_allowance" className="text-slate-500 font-bold">🚫 بدون بدلات (أساسي فقط)</SelectItem>
               </SelectContent>
@@ -500,7 +523,7 @@ export default function Allowances() {
                 <th className="py-3.5 px-3 text-sky-700 dark:text-sky-400">🏠 بدل سكن</th>
                 <th className="py-3.5 px-3 text-emerald-700 dark:text-emerald-400">🚗 بدل مواصلات</th>
                 <th className="py-3.5 px-3 text-amber-700 dark:text-amber-400">⚡ بدل كهرباء</th>
-                <th className="py-3.5 px-3 text-purple-700 dark:text-purple-400">🛒 بدل مشتريات</th>
+                <th className="py-3.5 px-3 text-sky-700 dark:text-sky-400">🛒 بدل مشتريات</th>
                 <th className="py-3.5 px-3 text-slate-600 dark:text-slate-400">➕ أخرى</th>
                 <th className="py-3.5 px-3 text-indigo-700 dark:text-indigo-300 font-black">إجمالي البدلات</th>
                 <th className="py-3.5 px-4 text-emerald-800 dark:text-emerald-300 font-black">الراتب الإجمالي</th>
@@ -554,7 +577,7 @@ export default function Allowances() {
                             <div className="font-heading font-black text-foreground text-xs flex items-center gap-1.5">
                               <span>{emp.full_name}</span>
                               <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 h-4">
-                                #{emp.employee_number}
+                                {emp.employee_number}
                               </Badge>
                             </div>
                             <div className="text-[11px] text-muted-foreground font-semibold mt-0.5">
@@ -615,7 +638,7 @@ export default function Allowances() {
                       {/* Phone */}
                       <td className="py-3.5 px-3 font-mono">
                         {phone > 0 ? (
-                          <span className="font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-lg border border-purple-200/60">
+                          <span className="font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-lg border border-sky-200/60">
                             {fmtSAR(phone)}
                           </span>
                         ) : (
@@ -681,7 +704,7 @@ export default function Allowances() {
                   <td className="py-3 px-3 text-sky-700 dark:text-sky-300">{fmtSAR(metrics.totalHousing)}</td>
                   <td className="py-3 px-3 text-emerald-700 dark:text-emerald-300">{fmtSAR(metrics.totalTransport)}</td>
                   <td className="py-3 px-3 text-amber-700 dark:text-amber-300">{fmtSAR(metrics.totalElectricity)}</td>
-                  <td className="py-3 px-3 text-purple-700 dark:text-purple-300">{fmtSAR(metrics.totalPhone)}</td>
+                  <td className="py-3 px-3 text-sky-700 dark:text-sky-300">{fmtSAR(metrics.totalPhone)}</td>
                   <td className="py-3 px-3 text-slate-700 dark:text-slate-300">{fmtSAR(metrics.totalOther)}</td>
                   <td className="py-3 px-3 text-indigo-700 dark:text-indigo-300 font-black">+{fmtSAR(metrics.totalAllowances)}</td>
                   <td className="py-3 px-4 text-emerald-800 dark:text-emerald-300 text-sm font-black">{fmtSAR(metrics.totalGross)}</td>
@@ -713,7 +736,7 @@ export default function Allowances() {
                 <div>
                   <span className="font-bold text-indigo-950 dark:text-indigo-200 text-sm">{editModal.emp?.full_name}</span>
                   <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                    #{editModal.emp?.employee_number} • {editModal.emp?.job_title} • {editModal.emp?.branch_name}
+                    {editModal.emp?.employee_number} • {editModal.emp?.job_title} • {editModal.emp?.branch_name}
                   </div>
                 </div>
                 <div className="text-left font-mono">
@@ -778,7 +801,7 @@ export default function Allowances() {
 
                 {/* 4. Phone */}
                 <div className="space-y-1">
-                  <Label className="font-bold flex items-center gap-1.5 text-purple-800 dark:text-purple-300">
+                  <Label className="font-bold flex items-center gap-1.5 text-sky-800 dark:text-sky-300">
                     <Phone className="w-3.5 h-3.5" />
                     <span>4. بدل المشتريات والاتصالات:</span>
                   </Label>

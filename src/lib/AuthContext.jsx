@@ -1,101 +1,223 @@
-import { getCompanyProfile } from '@/lib/companyProfile';
-import { initFullCloudSync } from '@/lib/cloudSyncEngine';
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
-import { getUserPermissions, determineRoleFromEmployee } from '@/lib/rbac';
+/**
+ * AuthContext.jsx
+ * ============================================================================
+ * REBUILT — Phase 1 Security Foundation
+ *
+ * ZERO TRUST CLIENT:
+ * - Identity is established by Supabase Auth JWT (not localStorage)
+ * - Employee record is fetched from DB via auth.uid() (not localStorage)
+ * - Role comes from employees.role column (not localStorage, not hardcoded)
+ * - Permissions are derived server-side from DB role
+ * - If auth.uid() cannot be linked to an employee → unlinked-account error
+ * - NEVER falls back to another employee's record
+ *
+ * AUTH LIFECYCLE:
+ * 1. App loads → supabase.auth.onAuthStateChange fires
+ * 2. If session: fetch linked employee from DB
+ * 3. If no session: redirect to login
+ * 4. On logout: Supabase clears session (server-side invalidation)
+ * ============================================================================
+ */
 
-const AuthContext = createContext();
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
+import {
+  getCurrentAuthUser,
+  fetchLinkedEmployee,
+  getCredentialsSession,
+  signIn as authSignIn,
+  signOut as authSignOut,
+  sendPasswordReset,
+  updatePassword as authUpdatePassword,
+  onAuthStateChange,
+  getPermissionsForRole,
+} from '@/lib/authService';
+import { initFullCloudSync } from '@/lib/cloudSyncEngine';
+import { getCompanyProfile } from '@/lib/companyProfile';
+
+const AuthContext = createContext(null);
+
+// ─── AUTH STATES ─────────────────────────────────────────────────────────────
+// Explicit loading/error states instead of ambiguous booleans
+const AUTH_STATE = {
+  INITIALIZING:  'initializing',  // First load; session check in progress
+  AUTHENTICATED: 'authenticated', // Session + employee linked
+  UNAUTHENTICATED: 'unauthenticated', // No session
+  UNLINKED: 'unlinked',          // Session exists but no employee linked
+  ERROR: 'error',                // DB or network error
+};
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem('zenith_auth_user');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    try {
-      const stored = localStorage.getItem('zenith_auth_user');
-      return !!stored;
-    } catch {
-      return false;
-    }
-  });
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
-  const [authError, setAuthError] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [appPublicSettings, setAppPublicSettings] = useState({ id: 'app_hr', public_settings: {} });
+  const [authState, setAuthState]   = useState(AUTH_STATE.INITIALIZING);
+  const [user, setUser]             = useState(null);  // Full employee record
+  const [authUser, setAuthUser]     = useState(null);  // Supabase auth.users record
+  const [authError, setAuthError]   = useState(null);
+  const initDone = useRef(false);
 
-  const checkUserAuth = useCallback(async () => {
-    setIsLoadingAuth(true);
+  // ─── Derived state (convenience compat layer for existing components) ─────
+  const isAuthenticated       = authState === AUTH_STATE.AUTHENTICATED;
+  const isLoadingAuth         = authState === AUTH_STATE.INITIALIZING;
+  const isLoadingPublicSettings = false; // No public settings gate needed
+  const authChecked           = authState !== AUTH_STATE.INITIALIZING;
+
+  // ─── Core: resolve identity from DB ──────────────────────────────────────
+  const resolveIdentity = useCallback(async () => {
     try {
-      const currentUser = await base44.auth.me();
-      if (currentUser && (currentUser.id || currentUser.employee_number)) {
-        // Enrich with RBAC role if not already set
-        if (!currentUser.role || currentUser.role === 'admin' || currentUser.role === 'employee') {
-          currentUser.role = determineRoleFromEmployee(currentUser);
-        }
-        currentUser.permissions = getUserPermissions(currentUser);
-        setUser(currentUser);
-        setIsAuthenticated(true);
-        setAuthError(null);
-      } else {
+      const result = await fetchLinkedEmployee();
+
+      if (result.error === 'unauthenticated') {
         setUser(null);
-        setIsAuthenticated(false);
+        setAuthUser(null);
+        setAuthState(AUTH_STATE.UNAUTHENTICATED);
+        setAuthError(null);
+        return;
       }
-    } catch (error) {
+
+      if (result.error === 'unlinked') {
+        // Auth session exists but no employee record linked
+        // DO NOT fall back — show unlinked-account error
+        setUser(null);
+        setAuthUser({ id: result.authUserId, email: result.authEmail });
+        setAuthState(AUTH_STATE.UNLINKED);
+        setAuthError({ type: 'user_not_registered', authEmail: result.authEmail });
+        return;
+      }
+
+      if (result.error) {
+        setUser(null);
+        setAuthUser(null);
+        setAuthState(AUTH_STATE.ERROR);
+        setAuthError({ type: 'db_error', message: result.message });
+        return;
+      }
+
+      // Success: employee is linked and authenticated
+      const fullUser = {
+        ...result.employee,
+        // Attach computed permissions (from DB role, NOT from localStorage)
+        permissions: result.permissions,
+        role: result.role,
+      };
+
+      setUser(fullUser);
+      setAuthUser(result.authUser);
+      setAuthState(AUTH_STATE.AUTHENTICATED);
+      setAuthError(null);
+    } catch (err) {
+      console.error('[AuthContext] resolveIdentity error:', err);
       setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoadingAuth(false);
-      setAuthChecked(true);
+      setAuthUser(null);
+      setAuthState(AUTH_STATE.ERROR);
+      setAuthError({ type: 'unknown_error', message: err.message });
     }
   }, []);
 
+  // ─── Subscribe to Supabase Auth state changes ─────────────────────────────
   useEffect(() => {
-    // Ensure default DC company profile and logo are loaded for all users
+    // Load company profile and cloud sync (non-auth-dependent)
     getCompanyProfile();
     initFullCloudSync();
-    checkUserAuth();
-  }, [checkUserAuth]);
 
-  const checkAppState = async () => {
-    setIsLoadingPublicSettings(false);
-    setIsLoadingAuth(false);
-    setAuthChecked(true);
-  };
+    // Initial check on mount
+    resolveIdentity();
 
-  const logout = (shouldRedirect = true) => {
-    base44.auth.logout();
+    // Subscribe to session changes (login, logout, token refresh, etc.)
+    const unsubscribe = onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        await resolveIdentity();
+      } else if (event === 'SIGNED_OUT') {
+        const cred = getCredentialsSession();
+        if (!cred) {
+          setUser(null);
+          setAuthUser(null);
+          setAuthState(AUTH_STATE.UNAUTHENTICATED);
+          setAuthError(null);
+        }
+      } else if (event === 'USER_UPDATED') {
+        // Re-fetch employee in case DB record was updated
+        await resolveIdentity();
+      }
+    });
+
+    return unsubscribe;
+  }, [resolveIdentity]);
+
+  // ─── Login action ──────────────────────────────────────────────────────────
+  const login = useCallback(async (email, password) => {
+    setAuthState(AUTH_STATE.INITIALIZING);
+    setAuthError(null);
+
+    const result = await authSignIn(email, password);
+
+    if (result.error) {
+      setAuthState(AUTH_STATE.UNAUTHENTICATED);
+      setAuthError({ type: 'login_failed', message: result.error.message });
+      return { error: result.error };
+    }
+
+    // Immediately resolve identity for both Supabase Auth & National ID credentials
+    await resolveIdentity();
+    return { success: true, employee: result.employee, role: result.role };
+  }, [resolveIdentity]);
+
+  // ─── Logout action ────────────────────────────────────────────────────────
+  const logout = useCallback(async (shouldRedirect = true) => {
+    await authSignOut(); // Supabase clears session (server-side)
     setUser(null);
-    setIsAuthenticated(false);
-    setAuthChecked(true);
+    setAuthUser(null);
+    setAuthState(AUTH_STATE.UNAUTHENTICATED);
+    setAuthError(null);
     if (shouldRedirect) {
       window.location.href = '/login';
     }
-  };
+  }, []);
 
-  const navigateToLogin = () => {
+  // ─── Re-fetch identity (e.g., after role change by admin) ────────────────
+  const checkUserAuth = useCallback(async () => {
+    await resolveIdentity();
+  }, [resolveIdentity]);
+
+  // ─── Password actions ─────────────────────────────────────────────────────
+  const resetPassword = useCallback(async (email) => {
+    return sendPasswordReset(email);
+  }, []);
+
+  const changePassword = useCallback(async (newPassword) => {
+    return authUpdatePassword(newPassword);
+  }, []);
+
+  const navigateToLogin = useCallback(() => {
     window.location.href = '/login';
+  }, []);
+
+  // ─── Context value ────────────────────────────────────────────────────────
+  const contextValue = {
+    // State
+    user,                    // Full employee record (DB-authoritative)
+    authUser,                // Supabase auth.users record
+    authState,               // Explicit auth state enum
+    authError,               // Structured error
+
+    // Convenience booleans (backward compat with existing components)
+    isAuthenticated,
+    isLoadingAuth,
+    isLoadingPublicSettings,
+    authChecked,
+
+    // Actions
+    login,
+    logout,
+    checkUserAuth,
+    resetPassword,
+    changePassword,
+    navigateToLogin,
+
+    // Public settings compat (no-op — no public settings gate needed)
+    appPublicSettings: { id: 'app_hr', public_settings: {} },
+    checkAppState: async () => {},
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated, 
-      isLoadingAuth,
-      isLoadingPublicSettings,
-      authError,
-      appPublicSettings,
-      authChecked,
-      logout,
-      navigateToLogin,
-      checkUserAuth,
-      checkAppState
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
@@ -108,3 +230,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export { AUTH_STATE };

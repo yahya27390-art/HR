@@ -371,26 +371,23 @@ export default function Announcements() {
   return (
     <div className="space-y-5" dir="rtl" style={{ direction: 'rtl', textAlign: 'right' }}>
       
-      {/* ─── 1. EXECUTIVE ENTERPRISE HEADER ───────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-l from-slate-900 via-[#0B1F3A] to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-slate-800 relative overflow-hidden">
-        <div className="absolute -left-12 -top-12 w-64 h-64 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-600 to-rose-500 text-white flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
-            <Mail className="w-7 h-7" />
+      {/* ─── 1. EXECUTIVE ENTERPRISE HEADER (COMPACT & MOBILE-FIRST) ─────── */}
+      <div className="flex items-center justify-between gap-3 bg-gradient-to-l from-slate-900 via-[#101b4d] to-slate-900 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-md border border-slate-800 relative overflow-hidden">
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-[#3b5bfd] to-[#1c3285] text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+            <Mail className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-heading font-black tracking-tight text-white">
-                مركز التواصل والمراسلات الإدارية والتعاميم
+              <h1 className="text-sm sm:text-lg font-heading font-black text-white">
+                التعاميم والمراسلات
               </h1>
-              <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                منظومة معتمدة
+              <Badge className="bg-white/10 text-blue-200 border-white/10 text-[10px] font-bold hidden sm:inline-flex">
+                شركة درة السيارة
               </Badge>
             </div>
-            <p className="text-xs text-slate-300 mt-1 leading-relaxed max-w-2xl">
-              إدارة وتوثيق المراسلات الرسمية والتعاميم والقرارات الإدارية بين الإدارة وفروع المنشأة الأربعة وفقاً للمعايير المؤسسية.
+            <p className="text-[11px] text-slate-300 font-medium hidden sm:block">
+              القرارات والتعاميم الرسمية والمراسلات الإدارية
             </p>
           </div>
         </div>
@@ -398,33 +395,33 @@ export default function Announcements() {
         <div className="relative z-10 flex items-center gap-2 shrink-0">
           <Button
             onClick={() => setComposeOpen(true)}
-            className="h-11 px-5 rounded-2xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-black text-xs shadow-lg shadow-pink-500/25 transition-all gap-2"
+            className="h-8 sm:h-10 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-[#3b5bfd] hover:bg-[#2e4bd6] text-white font-bold text-xs shadow-md shadow-blue-500/25 transition-all gap-1.5"
           >
             <Plus className="w-4 h-4" />
-            <span>+ إنشاء رسالة / تعميم رسمي</span>
+            <span>رسالة جديدة</span>
           </Button>
         </div>
       </div>
 
-      {/* ─── 2. PRIMARY TOP TABS WITH EXACT UNREAD COUNTERS ────────────────── */}
-      <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-border/80 p-2 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+      {/* ─── 2. PRIMARY TOP TABS (COMPACT & CLEAN ON MOBILE) ────────────────── */}
+      <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-1.5 rounded-2xl shadow-xs">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar w-full sm:w-auto">
           
           {/* Tab 1: Internal Mail */}
           <button
             type="button"
             onClick={() => setActiveTab('inbox')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 ${
               activeTab === 'inbox'
-                ? 'bg-pink-600 text-white shadow-md shadow-pink-600/20'
-                : 'text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-[#3b5bfd] text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <Mail className="w-4 h-4" />
-            <span>البريد والمراسلات الإدارية</span>
+            <Mail className="w-3.5 h-3.5" />
+            <span>البريد</span>
             {unreadMessagesCount > 0 && (
               <span className={`text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full ${
-                activeTab === 'inbox' ? 'bg-white text-pink-700' : 'bg-pink-600 text-white'
+                activeTab === 'inbox' ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'
               }`}>
                 {unreadMessagesCount}
               </span>
@@ -435,16 +432,16 @@ export default function Announcements() {
           <button
             type="button"
             onClick={() => setActiveTab('circulars')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 ${
               activeTab === 'circulars'
-                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
-                : 'text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-[#3b5bfd] text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <Megaphone className="w-4 h-4" />
-            <span>التعاميم والقرارات الرسمية</span>
+            <Megaphone className="w-3.5 h-3.5" />
+            <span>التعاميم</span>
             <span className={`text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full ${
-              activeTab === 'circulars' ? 'bg-white text-sky-700' : 'bg-slate-200 dark:bg-slate-800 text-foreground'
+              activeTab === 'circulars' ? 'bg-white text-blue-700' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
             }`}>
               {activeCircularsCount}
             </span>
@@ -454,17 +451,17 @@ export default function Announcements() {
           <button
             type="button"
             onClick={() => setActiveTab('notifications')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 ${
               activeTab === 'notifications'
-                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-                : 'text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-[#3b5bfd] text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <Bell className="w-4 h-4" />
-            <span>التنبيهات الإدارية</span>
+            <Bell className="w-3.5 h-3.5" />
+            <span>التنبيهات</span>
             {unreadNotificationsCount > 0 && (
               <span className={`text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full ${
-                activeTab === 'notifications' ? 'bg-white text-amber-700' : 'bg-rose-500 text-white'
+                activeTab === 'notifications' ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'
               }`}>
                 {unreadNotificationsCount}
               </span>
@@ -475,14 +472,14 @@ export default function Announcements() {
           <button
             type="button"
             onClick={() => setActiveTab('calendar')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 ${
               activeTab === 'calendar'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                : 'text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-[#3b5bfd] text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <CalendarDays className="w-4 h-4" />
-            <span>التقويم والأحداث الرسمية</span>
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>التقويم</span>
           </button>
 
         </div>
@@ -751,38 +748,40 @@ export default function Announcements() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {circulars.map((circ) => (
-              <Card key={circ.id} className="p-6 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm space-y-4 relative overflow-hidden">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 text-sky-600 flex items-center justify-center shadow-sm">
-                      <Megaphone className="w-6 h-6" />
+              <Card key={circ.id} className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-3 relative overflow-hidden">
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-[#edf2fe] dark:bg-indigo-950/60 text-[#3b5bfd] flex items-center justify-center shrink-0">
+                      <Megaphone className="w-5 h-5" />
                     </div>
-                    <div>
-                      <Badge className="bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 font-mono text-[10px] font-bold">
+                    <div className="min-w-0">
+                      <Badge className="bg-[#edf2fe] dark:bg-indigo-950 text-[#3b5bfd] font-mono text-[10px] font-bold">
                         {circ.number}
                       </Badge>
-                      <h3 className="font-heading font-black text-sm text-foreground mt-1">
+                      <h3 className="font-heading font-black text-xs sm:text-sm text-foreground mt-0.5 truncate">
                         {circ.title}
                       </h3>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono text-muted-foreground font-bold">{circ.date}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground font-bold shrink-0">{circ.date}</span>
                 </div>
 
-                <p className="text-xs text-muted-foreground leading-relaxed p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border">
+                <p className="text-xs text-muted-foreground leading-relaxed p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/60 line-clamp-3">
                   {circ.content}
                 </p>
 
-                <div className="flex items-center justify-between pt-2 border-t text-xs">
-                  <span className="text-[11px] font-bold text-foreground">الجهة المصدرة: {circ.issued_by}</span>
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-xs">
+                  <span className="text-[11px] font-bold text-muted-foreground truncate max-w-[200px]">
+                    المصدر: {circ.issued_by}
+                  </span>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setReadingCircular(circ)}
-                    className="h-8 rounded-xl text-xs font-bold gap-1.5"
+                    className="h-7 sm:h-8 rounded-xl text-xs font-bold gap-1 px-2.5 border-slate-200 hover:border-blue-400 hover:text-[#3b5bfd]"
                   >
-                    <Printer className="w-3.5 h-3.5 text-sky-600" />
-                    <span>طباعة القرار الرسمي</span>
+                    <Printer className="w-3.5 h-3.5 text-[#3b5bfd]" />
+                    <span>طباعة القرار</span>
                   </Button>
                 </div>
               </Card>

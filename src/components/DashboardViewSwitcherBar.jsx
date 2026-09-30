@@ -89,7 +89,7 @@ export default function DashboardViewSwitcherBar({ viewMode, onToggleMode }) {
       <div className={`p-3.5 sm:p-4 rounded-3xl border transition-all duration-300 shadow-md ${
         isEmployeeView 
           ? 'bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 border-emerald-500/40' 
-          : 'bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-slate-800'
+          : 'bg-gradient-to-r from-purple-950 via-slate-900 to-slate-950 border-purple-800/40'
       }`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           

@@ -32,11 +32,15 @@ import {
   Calculator,
   CheckCircle2,
   AlertTriangle,
-  ClipboardList
+  ClipboardList,
+  Star,
+  Palmtree,
+  TrendingUp
 } from 'lucide-react';
 import { hasPermission } from '@/lib/rbac';
 
 export const navigationModules = [
+  // 1. الرئيسية (Dashboard & Self-Service)
   {
     id: 'dashboard',
     label: 'الرئيسية',
@@ -49,14 +53,16 @@ export const navigationModules = [
     activeBg: 'bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-200',
     permission: 'dashboard.view',
     items: [
-      { to: '/', label: 'لوحة التحكم', icon: LayoutDashboard },
-      { to: '/my-requests', label: 'طلباتي', icon: ClipboardList },
-      { to: '/approvals', label: 'الاعتمادات', icon: CheckCircle2, permission: 'approvals.manage' },
-      { to: '/alerts', label: 'التنبيهات', icon: Bell, permission: 'alerts.view' },
-      { to: '/employee-profile', label: 'ملفي 360°', icon: UserCheck },
+      { to: '/', label: 'لوحة التحكم والمؤشرات', icon: LayoutDashboard },
+      { to: '/my-requests', label: 'طلباتي والخدمة الذاتية', icon: ClipboardList },
+      { to: '/approvals', label: 'مركز الاعتمادات والطلبات', icon: CheckCircle2, permission: 'approvals.manage' },
+      { to: '/alerts', label: 'التنبيهات والإشعارات', icon: Bell, permission: 'alerts.view' },
+      { to: '/employee-profile', label: 'ملفي التعريفي 360°', icon: UserCheck },
       { to: '/portal', label: 'بوابة الموظف', icon: UserCheck },
     ]
   },
+
+  // 2. الموظفين (Employees & Organization)
   {
     id: 'employees',
     label: 'الموظفين',
@@ -69,18 +75,19 @@ export const navigationModules = [
     activeBg: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
     permission: 'employees.view',
     items: [
-      { to: '/employees', label: 'الموظفين', icon: Users },
-      { to: '/contracts', label: 'العقود', icon: FileText, permission: 'employees.edit' },
-      { to: '/departments', label: 'الأقسام والهيكل', icon: Layers, permission: 'departments.manage' },
-      { to: '/branches', label: 'الفروع', icon: GitBranch, permission: 'branches.manage' },
-      { to: '/shifts', label: 'الورديات', icon: CalendarRange, permission: 'shifts.view' },
-      { to: '/allowances', label: 'البدلات والمزايا', icon: Coins, permission: 'allowances.view' },
+      { to: '/employees', label: 'دليل وبيانات الموظفين', icon: Users },
+      { to: '/contracts', label: 'عقود العمل والاتفاقيات', icon: FileText, permission: 'employees.edit' },
+      { to: '/departments', label: 'الأقسام والهيكل الإداري', icon: Layers, permission: 'departments.manage' },
+      { to: '/branches', label: 'الفروع ومواقع العمل', icon: GitBranch, permission: 'branches.manage' },
+      { to: '/users', label: 'حسابات الدخول والمستخدمين', icon: KeyRound, permission: 'employees.view' },
     ]
   },
+
+  // 3. الحضور والدوام (Attendance & Shifts)
   {
     id: 'attendance',
     label: 'الحضور',
-    sublabel: 'البصمات والأجهزة',
+    sublabel: 'البصمات والورديات',
     icon: Clock,
     color: '#f59e0b', // Amber
     gradient: 'from-amber-500 to-orange-600',
@@ -89,76 +96,75 @@ export const navigationModules = [
     activeBg: 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
     permission: 'attendance.view',
     items: [
-      { to: '/attendance', label: 'حركات البصمة', icon: Clock },
-      { to: '/devices', label: 'أجهزة البصمة', icon: Fingerprint, permission: 'shifts.manage' },
-      { to: '/devices?sync=true', label: 'سحب الحركات', icon: Fingerprint, permission: 'shifts.manage' },
-      { to: '/attendance?mode=manual', label: 'التحضير اليدوي', icon: FileCheck, permission: 'attendance.edit' },
-      { to: '/import-data', label: 'رفع البصمات', icon: UploadCloud, permission: 'attendance.import' },
+      { to: '/attendance', label: 'سجل وحركات البصمة', icon: Clock },
+      { to: '/shifts', label: 'الورديات وفترات العمل', icon: CalendarRange, permission: 'shifts.view' },
+      { to: '/devices', label: 'أجهزة البصمة والربط', icon: Fingerprint, permission: 'shifts.manage' },
+      { to: '/attendance?mode=manual', label: 'التحضير اليدوي والتصحيح', icon: FileCheck, permission: 'attendance.edit' },
+      { to: '/import-data', label: 'سحب ورفع حركات البصمة', icon: UploadCloud, permission: 'attendance.import' },
     ]
   },
+
+  // 4. الإجازات (Leaves & Absences)
   {
-    id: 'services',
+    id: 'leaves',
     label: 'الإجازات',
-    sublabel: 'الطلبات والتقييم',
-    icon: Briefcase,
-    color: '#6366f1', // Indigo
-    gradient: 'from-indigo-500 to-violet-600',
-    glowColor: 'rgba(99, 102, 241, 0.4)',
-    badgeColor: 'bg-indigo-500 text-white',
-    activeBg: 'bg-indigo-50 text-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200',
+    sublabel: 'الطلبات والأرصدة',
+    icon: Palmtree,
+    color: '#06b6d4', // Cyan
+    gradient: 'from-cyan-500 to-blue-600',
+    glowColor: 'rgba(6, 182, 212, 0.4)',
+    badgeColor: 'bg-cyan-600 text-white',
+    activeBg: 'bg-cyan-50 text-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-200',
     permission: 'leave.view',
     items: [
-      { to: '/leave', label: 'الإجازات', icon: CalendarDays },
-      { to: '/leave-policies', label: 'سياسات الإجازة', icon: BookOpen, permission: 'settings.view' },
-      { to: '/evaluations', label: 'تقييم الأداء', icon: Award, permission: 'employees.view' },
-      { to: '/rewards-penalties', label: 'المكافآت والجزاءات', icon: Award, permission: 'employees.edit' },
-      { to: '/approvals', label: 'مركز الاعتمادات', icon: CheckCircle2, permission: 'approvals.manage' },
+      { to: '/leave?tab=requests', label: 'طلبات وسجل الإجازات', icon: CalendarDays },
+      { to: '/leave?tab=balances', label: 'أرصدة الإجازات السنوية', icon: FileSpreadsheet },
+      { to: '/leave-policies', label: 'سياسات ولائحة الإجازات', icon: BookOpen, permission: 'settings.view' },
+      { to: '/leave?tab=holidays', label: 'العطلات والإجازات الرسمية', icon: CalendarRange, permission: 'settings.view' },
     ]
   },
+
+  // 5. الأداء والتقييم (Performance & KPIs) - قسم مستقل ومتخصص
+  {
+    id: 'performance',
+    label: 'الأداء والتقييم',
+    sublabel: 'الكفاءة والـ KPIs',
+    icon: Award,
+    color: '#8b5cf6', // Violet/Purple
+    gradient: 'from-violet-500 to-purple-600',
+    glowColor: 'rgba(139, 92, 246, 0.4)',
+    badgeColor: 'bg-violet-600 text-white',
+    activeBg: 'bg-violet-50 text-violet-900 dark:bg-violet-950/40 dark:text-violet-200',
+    permission: 'employees.view',
+    items: [
+      { to: '/evaluations', label: 'تقييم الأداء الوظيفي', icon: Award, permission: 'employees.view' },
+      { to: '/rewards-penalties', label: 'لائحة المكافآت والجزاءات', icon: Star, permission: 'employees.edit' },
+      { to: '/evaluations?tab=criteria', label: 'معايير ومؤشرات الكفاءة (KPIs)', icon: TrendingUp, permission: 'employees.view' },
+    ]
+  },
+
+  // 6. الرواتب (Payroll & Financials)
   {
     id: 'payroll',
     label: 'الرواتب',
-    sublabel: 'المسيرات والسلف',
+    sublabel: 'المسيرات والبدلات',
     icon: Wallet,
-    color: '#8b5cf6', // Purple
-    gradient: 'from-purple-500 to-indigo-700',
-    glowColor: 'rgba(139, 92, 246, 0.4)',
-    badgeColor: 'bg-purple-500 text-white',
-    activeBg: 'bg-purple-50 text-purple-900 dark:bg-purple-950/40 dark:text-purple-200',
+    color: '#2563eb', // Royal Blue
+    gradient: 'from-blue-600 to-indigo-700',
+    glowColor: 'rgba(37, 99, 235, 0.4)',
+    badgeColor: 'bg-blue-600 text-white',
+    activeBg: 'bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-200',
     permission: 'payroll.view',
     items: [
-      { to: '/payroll?stage=1', label: '1. تدقيق البصمات', icon: Clock },
-      { to: '/payroll?stage=2', label: '2. الاستقطاعات', icon: Wallet },
-      { to: '/payroll?stage=3', label: '3. الاستحقاقات', icon: Award },
-      { to: '/payroll?stage=4', label: '4. الإقفال النهائي', icon: FileSpreadsheet },
-      { to: '/payroll?stage=5', label: '5. أرشيف الرواتب', icon: FileText },
-      { to: '/payroll?tab=advances', label: 'السلف والقروض', icon: CreditCard, permission: 'loans.view' },
-      { to: '/allowances', label: 'البدلات والمزايا', icon: Coins },
-      { to: '/end-of-service', label: 'مكافأة نهاية الخدمة', icon: Calculator },
+      { to: '/payroll', label: 'مسيرات الرواتب الشهرية', icon: Wallet },
+      { to: '/payroll?tab=advances', label: 'السلف والقروض الميسرة', icon: CreditCard, permission: 'loans.view' },
+      { to: '/allowances', label: 'البدلات والمزايا الشهرية', icon: Coins, permission: 'allowances.view' },
+      { to: '/end-of-service', label: 'مكافأة نهاية الخدمة (WPS)', icon: Calculator },
+      { to: '/payroll?stage=5', label: 'أرشيف وكشوفات البنوك', icon: FileSpreadsheet },
     ]
   },
-  {
-    id: 'reports',
-    label: 'التقارير',
-    sublabel: 'الكشوفات والطباعة',
-    icon: FileSpreadsheet,
-    color: '#0d9488', // Teal
-    gradient: 'from-teal-500 to-cyan-700',
-    glowColor: 'rgba(13, 148, 136, 0.4)',
-    badgeColor: 'bg-teal-600 text-white',
-    activeBg: 'bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200',
-    permission: 'reports.view',
-    items: [
-      { to: '/reports', label: 'مركز التقارير', icon: FileSpreadsheet },
-      { to: '/reports?report=daily_biometrics', label: 'حضور وبصمات اليوم', icon: Clock },
-      { to: '/reports?report=payroll_details', label: 'مسيرات الرواتب', icon: Wallet, permission: 'employees.salary.view' },
-      { to: '/reports?report=employee_master_data', label: 'بيانات الموظفين', icon: Users },
-      { to: '/reports?report=leave_report', label: 'أرصدة الإجازات', icon: CalendarDays },
-      { to: '/reports?report=advances_and_loans', label: 'أقساط السلف', icon: CreditCard, permission: 'loans.view' },
-      { to: '/documents-print', label: 'طباعة النماذج', icon: FileText },
-      { to: '/evaluations', label: 'مؤشرات الكفاءة', icon: Award },
-    ]
-  },
+
+  // 7. التواصل (Communication & Circulars)
   {
     id: 'communication',
     label: 'التواصل',
@@ -171,12 +177,37 @@ export const navigationModules = [
     activeBg: 'bg-pink-50 text-pink-900 dark:bg-pink-950/40 dark:text-pink-200',
     permission: 'announcements.send',
     items: [
-      { to: '/announcements?tab=circulars', label: 'التعاميم والقرارات', icon: Megaphone },
-      { to: '/announcements?tab=inbox', label: 'البريد الداخلي', icon: Mail },
-      { to: '/announcements?tab=notifications', label: 'التنبيهات الإدارية', icon: Bell },
-      { to: '/announcements?tab=calendar', label: 'التقويم والفعاليات', icon: CalendarDays },
+      { to: '/announcements?tab=circulars', label: 'التعاميم والقرارات الرسمية', icon: Megaphone },
+      { to: '/announcements?tab=inbox', label: 'البريد والمراسلات الداخلية', icon: Mail },
+      { to: '/announcements?tab=notifications', label: 'التنبيهات الإدارية والوثائق', icon: Bell },
+      { to: '/announcements?tab=calendar', label: 'التقويم والفعاليات الرسمية', icon: CalendarDays },
     ]
   },
+
+  // 8. التقارير (Reports & Documents)
+  {
+    id: 'reports',
+    label: 'التقارير',
+    sublabel: 'الكشوفات والطباعة',
+    icon: FileSpreadsheet,
+    color: '#0d9488', // Teal
+    gradient: 'from-teal-500 to-cyan-700',
+    glowColor: 'rgba(139, 92, 246, 0.4)',
+    badgeColor: 'bg-teal-600 text-white',
+    activeBg: 'bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200',
+    permission: 'reports.view',
+    items: [
+      { to: '/reports', label: 'مركز التقارير الشامل', icon: FileSpreadsheet },
+      { to: '/reports?report=daily_biometrics', label: 'كشف الحضور والبصمات اليومي', icon: Clock },
+      { to: '/reports?report=payroll_details', label: 'كشف مسيرات الرواتب', icon: Wallet, permission: 'employees.salary.view' },
+      { to: '/reports?report=leave_report', label: 'تقرير أرصدة الإجازات', icon: CalendarDays },
+      { to: '/reports?report=advances_and_loans', label: 'كشف أقساط السلف', icon: CreditCard, permission: 'loans.view' },
+      { to: '/reports?report=employee_master_data', label: 'سجل بيانات الموظفين', icon: Users },
+      { to: '/documents-print', label: 'طباعة النماذج والمستندات', icon: FileText },
+    ]
+  },
+
+  // 9. الإعدادات (Settings & Configuration)
   {
     id: 'settings',
     label: 'الإعدادات',
@@ -189,30 +220,14 @@ export const navigationModules = [
     activeBg: 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100',
     permission: 'settings.view',
     items: [
-      { to: '/settings?tab=company', label: 'بيانات المنشأة', icon: Building2 },
-      { to: '/settings?tab=permissions', label: 'الصلاحيات', icon: ShieldCheck },
-      { to: '/settings?tab=branches', label: 'الفروع', icon: Building },
-      { to: '/settings?tab=departments', label: 'الأقسام', icon: Layers },
-      { to: '/settings?tab=bank_accounts', label: 'الحسابات البنكية', icon: Wallet },
-      { to: '/settings?tab=salary_components', label: 'بنود الراتب', icon: Calculator },
-      { to: '/settings?tab=payroll_workflow', label: 'سير الاعتماد', icon: FileCheck },
-      { to: '/settings?tab=request_workflows', label: 'سير الطلبات', icon: GitBranch },
-      { to: '/settings?tab=job_titles', label: 'المسميات الوظيفية', icon: Briefcase },
-      { to: '/settings?tab=penalties', label: 'لائحة الجزاءات', icon: AlertTriangle },
-      { to: '/settings?tab=cadre_policies', label: 'سياسات الكادر', icon: Users },
-      { to: '/settings?tab=document_templates', label: 'قوالب الطباعة', icon: FileText },
-      { to: '/settings?tab=official_holidays', label: 'العطلات الرسمية', icon: CalendarDays },
-      { to: '/settings?tab=leave_policies', label: 'سياسات الإجازات', icon: CalendarRange },
-      { to: '/settings?tab=rewards_bonuses', label: 'أنواع المكافآت', icon: Award },
-      { to: '/settings?tab=deductions_rules', label: 'الحسميات والتأمينات', icon: Calculator },
-      { to: '/settings?tab=advances_rules', label: 'ضوابط السلف', icon: CreditCard },
-      { to: '/settings?tab=overtime_rules', label: 'العمل الإضافي', icon: Clock },
-      { to: '/settings?tab=geofencing', label: 'بصمة الموقع', icon: Fingerprint },
-      { to: '/settings?tab=biometric_devices', label: 'أجهزة البصمة', icon: UploadCloud },
-      { to: '/settings?tab=custody_assets', label: 'العهد والأصول', icon: BookOpen },
-      { to: '/settings?tab=medical_insurance', label: 'التأمين الطبي', icon: CheckCircle2 },
-      { to: '/settings?tab=audit_logs', label: 'سجل العمليات', icon: ClipboardList },
-      { to: '/settings?tab=api_integration', label: 'الربط البرمجي (قوى • مدد)', icon: KeyRound },
+      { to: '/settings?tab=company', label: 'معلومات المنشأة والتراخيص', icon: Building2 },
+      { to: '/settings?tab=rbac', label: 'الصلاحيات والمشرفين', icon: ShieldCheck },
+      { to: '/settings?tab=salary_rules', label: 'بنود الراتب وحماية الأجور WPS', icon: Calculator },
+      { to: '/settings?tab=leave_settings', label: 'سياسات الإجازات والدوام', icon: CalendarRange },
+      { to: '/settings?tab=biometric_hardware', label: 'أجهزة البصمة والربط السحابي', icon: Fingerprint },
+      { to: '/settings?tab=device_api', label: 'الربط البرمجي (قوى • مدد)', icon: KeyRound },
+      { to: '/settings?tab=templates', label: 'نماذج وقوالب النظام الرسمية', icon: FileText },
+      { to: '/settings?tab=audit_logs', label: 'سجلات الأمان والنسخ الاحتياطي', icon: ClipboardList },
     ]
   }
 ];

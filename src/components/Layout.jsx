@@ -66,11 +66,11 @@ export default function Layout() {
             to="/"
             className={`flex flex-col items-center justify-center gap-1 py-1 rounded-2xl transition-all ${
               location.pathname === '/'
-                ? 'text-emerald-600 dark:text-emerald-400 scale-105 font-black'
+                ? 'text-[#3b5bfd] dark:text-blue-400 scale-105 font-black'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all ${location.pathname === '/' ? 'bg-emerald-500/15' : ''}`}>
+            <div className={`p-1 rounded-xl transition-all ${location.pathname === '/' ? 'bg-[#3b5bfd]/15' : ''}`}>
               <Grid className="w-5 h-5" />
             </div>
             <span className="text-[10.5px] font-bold tracking-tight">الرئيسية</span>
@@ -81,11 +81,11 @@ export default function Layout() {
             to="/my-requests"
             className={`flex flex-col items-center justify-center gap-1 py-1 rounded-2xl transition-all ${
               location.pathname.startsWith('/my-requests') || location.pathname.startsWith('/requests')
-                ? 'text-emerald-600 dark:text-emerald-400 scale-105 font-black'
+                ? 'text-[#3b5bfd] dark:text-blue-400 scale-105 font-black'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all ${location.pathname.startsWith('/my-requests') ? 'bg-emerald-500/15' : ''}`}>
+            <div className={`p-1 rounded-xl transition-all ${location.pathname.startsWith('/my-requests') ? 'bg-[#3b5bfd]/15' : ''}`}>
               <FileSignature className="w-5 h-5" />
             </div>
             <span className="text-[10.5px] font-bold tracking-tight">طلباتي</span>
@@ -96,22 +96,22 @@ export default function Layout() {
             to="/attendance"
             className="flex flex-col items-center justify-center -mt-5 group"
           >
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 ring-4 ring-white dark:ring-slate-900 group-active:scale-95 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#101b4d] via-[#162768] to-[#3b5bfd] text-white flex items-center justify-center shadow-lg shadow-blue-900/30 ring-4 ring-white dark:ring-slate-900 group-active:scale-95 transition-all">
               <Clock className="w-6 h-6" />
             </div>
-            <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 mt-1">دوامي</span>
+            <span className="text-[10px] font-black text-[#101b4d] dark:text-blue-300 mt-1">دوامي</span>
           </Link>
 
           {/* 360 Profile */}
           <Link
-            to={user?.role === 'employee' ? `/employees/${user.employee_number || user.id}` : '/employees'}
+            to={user?.role === 'employee' ? `/employees/${user.employee_number || user.id}` : '/profile'}
             className={`flex flex-col items-center justify-center gap-1 py-1 rounded-2xl transition-all ${
-              location.pathname.startsWith('/employees') || location.pathname.startsWith('/profile')
-                ? 'text-emerald-600 dark:text-emerald-400 scale-105 font-black'
+              location.pathname.startsWith('/profile') || location.pathname.startsWith('/employees')
+                ? 'text-[#3b5bfd] dark:text-blue-400 scale-105 font-black'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all ${location.pathname.startsWith('/employees') ? 'bg-emerald-500/15' : ''}`}>
+            <div className={`p-1 rounded-xl transition-all ${location.pathname.startsWith('/profile') || location.pathname.startsWith('/employees') ? 'bg-[#3b5bfd]/15' : ''}`}>
               <User className="w-5 h-5" />
             </div>
             <span className="text-[10.5px] font-bold tracking-tight">ملفي 360°</span>

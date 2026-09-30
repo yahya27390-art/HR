@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
+import { hasPermission } from '@/lib/rbac';
 import { useI18n } from '@/lib/i18n';
 import { Plus, Pencil, Building2, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -13,7 +14,7 @@ import { useToast } from '@/components/ui/use-toast';
 export default function Departments() {
   const { user } = useAuth();
   const { t } = useI18n();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'system_admin' || user?.role === 'owner' || user?.role === 'general_manager' || user?.role === 'hr' || user?.role === 'admin' || hasPermission(user, 'departments.manage');
   const { toast } = useToast();
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);

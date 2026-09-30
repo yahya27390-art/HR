@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 export default function LeavePolicies() {
   const { user } = useAuth();
   const { t } = useI18n();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'system_admin' || user?.role === 'owner' || user?.role === 'general_manager' || user?.role === 'hr' || user?.role === 'admin';
   const { toast } = useToast();
   const [policies, setPolicies] = useState([]);
   const [employees, setEmployees] = useState([]);

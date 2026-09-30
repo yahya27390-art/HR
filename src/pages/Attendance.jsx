@@ -353,9 +353,20 @@ export default function Attendance() {
           dur2 = m2Out >= m2In ? m2Out - m2In : (m2Out + 1440) - m2In;
         }
         totalHrs = Math.round(((dur1 + dur2) / 60) * 10) / 10;
-        rawPunches = `${manualForm.period_1_in || '09:00'}:00 -- ${manualForm.period_1_out || '13:00'}:00 & ${manualForm.period_2_in || '16:00'}:00 -- ${manualForm.period_2_out || '21:00'}:00`;
-        checkInFinal = manualForm.period_1_in ? `${manualForm.log_date}T${manualForm.period_1_in}:00` : null;
-        checkOutFinal = manualForm.period_2_out ? `${manualForm.log_date}T${manualForm.period_2_out}:00` : null;
+        const punchParts = [];
+        if (manualForm.period_1_in && manualForm.period_1_out) {
+          punchParts.push(`${manualForm.period_1_in}:00 -- ${manualForm.period_1_out}:00`);
+        } else if (manualForm.period_1_in) {
+          punchParts.push(`${manualForm.period_1_in}:00`);
+        }
+        if (manualForm.period_2_in && manualForm.period_2_out) {
+          punchParts.push(`${manualForm.period_2_in}:00 -- ${manualForm.period_2_out}:00`);
+        } else if (manualForm.period_2_in) {
+          punchParts.push(`${manualForm.period_2_in}:00`);
+        }
+        rawPunches = punchParts.join(' & ');
+        checkInFinal = manualForm.period_1_in ? `${manualForm.log_date}T${manualForm.period_1_in}:00` : (manualForm.period_2_in ? `${manualForm.log_date}T${manualForm.period_2_in}:00` : null);
+        checkOutFinal = manualForm.period_2_out ? `${manualForm.log_date}T${manualForm.period_2_out}:00` : (manualForm.period_1_out ? `${manualForm.log_date}T${manualForm.period_1_out}:00` : null);
       } else {
         const inM = parseM(manualForm.check_in);
         const outM = parseM(manualForm.check_out);
@@ -363,9 +374,21 @@ export default function Attendance() {
           const diff = outM >= inM ? outM - inM : (outM + 1440) - inM;
           totalHrs = Math.round((diff / 60) * 10) / 10;
         }
-        rawPunches = `${manualForm.check_in || '16:00'}:00 -- ${manualForm.check_out || '21:00'}:00`;
+        rawPunches = manualForm.check_in ? `${manualForm.check_in}:00 -- ${manualForm.check_out || manualForm.check_in}:00` : '';
         checkInFinal = manualForm.check_in ? `${manualForm.log_date}T${manualForm.check_in}:00` : null;
-        checkOutFinal = manualForm.check_out ? `${manualForm.log_date}T${manualForm.check_out}:00` : null;
+        checkOutFinal = manualForm.check_out ? `${manualForm.log_date}T${manualForm.check_out}:00` : (manualForm.check_in ? `${manualForm.log_date}T${manualForm.check_in}:00` : null);
+      }
+
+      const shiftHours = isSplitShift ? 9 : 8;
+      let finalStatus = manualForm.status || 'present';
+      if (manualForm.status !== 'absent' && manualForm.status !== 'unpaid_leave') {
+        if (totalHrs > 0 && totalHrs < shiftHours) {
+          finalStatus = 'late';
+        } else if (totalHrs >= shiftHours) {
+          finalStatus = 'present';
+        } else if (totalHrs === 0) {
+          finalStatus = 'absent';
+        }
       }
 
       const logPayload = {
@@ -377,7 +400,7 @@ export default function Attendance() {
         log_date: manualForm.log_date,
         check_in: checkInFinal,
         check_out: checkOutFinal,
-        status: manualForm.status || 'present',
+        status: finalStatus,
         timestamp_raw: rawPunches,
         total_hours: totalHrs,
         period_1_in: isSplitShift ? manualForm.period_1_in : manualForm.check_in,

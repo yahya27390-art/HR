@@ -32,7 +32,7 @@ export default function Devices() {
   const { user } = useAuth();
   const { t } = useI18n();
   const { toast } = useToast();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'system_admin' || user?.role === 'owner' || user?.role === 'general_manager' || user?.role === 'admin';
 
   const [devices, setDevices] = useState([]);
   const [branches, setBranches] = useState([]);

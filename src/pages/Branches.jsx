@@ -56,9 +56,9 @@ const BRANCH_THEMES = {
   },
   'فرع كيا ( السليم )': {
     color: '#7c3aed', // Purple
-    gradient: 'from-purple-600 to-indigo-700',
-    lightBg: 'bg-purple-50/70 dark:bg-purple-950/30',
-    border: 'border-purple-200 dark:border-purple-900',
+    gradient: 'from-sky-600 to-indigo-700',
+    lightBg: 'bg-sky-50/70 dark:bg-sky-950/30',
+    border: 'border-sky-200 dark:border-sky-900',
     badge: 'فرع وكالة كيا',
     device: '.2 EK0201000044',
     shift: 'فترة عمل غير السعوديين / السعودي المساء'
@@ -201,12 +201,12 @@ export default function Branches() {
         <Card className="p-4 rounded-3xl border bg-white dark:bg-slate-900 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs text-muted-foreground font-bold">أجهزة البصمة المربوطة سحابياً</div>
-            <div className="font-mono font-black text-2xl text-purple-600 dark:text-purple-400 mt-1">
+            <div className="font-mono font-black text-2xl text-sky-600 dark:text-sky-400 mt-1">
               4 أجهزة
             </div>
             <div className="text-[10px] text-muted-foreground mt-0.5">مزامنة حية لحظية</div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center font-bold">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 dark:bg-sky-950 text-sky-600 flex items-center justify-center font-bold">
             <Fingerprint className="w-6 h-6" />
           </div>
         </Card>
@@ -343,7 +343,7 @@ export default function Branches() {
 
                       {/* Device */}
                       <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Fingerprint className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                        <Fingerprint className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                         <span className="font-mono text-[10px] font-bold text-foreground">{theme.device}</span>
                       </div>
 

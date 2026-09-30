@@ -53,7 +53,7 @@ export default function AdvanceVoucherA4Modal({
         {/* Top Control Action Bar (Hidden in Print) */}
         <div className="p-4 bg-white dark:bg-slate-900 border-b flex items-center justify-between sticky top-0 z-20 shadow-sm print:hidden">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center font-bold">
               <Receipt className="w-5 h-5" />
             </div>
             <div>
@@ -69,7 +69,7 @@ export default function AdvanceVoucherA4Modal({
           <div className="flex items-center gap-2">
             <Button
               onClick={handlePrint}
-              className="bg-purple-700 hover:bg-purple-600 text-white rounded-xl text-xs font-black gap-2 h-9 px-4 shadow-md"
+              className="bg-sky-600 hover:bg-sky-600 text-white rounded-xl text-xs font-black gap-2 h-9 px-4 shadow-md"
             >
               <Printer className="w-4 h-4" />
               <span>طباعة سند A4 🖨️</span>
@@ -103,22 +103,27 @@ export default function AdvanceVoucherA4Modal({
                   <h2 className="text-base font-black text-slate-900">مؤسسة السهم الأخضر للتجارة</h2>
                   <p className="text-[11px] text-slate-600 font-bold">Green Arrow Trading Est.</p>
                   <p className="text-[10px] text-slate-500 font-mono">س.ت: 1131012345 • بريدة، المملكة العربية السعودية</p>
-                  <Badge className="bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-bold mt-1">
+                  <Badge className="bg-sky-100 text-sky-900 border border-sky-300 text-[10px] font-bold mt-1">
                     إدارة الشؤون المالية والموارد البشرية
                   </Badge>
                 </div>
 
                 {/* Center: Title */}
-                <div className="text-center px-4 py-2 border-2 border-purple-800 bg-purple-50 rounded-2xl">
-                  <h1 className="text-base font-black text-purple-950">سند أمر وإقرار استلام سلفة</h1>
-                  <p className="text-[10px] text-purple-800 font-mono mt-0.5 font-bold">ADVANCE DISBURSEMENT VOUCHER</p>
+                <div className="text-center px-4 py-2 border-2 border-sky-700 bg-sky-50 rounded-2xl">
+                  <h1 className="text-base font-black text-sky-950">سند أمر وإقرار استلام سلفة</h1>
+                  <p className="text-[10px] text-sky-800 font-mono mt-0.5 font-bold">ADVANCE DISBURSEMENT VOUCHER</p>
                   <span className="text-[9px] text-slate-500 font-mono">{voucherNumber}</span>
                 </div>
 
-                {/* Left: Logo & Date */}
+                {/* Left: Free Logo without frame & Date */}
                 <div className="text-left space-y-1">
-                  <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center p-1 font-bold ms-auto">
-                    <img src={companyProfile.logo_url || "/company-logo.svg"} alt="logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.src = "/company-logo.svg"; }} />
+                  <div className="flex items-center justify-end bg-transparent border-0 shadow-none p-0 ms-auto">
+                    <img 
+                      src={companyProfile.logo_url || "/company-logo.png"} 
+                      alt="logo" 
+                      className="h-14 sm:h-16 w-auto max-w-[150px] object-contain drop-shadow-sm" 
+                      onError={(e) => { e.currentTarget.src = "/company-logo.png"; }} 
+                    />
                   </div>
                   <div className="text-[10px] text-slate-600 font-mono pt-1">
                     التاريخ: <strong className="text-slate-900">{advance.disbursement_date || new Date().toISOString().slice(0, 10)}</strong>
@@ -130,8 +135,8 @@ export default function AdvanceVoucherA4Modal({
 
             {/* 2. EMPLOYEE INFO BOX */}
             <div className="bg-slate-50 border border-slate-300 rounded-2xl p-4 mb-5">
-              <h3 className="font-black text-xs text-purple-950 mb-3 flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
-                <User className="w-4 h-4 text-purple-700" />
+              <h3 className="font-black text-xs text-sky-950 mb-3 flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
+                <User className="w-4 h-4 text-sky-700" />
                 <span>أولاً: بيانات الموظف المستفيد (المقترض)</span>
               </h3>
 
@@ -142,7 +147,7 @@ export default function AdvanceVoucherA4Modal({
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] font-bold">الرقم الوظيفي:</span>
-                  <strong className="text-purple-800 font-mono font-bold">#{advance.employee_number}</strong>
+                  <strong className="text-sky-800 font-mono font-bold">#{advance.employee_number}</strong>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] font-bold">الفرع / الموقع:</span>
@@ -156,35 +161,35 @@ export default function AdvanceVoucherA4Modal({
             </div>
 
             {/* 3. LOAN & FINANCIAL DETAILS */}
-            <div className="bg-purple-50/60 border border-purple-200 rounded-2xl p-4 mb-5">
-              <h3 className="font-black text-xs text-purple-950 mb-3 flex items-center gap-1.5 border-b border-purple-200 pb-1.5">
-                <CreditCard className="w-4 h-4 text-purple-700" />
+            <div className="bg-sky-50/60 border border-sky-200 rounded-2xl p-4 mb-5">
+              <h3 className="font-black text-xs text-sky-950 mb-3 flex items-center gap-1.5 border-b border-sky-200 pb-1.5">
+                <CreditCard className="w-4 h-4 text-sky-700" />
                 <span>ثانياً: تفاصيل وبيانات السلفة والجدولة المالية</span>
               </h3>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                <div className="p-2.5 bg-white rounded-xl border border-purple-100">
+                <div className="p-2.5 bg-white rounded-xl border border-sky-100">
                   <span className="text-slate-500 block text-[10px] font-bold">إجمالي مبلغ السلفة:</span>
-                  <div className="font-mono font-black text-sm text-purple-900 mt-0.5">
+                  <div className="font-mono font-black text-sm text-sky-900 mt-0.5">
                     {totalAmount.toLocaleString('en-US')} ر.س
                   </div>
                 </div>
 
-                <div className="p-2.5 bg-white rounded-xl border border-purple-100">
+                <div className="p-2.5 bg-white rounded-xl border border-sky-100">
                   <span className="text-slate-500 block text-[10px] font-bold">عدد الأقساط الشهرية:</span>
                   <div className="font-mono font-black text-sm text-slate-900 mt-0.5">
                     {installmentsCount} أشهر
                   </div>
                 </div>
 
-                <div className="p-2.5 bg-white rounded-xl border border-purple-100">
+                <div className="p-2.5 bg-white rounded-xl border border-sky-100">
                   <span className="text-slate-500 block text-[10px] font-bold">القسط الشهري المستقطع:</span>
                   <div className="font-mono font-black text-sm text-rose-600 mt-0.5">
                     {monthlyInstallment.toLocaleString('en-US')} ر.س/شهر
                   </div>
                 </div>
 
-                <div className="p-2.5 bg-white rounded-xl border border-purple-100">
+                <div className="p-2.5 bg-white rounded-xl border border-sky-100">
                   <span className="text-slate-500 block text-[10px] font-bold">بدء الاستقطاع من مسير:</span>
                   <div className="font-mono font-bold text-xs text-slate-800 mt-1">
                     شهر ({startMonth})
@@ -192,7 +197,7 @@ export default function AdvanceVoucherA4Modal({
                 </div>
               </div>
 
-              <div className="p-2.5 bg-white rounded-xl border border-purple-100 text-[11px] flex items-center gap-2">
+              <div className="p-2.5 bg-white rounded-xl border border-sky-100 text-[11px] flex items-center gap-2">
                 <span className="text-slate-500 font-bold">الغرض ومبرر السلفة:</span>
                 <span className="text-slate-900 font-medium">{advance.reason || 'سلفة شخصية طارئة بناءً على طلب الموظف'}</span>
               </div>
@@ -201,7 +206,7 @@ export default function AdvanceVoucherA4Modal({
             {/* 4. INSTALLMENTS SCHEDULE BREAKDOWN */}
             <div className="mb-6">
               <h3 className="font-black text-xs text-slate-900 mb-2 flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-purple-700" />
+                <Calendar className="w-4 h-4 text-sky-700" />
                 <span>ثالثاً: جدول استقطاع الأقساط من الرواتب الشهرية</span>
               </h3>
 

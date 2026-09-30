@@ -263,9 +263,9 @@ export default function Contracts() {
           <div className="text-2xl font-black font-mono text-blue-600">{stats.internal}</div>
         </Card>
 
-        <Card className="p-4 rounded-2xl border bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/60 shadow-sm space-y-1">
-          <div className="text-[11px] text-purple-800 dark:text-purple-300 font-bold">معتمدة وموقعة رقمياً</div>
-          <div className="text-2xl font-black font-mono text-purple-600">{stats.signed}</div>
+        <Card className="p-4 rounded-2xl border bg-sky-50/50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-700/60 shadow-sm space-y-1">
+          <div className="text-[11px] text-sky-800 dark:text-sky-300 font-bold">معتمدة وموقعة رقمياً</div>
+          <div className="text-2xl font-black font-mono text-sky-600">{stats.signed}</div>
         </Card>
 
         <Card className="p-4 rounded-2xl border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 shadow-sm space-y-1">
@@ -401,7 +401,7 @@ export default function Contracts() {
                         </TableCell>
 
                         {/* Salary */}
-                        <TableCell className="font-mono font-bold text-purple-700 dark:text-purple-400">
+                        <TableCell className="font-mono font-bold text-sky-700 dark:text-sky-400">
                           {(c.total_salary || c.basic_salary || 0).toLocaleString('en-US')} ر.س
                         </TableCell>
 

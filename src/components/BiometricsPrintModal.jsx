@@ -73,7 +73,12 @@ export default function BiometricsPrintModal({ open, onOpenChange, employee, dai
           <div style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', padding: '16px 20px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {company.logo_url && (
-                <img src={company.logo_url || "/company-logo.svg"} onError={(e) => { e.currentTarget.src = "/company-logo.svg"; }} alt="logo" style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#fff', objectFit: 'contain', padding: '3px' }} />
+                <img 
+                  src={company.logo_url || "/company-logo.png"} 
+                  onError={(e) => { e.currentTarget.src = "/company-logo.png"; }} 
+                  alt="logo" 
+                  style={{ height: '50px', width: 'auto', maxHeight: '52px', maxWidth: '130px', objectFit: 'contain', background: 'transparent', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }} 
+                />
               )}
               <div>
                 <div style={{ fontSize: '14px', fontWeight: '900' }}>{company.legal_name}</div>
@@ -174,13 +179,25 @@ export default function BiometricsPrintModal({ open, onOpenChange, employee, dai
                       : '#16a34a';
 
                     // Morning Period formatting
-                    const p1Text = d.hasAttendance 
-                      ? (d.period_1_in ? `${d.period_1_in} ➔ ${d.period_1_out || '--:--'}` : (d.check_in ? formatTimeDisplay(d.check_in) : '—'))
+                    const p1Display = d.hasAttendance 
+                      ? (d.period_1_in ? (
+                          <span dir="ltr" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', direction: 'ltr' }}>
+                            <span>{d.period_1_in}</span>
+                            <span style={{ fontSize: '9px' }}>➔</span>
+                            <span>{d.period_1_out || '--:--'}</span>
+                          </span>
+                        ) : (d.check_in ? formatTimeDisplay(d.check_in) : '—'))
                       : '—';
 
                     // Evening Period formatting
-                    const p2Text = d.hasAttendance 
-                      ? (d.period_2_in ? `${d.period_2_in} ➔ ${d.period_2_out || '--:--'}` : '—')
+                    const p2Display = d.hasAttendance 
+                      ? (d.period_2_in ? (
+                          <span dir="ltr" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', direction: 'ltr' }}>
+                            <span>{d.period_2_in}</span>
+                            <span style={{ fontSize: '9px' }}>➔</span>
+                            <span>{d.period_2_out || '--:--'}</span>
+                          </span>
+                        ) : '—')
                       : '—';
 
                     // Shortfall vs Surplus
@@ -198,8 +215,8 @@ export default function BiometricsPrintModal({ open, onOpenChange, employee, dai
                       <tr key={d.log_date || idx} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                         <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '700' }}>{d.log_date}</td>
                         <td style={{ padding: '4px 2px', fontWeight: '600' }}>{d.day_name}</td>
-                        <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '700', color: '#065F46' }}>{p1Text}</td>
-                        <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '700', color: '#1E40AF' }}>{p2Text}</td>
+                        <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '700', color: '#065F46', textAlign: 'center' }}>{p1Display}</td>
+                        <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '700', color: '#1E40AF', textAlign: 'center' }}>{p2Display}</td>
                         <td style={{ padding: '4px 2px', fontFamily: 'monospace' }}>{d.requiredMinutes ? formatMinutes(d.requiredMinutes) : '—'}</td>
                         <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '700' }}>{d.actualMinutes ? formatMinutes(d.actualMinutes) : '—'}</td>
                         <td style={{ padding: '4px 2px', fontFamily: 'monospace', fontWeight: '800', color: diffColor }}>

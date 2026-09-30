@@ -107,11 +107,22 @@ function DashboardRouter() {
     return 'specialized';
   });
 
+  useEffect(() => {
+    const handleModeChange = (e) => {
+      if (e.detail?.mode) {
+        setViewMode(e.detail.mode);
+      }
+    };
+    window.addEventListener('hr_view_mode_changed', handleModeChange);
+    return () => window.removeEventListener('hr_view_mode_changed', handleModeChange);
+  }, []);
+
   const handleToggleMode = (mode) => {
     setViewMode(mode);
     if (user?.id) {
       localStorage.setItem('hr_dashboard_view_mode_' + user.id, mode);
     }
+    window.dispatchEvent(new CustomEvent('hr_view_mode_changed', { detail: { mode } }));
   };
 
   // Regular employees never see switcher and always get personal portal
@@ -121,14 +132,19 @@ function DashboardRouter() {
 
   // Render the role-specific specialized dashboard
   const renderSpecializedDashboard = () => {
-    if (role === 'accountant') return <AccountantDashboard />;
-    return <EktefaStyleExecutiveDashboard />;
+    if (role === 'accountant') {
+      return <AccountantDashboard />;
+    }
+    return <EktefaStyleExecutiveDashboard viewMode={viewMode} onToggleMode={handleToggleMode} />;
   };
 
   return (
     <div className="space-y-4">
-      <DashboardViewSwitcherBar viewMode={viewMode} onToggleMode={handleToggleMode} />
-      {viewMode === 'employee' ? <EmployeePortal /> : renderSpecializedDashboard()}
+      {viewMode === 'employee' ? (
+        <EmployeePortal />
+      ) : (
+        renderSpecializedDashboard()
+      )}
     </div>
   );
 }

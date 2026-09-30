@@ -1,24 +1,8 @@
-// RBAC helpers (inline to avoid circular imports)
-function _determineRole(emp) {
-  var num = String((emp&&emp.employee_number)||"");
-  var email = ((emp&&emp.email)||"").toLowerCase();
-  var job = ((emp&&emp.job_title)||"").toLowerCase();
-  if (num==="1001"||email==="dortalsiarh@gmail.com") return "owner";
-  if (num==="1005"||email==="hes.ham42@yahoo.com") return "accountant";
-  if (num==="1022"||email==="yahya9031@gmail.com") return "system_admin";
-  if (job.indexOf("محاسب")!==-1||job.indexOf("حسابات")!==-1) return "accountant";
-  if (job.indexOf("موارد بشرية")!==-1) return "hr";
-  return "employee";
-}
+import { supabase } from '@/lib/supabaseClient';
+import { AUTHORITATIVE_LEAVE_BASELINES } from '@/lib/leaveBalance';
 
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || 'https://omnvdvmmmarwsobadlsb.supabase.co';
-const SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || 'sb_publishable_nUzUqD6WBgXey6SRU76zUA_Q5mlC1B5';
-
-const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-export const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
+const isSupabaseConfigured = Boolean(supabase);
+export { supabase };
 
 // Auto normalize branch names on load
 function normalizeEmployeeBranches(list) {
@@ -34,11 +18,10 @@ function normalizeEmployeeBranches(list) {
   });
 }
 
-
 // ============================================================================
 // AUTO DATABASE SYNC v8 (Guarantees zero cache mismatch across all browsers)
 // ============================================================================
-const CURRENT_DB_VERSION = 'v11_strict_realtime_biometrics';
+const CURRENT_DB_VERSION = 'v12_leave_balances_baseline';
 try {
   if (typeof window !== 'undefined' && window.localStorage) {
     if (localStorage.getItem('hr_flow_db_ver') !== CURRENT_DB_VERSION) {
@@ -214,7 +197,9 @@ export const initialData = {
       gosi_number: 'GSI-909119',
       housing_allowance: 0,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -238,7 +223,9 @@ export const initialData = {
       gosi_number: 'GSI-208695',
       housing_allowance: 200,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -262,7 +249,9 @@ export const initialData = {
       gosi_number: 'GSI-794498',
       housing_allowance: 150,
       transport_allowance: 150,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -287,6 +276,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -310,7 +301,9 @@ export const initialData = {
       gosi_number: 'GSI-165355',
       housing_allowance: 150,
       transport_allowance: 150,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (30 يوم)',
+      annual_leave_entitlement: 30,
+      opening_consumed_leaves: 11,
       status: 'active'
     },
     {
@@ -334,7 +327,9 @@ export const initialData = {
       gosi_number: 'GSI-464430',
       housing_allowance: 0,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (30 يوم)',
+      annual_leave_entitlement: 30,
+      opening_consumed_leaves: 11,
       status: 'active'
     },
     {
@@ -358,7 +353,9 @@ export const initialData = {
       gosi_number: 'GSI-368966',
       housing_allowance: 0,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 9,
       status: 'active'
     },
     {
@@ -383,6 +380,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -406,7 +405,9 @@ export const initialData = {
       gosi_number: 'GSI-161888',
       housing_allowance: 200,
       transport_allowance: 200,
-      leave_policy: 'Standard Policy',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -421,7 +422,7 @@ export const initialData = {
       shift: 'فترة عمل السعودي المساء',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'سعودي',
-      national_id: '1015000000',
+      national_id: '1137284566',
       id_expiry_date: '1455-01-01',
       birth_date: '1998-05-15',
       join_date: '2026-08-16',
@@ -430,7 +431,9 @@ export const initialData = {
       gosi_number: 'GSI-484161',
       housing_allowance: 0,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
 
@@ -455,7 +458,9 @@ export const initialData = {
       gosi_number: 'GSI-481938',
       housing_allowance: 200,
       transport_allowance: 100,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 3,
       status: 'active'
     },
     {
@@ -480,6 +485,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -503,7 +510,9 @@ export const initialData = {
       gosi_number: 'GSI-234371',
       housing_allowance: 0,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 15,
       status: 'active'
     },
     {
@@ -528,6 +537,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -552,6 +563,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -576,6 +589,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -599,7 +614,9 @@ export const initialData = {
       gosi_number: 'GSI-536459',
       housing_allowance: 200,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -623,7 +640,9 @@ export const initialData = {
       gosi_number: 'GSI-192020',
       housing_allowance: 200,
       transport_allowance: 0,
-      leave_policy: 'الاجازة السنوية',
+      leave_policy: 'الاجازة السنوية (21 يوم)',
+      annual_leave_entitlement: 21,
+      opening_consumed_leaves: 0,
       status: 'active'
     },
     {
@@ -648,6 +667,8 @@ export const initialData = {
       housing_allowance: 0,
       transport_allowance: 0,
       leave_policy: 'اجازات بدون مرتب',
+      annual_leave_entitlement: 0,
+      opening_consumed_leaves: 0,
       status: 'active'
     }
   ],
@@ -725,14 +746,21 @@ function toDbRecord(entityName, item) {
     const gosiNum = isInsured ? (item.gosi_number || '') : '';
     
     let existingManager = item.manager_name || null;
+    let existingMeta = {};
     if (typeof existingManager === 'string' && existingManager.startsWith('{')) {
       try {
-        const parsed = JSON.parse(existingManager);
-        existingManager = parsed.manager_name || null;
+        existingMeta = JSON.parse(existingManager);
+        existingManager = existingMeta.manager_name || null;
       } catch (e) {}
     }
 
+    const electricityAllowance = Number(item.electricity_allowance !== undefined ? item.electricity_allowance : existingMeta.electricity_allowance) || 0;
+    const phoneAllowance = Number(item.phone_allowance !== undefined ? item.phone_allowance : (item.purchases_allowance !== undefined ? item.purchases_allowance : (existingMeta.phone_allowance !== undefined ? existingMeta.phone_allowance : existingMeta.purchases_allowance))) || 0;
+    const otherAllowance = Number(item.other_allowance !== undefined ? item.other_allowance : existingMeta.other_allowance) || 0;
+    const allowanceNotes = item.allowance_notes !== undefined ? item.allowance_notes : (existingMeta.allowance_notes || '');
+
     const meta = JSON.stringify({
+      ...existingMeta,
       is_insured: isInsured,
       gosi_number: gosiNum,
       insured_salary: Number(item.insured_salary || item.salary) || 0,
@@ -749,7 +777,14 @@ function toDbRecord(entityName, item) {
       gender: item.gender || 'male',
       marital_status: item.marital_status || 'أعزب',
       contract_type: item.contract_type || 'محدد',
-      contract_end_date: item.contract_end_date || null
+      contract_end_date: item.contract_end_date || null,
+      annual_leave_entitlement: item.annual_leave_entitlement !== undefined && item.annual_leave_entitlement !== null ? Number(item.annual_leave_entitlement) : (item.leave_policy === 'اجازات بدون مرتب' ? 0 : (item.leave_policy && item.leave_policy.includes('30') ? 30 : 21)),
+      opening_consumed_leaves: Number(item.opening_consumed_leaves) || 0,
+      electricity_allowance: electricityAllowance,
+      phone_allowance: phoneAllowance,
+      purchases_allowance: phoneAllowance,
+      other_allowance: otherAllowance,
+      allowance_notes: allowanceNotes
     });
 
     const empNum = String(item.employee_number || item.id || '').replace('emp_', '');
@@ -774,7 +809,14 @@ function toDbRecord(entityName, item) {
       salary: Number(item.salary) || 0,
       housing_allowance: Number(item.housing_allowance) || 0,
       transport_allowance: Number(item.transport_allowance) || 0,
+      electricity_allowance: electricityAllowance,
+      phone_allowance: phoneAllowance,
+      purchases_allowance: phoneAllowance,
+      other_allowance: otherAllowance,
+      allowance_notes: allowanceNotes,
       leave_policy: item.leave_policy || 'الاجازة السنوية',
+      annual_leave_entitlement: item.annual_leave_entitlement !== undefined && item.annual_leave_entitlement !== null ? Number(item.annual_leave_entitlement) : (item.leave_policy === 'اجازات بدون مرتب' ? 0 : (item.leave_policy && item.leave_policy.includes('30') ? 30 : 21)),
+      opening_consumed_leaves: Number(item.opening_consumed_leaves) || 0,
       status: item.status || 'active',
       created_at: item.created_at || new Date().toISOString()
     };
@@ -995,6 +1037,13 @@ function fromDbRecord(entityName, row) {
     }
     return {
       ...row,
+      housing_allowance: Number(row.housing_allowance) || 0,
+      transport_allowance: Number(row.transport_allowance) || 0,
+      electricity_allowance: Number(row.electricity_allowance !== undefined ? row.electricity_allowance : meta.electricity_allowance) || 0,
+      phone_allowance: Number(row.phone_allowance !== undefined ? row.phone_allowance : (row.purchases_allowance !== undefined ? row.purchases_allowance : (meta.phone_allowance !== undefined ? meta.phone_allowance : meta.purchases_allowance))) || 0,
+      purchases_allowance: Number(row.purchases_allowance !== undefined ? row.purchases_allowance : (row.phone_allowance !== undefined ? row.phone_allowance : (meta.purchases_allowance !== undefined ? meta.purchases_allowance : meta.phone_allowance))) || 0,
+      other_allowance: Number(row.other_allowance !== undefined ? row.other_allowance : meta.other_allowance) || 0,
+      allowance_notes: row.allowance_notes || meta.allowance_notes || '',
       is_insured: meta.is_insured !== undefined ? meta.is_insured : (row.is_insured || false),
       gosi_number: meta.gosi_number || row.gosi_number || '',
       insured_salary: meta.insured_salary !== undefined ? meta.insured_salary : (row.insured_salary || row.salary || 0),
@@ -1012,7 +1061,38 @@ function fromDbRecord(entityName, row) {
       contract_type: meta.contract_type || 'محدد',
       contract_end_date: meta.contract_end_date || null,
       manager_name: meta.manager_name || (typeof row.manager_name === 'string' && !row.manager_name.startsWith('{') ? row.manager_name : null),
-      shift: row.shift || 'فترة عمل غير سعودي'
+      shift: row.shift || 'فترة عمل غير سعودي',
+      leave_policy: (() => {
+        const empNum = String(row.employee_number || row.id || '').replace('emp_', '').trim();
+        const baseline = AUTHORITATIVE_LEAVE_BASELINES[empNum];
+        if (baseline && (!row.leave_policy || row.leave_policy === 'الاجازة السنوية')) return baseline.policy;
+        return row.leave_policy || (baseline ? baseline.policy : 'الاجازة السنوية (21 يوم)');
+      })(),
+      annual_leave_entitlement: (() => {
+        if (row.annual_leave_entitlement !== undefined && row.annual_leave_entitlement !== null && row.annual_leave_entitlement !== '') {
+          return Number(row.annual_leave_entitlement);
+        }
+        if (meta.annual_leave_entitlement !== undefined && meta.annual_leave_entitlement !== null && meta.annual_leave_entitlement !== '') {
+          return Number(meta.annual_leave_entitlement);
+        }
+        const empNum = String(row.employee_number || row.id || '').replace('emp_', '').trim();
+        const baseline = AUTHORITATIVE_LEAVE_BASELINES[empNum];
+        if (baseline) return baseline.entitlement;
+        if (row.leave_policy === 'اجازات بدون مرتب') return 0;
+        if (row.leave_policy && String(row.leave_policy).includes('30')) return 30;
+        return 21;
+      })(),
+      opening_consumed_leaves: (() => {
+        if (row.opening_consumed_leaves !== undefined && row.opening_consumed_leaves !== null && row.opening_consumed_leaves !== '') {
+          return Number(row.opening_consumed_leaves);
+        }
+        if (meta.opening_consumed_leaves !== undefined && meta.opening_consumed_leaves !== null && meta.opening_consumed_leaves !== '') {
+          return Number(meta.opening_consumed_leaves);
+        }
+        const empNum = String(row.employee_number || row.id || '').replace('emp_', '').trim();
+        const baseline = AUTHORITATIVE_LEAVE_BASELINES[empNum];
+        return baseline ? baseline.consumed : 0;
+      })()
     };
   }
 
@@ -1102,9 +1182,18 @@ function createEntityHandler(entityName) {
             if (data.length < batchSize) break;
           }
 
-          const mapped = (allFetched || []).map(r => fromDbRecord(entityName, r));
-          saveLocalItems(entityName, mapped);
-          return mapped;
+          if (allFetched && allFetched.length > 0) {
+            const mapped = allFetched.map(r => fromDbRecord(entityName, r));
+            saveLocalItems(entityName, mapped);
+            return mapped;
+          }
+          const existing = getLocalItems(entityName);
+          if (existing && existing.length > 0) return existing;
+          if (initialData[entityName] && initialData[entityName].length > 0) {
+            saveLocalItems(entityName, initialData[entityName]);
+            return initialData[entityName];
+          }
+          return [];
         } catch (e) {
           console.warn('Supabase fetch error for ' + entityName + ':', e);
         }
@@ -1253,6 +1342,18 @@ const DEFAULT_ADMIN_USER = {
   department: 'مكتب الإدارة',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150'
 };
+
+function _determineRole(emp) {
+  if (!emp) return 'employee';
+  if (emp.role) return emp.role;
+  const jt = (emp.job_title || '').trim();
+  const num = String(emp.employee_number || '').trim();
+  if (num === '1001' || jt.includes('المدير العام') || jt.includes('مالك')) return 'owner';
+  if (num === '1022' || jt.includes('موارد بشرية') || jt.includes('مسؤول موارد')) return 'system_admin';
+  if (num === '1005' || jt.includes('حسابات') || jt.includes('محاسب')) return 'accountant';
+  if (jt.includes('مدير فرع') || jt.includes('مدير إداري')) return 'general_manager';
+  return 'employee';
+}
 
 export const base44 = {
   entities,

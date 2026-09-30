@@ -1,37 +1,46 @@
 import { getCompanyProfile } from '@/lib/companyProfile';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Printer, FileText } from 'lucide-react';
+import { Printer, FileText, CheckCircle2, AlertCircle, Coins, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/lib/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { getAdvances } from '@/lib/payrollEngine';
+import { saveAdvance as saveCloudAdvance } from '@/lib/advanceService';
+import { cloudSave } from '@/lib/cloudSyncEngine';
 
 export default function DocumentsPrint() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+
   const [employees, setEmployees] = useState([]);
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [docType, setDocType] = useState('loan');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [advancesRefreshTrigger, setAdvancesRefreshTrigger] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
 
-  // Company profile (with logo) from localStorage
+  // Company profile (with guaranteed logo)
   const [companyProfile, setCompanyProfile] = useState(() => {
-    const saved = localStorage.getItem('hr_flow_company_profile');
-    return saved ? JSON.parse(saved) : {
-      name: 'HR DORAT CARS',
-      legal_name: 'شركة درة السيارة لقطع غيار السيارات',
-      cr_number: '7016475555',
-      tax_number: '311861381500003',
-      phone: '+966541697999',
-      address: 'المملكة العربية السعودية - بريدة - القصيم',
-      logo_url: ''
+    const p = getCompanyProfile();
+    return {
+      ...p,
+      logo_url: p.logo_url || '/company-logo.png'
     };
   });
 
   // Listen for logo/profile updates from Settings page
   useEffect(() => {
     const handler = () => {
-      const saved = localStorage.getItem('hr_flow_company_profile');
-      if (saved) setCompanyProfile(JSON.parse(saved));
+      const p = getCompanyProfile();
+      setCompanyProfile({
+        ...p,
+        logo_url: p.logo_url || '/company-logo.png'
+      });
     };
     window.addEventListener('company_profile_updated', handler);
     return () => window.removeEventListener('company_profile_updated', handler);
@@ -57,23 +66,185 @@ export default function DocumentsPrint() {
   }, []);
 
   const currentEmp = employees.find(e => e.id === selectedEmpId || e.employee_number === selectedEmpId) || employees[0];
-  const numInstallments = Math.max(1, Math.min(24, Number(loanInstallments) || 1));
-  const monthlyDeduction = (Number(loanAmount) || 0) / numInstallments;
+  const currentEmpNumber = String(currentEmp?.employee_number || '').trim();
 
-  // Generate installment rows
+  // Find existing active advances for the current employee
+  const existingActiveAdvances = useMemo(() => {
+    if (!currentEmpNumber) return [];
+    try {
+      const all = getAdvances();
+      return all.filter(a => {
+        const matchEmp = String(a.employee_number || '').trim() === currentEmpNumber;
+        const isActive = a.status === 'active' || a.status === 'disbursed' || a.status === 'approved';
+        const rem = Number(a.remaining_balance !== undefined ? a.remaining_balance : a.total_amount) || 0;
+        return matchEmp && isActive && rem > 0;
+      });
+    } catch {
+      return [];
+    }
+  }, [currentEmpNumber, advancesRefreshTrigger]);
+
+  const existingAdvanceBalance = useMemo(() => {
+    return existingActiveAdvances.reduce((sum, a) => {
+      const rem = Number(a.remaining_balance !== undefined ? a.remaining_balance : a.total_amount) || 0;
+      return sum + rem;
+    }, 0);
+  }, [existingActiveAdvances]);
+
+  const numInstallments = Math.max(1, Math.min(24, Number(loanInstallments) || 1));
+  const requestedLoanAmount = Math.max(0, Number(loanAmount) || 0);
+  const totalLoanAfterAccumulation = existingAdvanceBalance + requestedLoanAmount;
+  const standaloneMonthlyDeduction = requestedLoanAmount / numInstallments;
+  const accumulatedMonthlyInstallment = numInstallments > 0 ? Math.round(totalLoanAfterAccumulation / numInstallments) : 0;
+
+  // Generate installment rows for document print
+  // If employee has previous balance and accountant is printing the cumulative plan, or standard requested amount
   const installmentRows = [];
-  if (loanAmount && numInstallments > 0) {
+  const baseForSchedule = existingAdvanceBalance > 0 ? totalLoanAfterAccumulation : requestedLoanAmount;
+  const monthlyForSchedule = existingAdvanceBalance > 0 ? accumulatedMonthlyInstallment : Math.round(standaloneMonthlyDeduction);
+
+  if (baseForSchedule > 0 && numInstallments > 0) {
     const startDate = new Date(deductionStart || '2026-09-01');
     for (let i = 1; i <= numInstallments; i++) {
       const d = new Date(startDate);
       d.setMonth(startDate.getMonth() + (i - 1));
       installmentRows.push({
         index: i,
-        amount: Math.round(monthlyDeduction),
+        amount: monthlyForSchedule,
         date: d.toISOString().split('T')[0]
       });
     }
   }
+
+  // Handle accountant approval & balance accumulation
+  const handleAddAdvanceToSystem = async () => {
+    if (!currentEmp) {
+      toast({ title: 'خطأ', description: 'يرجى اختيار الموظف أولاً', variant: 'destructive' });
+      return;
+    }
+    if (requestedLoanAmount <= 0) {
+      toast({ title: 'تنبيه', description: 'يرجى إدخال مبلغ سلفة صحيح أكبر من صفر', variant: 'destructive' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const todayStr = nowIso.slice(0, 10);
+      const startM = deductionStart ? deductionStart.slice(0, 7) : todayStr.slice(0, 7);
+
+      const allAdvs = getAdvances();
+      const empNum = currentEmpNumber;
+
+      // Identify existing active advances for this employee
+      const activeForEmp = allAdvs.filter(a => {
+        const match = String(a.employee_number || '').trim() === empNum;
+        const isActive = a.status === 'active' || a.status === 'disbursed' || a.status === 'approved';
+        const rem = Number(a.remaining_balance !== undefined ? a.remaining_balance : a.total_amount) || 0;
+        return match && isActive && rem > 0;
+      });
+
+      const prevBal = activeForEmp.reduce((sum, a) => {
+        return sum + (Number(a.remaining_balance !== undefined ? a.remaining_balance : a.total_amount) || 0);
+      }, 0);
+
+      const newTotal = prevBal + requestedLoanAmount;
+      const instCount = numInstallments;
+      const newMonthly = Math.round(newTotal / instCount);
+
+      const autoReason = prevBal > 0 
+        ? `${loanReason || 'سلفة مالية'} (تم جمع رصيد سابق ${prevBal.toLocaleString()} ر.س مع سلفة جديدة ${requestedLoanAmount.toLocaleString()} ر.س ليصبح الإجمالي ${newTotal.toLocaleString()} ر.س)`
+        : (loanReason || 'سلفة شخصية');
+
+      // Keep non-conflicting advances
+      const otherAdvs = allAdvs.filter(a => {
+        const match = String(a.employee_number || '').trim() === empNum;
+        const isActive = a.status === 'active' || a.status === 'disbursed' || a.status === 'approved';
+        return !(match && isActive);
+      });
+
+      // Mark previous active ones as consolidated
+      activeForEmp.forEach(oldAdv => {
+        otherAdvs.push({
+          ...oldAdv,
+          status: 'completed',
+          remaining_balance: 0,
+          notes: `تم تجميع وتبديل الرصيد المتبقي (${Number(oldAdv.remaining_balance || oldAdv.total_amount).toLocaleString()} ر.س) في السلفة المجمعة الجديدة بتاريخ ${todayStr}`
+        });
+      });
+
+      // Construct consolidated new advance
+      const consolidatedAdvance = {
+        id: 'adv_doc_' + Date.now(),
+        employee_id: currentEmp.id || ('emp_' + empNum),
+        employee_number: empNum,
+        employee_name: currentEmp.full_name,
+        total_amount: newTotal,
+        monthly_installment: newMonthly,
+        total_installments: instCount,
+        paid_installments: 0,
+        paid_amount: 0,
+        remaining_balance: newTotal,
+        start_month: startM,
+        disbursement_date: todayStr,
+        reason: autoReason,
+        status: 'active',
+        source: 'management',
+        workflow_stage: 'disbursed',
+        approved_by: user?.full_name || 'فهد ناصر محمد الجوعي (المدير العام)',
+        disbursed_by: user?.full_name || 'هشام ابوالفضل زغلول (المحاسب)',
+        created_at: nowIso,
+        updated_at: nowIso,
+        notes: `تم اعتماد السلفة من شاشة النماذج الرسمية وتجميع الرصيد تلقائياً (${prevBal > 0 ? `رصيد سابق: ${prevBal.toLocaleString()} ر.س + سلفة جديدة: ${requestedLoanAmount.toLocaleString()} ر.س` : `سلفة جديدة: ${requestedLoanAmount.toLocaleString()} ر.س`})`
+      };
+
+      // 1. Update localStorage & cloudSyncEngine
+      const updatedList = [consolidatedAdvance, ...otherAdvs];
+      localStorage.setItem('hr_flow_employee_advances', JSON.stringify(updatedList));
+      localStorage.setItem('hr_advances_list', JSON.stringify(updatedList));
+      await cloudSave('hr_flow_employee_advances', updatedList);
+      await cloudSave('hr_advances_list', updatedList);
+
+      // 2. Also save to Supabase advances table via advanceService
+      try {
+        await saveCloudAdvance(consolidatedAdvance, user);
+        for (const oldAdv of activeForEmp) {
+          if (oldAdv.id && !oldAdv.id.startsWith('adv_doc_')) {
+            await saveCloudAdvance({
+              ...oldAdv,
+              status: 'completed',
+              remaining_balance: 0
+            }, user).catch(() => {});
+          }
+        }
+      } catch (sbErr) {
+        console.warn('Supabase advance sync:', sbErr);
+      }
+
+      // 3. Dispatch system events
+      window.dispatchEvent(new Event('advances_updated'));
+      window.dispatchEvent(new Event('payroll_refresh'));
+
+      // 4. Notify accountant
+      toast({
+        title: '✓ تم اعتماد السلفة وتحديث رصيد الموظف بالنظام بنجاح',
+        description: prevBal > 0 
+          ? `تم جمع المبلغ الجديد (${requestedLoanAmount.toLocaleString()} ر.س) مع الرصيد السابق (${prevBal.toLocaleString()} ر.س). الرصيد الإجمالي المعتمد: ${newTotal.toLocaleString()} ر.س بقسط شهري ${newMonthly.toLocaleString()} ر.س على ${instCount} أشهُر ابتداءً من ${startM}.`
+          : `تم تسجيل سلفة بمبلغ ${requestedLoanAmount.toLocaleString()} ر.س بقسط شهري ${newMonthly.toLocaleString()} ر.س على ${instCount} أشهُر ابتداءً من ${startM}.`,
+      });
+
+      setAdvancesRefreshTrigger(t => t + 1);
+    } catch (err) {
+      console.error('Error adding advance:', err);
+      toast({
+        title: 'خطأ أثناء إضافة السلفة',
+        description: err.message || 'حدث خطأ غير متوقع.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const docTitles = {
     loan: 'طلب سلفة مالية',
@@ -95,6 +266,7 @@ export default function DocumentsPrint() {
     return phone;
   };
 
+  // Standalone print without modifying advances
   const handlePrint = () => window.print();
 
   const todayAr = new Date().toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -117,6 +289,8 @@ export default function DocumentsPrint() {
       .lg\\:ps-64 { padding-inline-start: 0 !important; }
       main, main > div { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
       .executive-sheet {
+        display: block !important;
+        visibility: visible !important;
         border: 2px solid #0B1F3A !important; border-radius: 4px !important;
         padding: 20px !important; background: #fff !important; box-shadow: none !important;
         width: 100% !important; min-height: auto !important;
@@ -125,7 +299,18 @@ export default function DocumentsPrint() {
       .sheet-header-bg { background-color: #0B1F3A !important; color: #fff !important; }
       .sheet-box-bg { background-color: #F8FAFC !important; border: 1px solid #CBD5E1 !important; }
       .sheet-table-header { background-color: #0B1F3A !important; color: #fff !important; }
-      .print-logo img { max-width: 60px !important; max-height: 60px !important; }
+      .print-logo-box { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0 !important; }
+      .print-logo img {
+        max-width: 190px !important;
+        max-height: 85px !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        filter: contrast(1.05) !important;
+      }
       .ltr-nums { direction: ltr !important; unicode-bidi: embed !important; }
     }
   `;
@@ -143,12 +328,54 @@ export default function DocumentsPrint() {
           </div>
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">نماذج الطباعة والمستندات الرسمية</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">إنشاء وطباعة المستندات الرسمية على ورقة A4 احترافية</p>
+            <p className="text-xs text-muted-foreground mt-0.5">إنشاء وطباعة المستندات الرسمية على ورقة A4 احترافية مع خيار الترحيل المالي</p>
           </div>
         </div>
-        <Button onClick={handlePrint} className="bg-[#0B1F3A] hover:bg-[#152e54] text-white font-bold px-6 py-2.5 rounded-xl shadow-lg border border-[#D4AF37]/40 gap-2">
-          <Printer className="w-4 h-4 text-[#D4AF37]" /> طباعة / حفظ PDF
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {docType === 'loan' && (
+            <Button 
+              type="button"
+              onClick={handleAddAdvanceToSystem}
+              disabled={isSubmitting || requestedLoanAmount <= 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md border border-emerald-500 gap-2 transition-all active:scale-95"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+              )}
+              {existingAdvanceBalance > 0 
+                ? `اعتماد وإضافة للسلف (+ جمع مع رصيد ${existingAdvanceBalance.toLocaleString()} ر.س)`
+                : 'اعتماد وإضافة السلفة إلى رصيد الموظف بالنظام'}
+            </Button>
+          )}
+
+          <Button 
+            type="button"
+            variant="outline"
+            onClick={() => setShowPreview(prev => !prev)} 
+            className="bg-white hover:bg-slate-50 text-[#0B1F3A] font-bold px-4 py-2.5 rounded-xl shadow-sm border border-slate-300 gap-2 transition-all active:scale-95"
+          >
+            {showPreview ? (
+              <>
+                <EyeOff className="w-4 h-4 text-slate-500" /> إخفاء المعاينة
+              </>
+            ) : (
+              <>
+                <Eye className="w-4 h-4 text-blue-600" /> معاينة النموذج
+              </>
+            )}
+          </Button>
+
+          <Button 
+            type="button"
+            onClick={handlePrint} 
+            className="bg-[#0B1F3A] hover:bg-[#152e54] text-white font-bold px-5 py-2.5 rounded-xl shadow-lg border border-[#D4AF37]/40 gap-2"
+          >
+            <Printer className="w-4 h-4 text-[#D4AF37]" /> طباعة / حفظ PDF
+          </Button>
+        </div>
       </div>
 
       {/* INPUT FORM (Hidden on Print) */}
@@ -182,22 +409,93 @@ export default function DocumentsPrint() {
         </div>
 
         {docType === 'loan' && (
-          <div className="pt-2 grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">مبلغ السلفة (ر.س)</Label>
-              <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} className="rounded-xl h-11 font-mono" />
+          <div className="space-y-4 pt-1">
+            {/* Live Financial Balance Preview Card */}
+            <div className={`p-4 rounded-xl border ${existingAdvanceBalance > 0 ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-50 border-slate-200'} transition-all`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${existingAdvanceBalance > 0 ? 'bg-amber-600 text-white' : 'bg-[#0B1F3A] text-[#D4AF37]'}`}>
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">حالة رصيد سلف الموظف بالنظام</h3>
+                    <p className="text-[11px] text-slate-500">
+                      {existingAdvanceBalance > 0 
+                        ? `يوجد رصيد سلفة قائم مسجل على هذا الموظف (${existingActiveAdvances.length} سلفة نشطة)`
+                        : 'لا يوجد رصيد سلف مسجل على هذا الموظف حالياً'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 font-medium">الرصيد القائم الحالي:</span>
+                  <span className={`font-mono font-bold text-sm px-2.5 py-1 rounded-lg ${existingAdvanceBalance > 0 ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-100 text-emerald-800'}`}>
+                    {existingAdvanceBalance.toLocaleString()} ر.س
+                  </span>
+                </div>
+              </div>
+
+              {existingAdvanceBalance > 0 && requestedLoanAmount > 0 && (
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white/90 p-3 rounded-lg border border-amber-200/60">
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">الرصيد السابق:</span>
+                    <span className="font-mono font-bold text-amber-800">{existingAdvanceBalance.toLocaleString()} ر.س</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">السلفة الجديدة:</span>
+                    <span className="font-mono font-bold text-blue-700">+{requestedLoanAmount.toLocaleString()} ر.س</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">الإجمالي بعد الجمع:</span>
+                    <span className="font-mono font-black text-slate-900 text-sm">{totalLoanAfterAccumulation.toLocaleString()} ر.س</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">القسط الشهري الجديد:</span>
+                    <span className="font-mono font-bold text-emerald-700">{accumulatedMonthlyInstallment.toLocaleString()} ر.س/شهر</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">عدد الأقساط</Label>
-              <Input type="number" value={loanInstallments} onChange={(e) => setLoanInstallments(e.target.value)} className="rounded-xl h-11 font-mono" />
+
+            {/* Loan Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">مبلغ السلفة (ر.س)</Label>
+                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} className="rounded-xl h-11 font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">عدد الأقساط</Label>
+                <Input type="number" value={loanInstallments} onChange={(e) => setLoanInstallments(e.target.value)} className="rounded-xl h-11 font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">بداية الخصم</Label>
+                <Input type="date" value={deductionStart} onChange={(e) => setDeductionStart(e.target.value)} className="rounded-xl h-11 font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">سبب السلفة</Label>
+                <Input value={loanReason} onChange={(e) => setLoanReason(e.target.value)} className="rounded-xl h-11" />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">بداية الخصم</Label>
-              <Input type="date" value={deductionStart} onChange={(e) => setDeductionStart(e.target.value)} className="rounded-xl h-11 font-mono" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">سبب السلفة</Label>
-              <Input value={loanReason} onChange={(e) => setLoanReason(e.target.value)} className="rounded-xl h-11" />
+
+            {/* Guidance for Accountant */}
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100">
+              <p className="text-[11px] text-slate-600">
+                💡 <span className="font-bold text-slate-800">خيارات المحاسب المالي:</span> يمكنك الضغط على <span className="font-semibold text-[#0B1F3A]">"طباعة / حفظ PDF"</span> للطباعة الورقية فقط دون إضافة للسلف، أو الضغط على <span className="font-semibold text-emerald-700">"اعتماد وإضافة للسلف"</span> لجمع المبلغ تلقائياً برصيد الموظف بالنظام وترحيله لمسير الرواتب.
+              </p>
+              <Button 
+                type="button"
+                onClick={handleAddAdvanceToSystem}
+                disabled={isSubmitting || requestedLoanAmount <= 0}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow-md border border-emerald-500 gap-2 shrink-0 transition-all active:scale-95"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                )}
+                {existingAdvanceBalance > 0 
+                  ? `اعتماد وإضافة للسلف (+ جمع مع رصيد ${existingAdvanceBalance.toLocaleString()} ر.س)`
+                  : 'اعتماد وإضافة السلفة إلى رصيد الموظف بالنظام'}
+              </Button>
             </div>
           </div>
         )}
@@ -224,9 +522,81 @@ export default function DocumentsPrint() {
         )}
       </Card>
 
-      {/* A4 PRINTABLE SHEET */}
+      {/* PREVIEW PLACEHOLDER (SHOWN WHEN PREVIEW IS CLOSED) */}
+      {!showPreview && (
+        <Card className="no-print p-8 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/70 text-center space-y-4 shadow-sm transition-all">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-100/80 text-blue-800 flex items-center justify-center shadow-inner">
+            <Eye className="w-7 h-7 text-blue-700" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="font-heading font-black text-base text-slate-900">
+              نموذج {docTitles[docType]} جاهز للمعاينة أو الطباعة
+            </h3>
+            <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+              تم إخفاء المستند لتقليل التزاحم على الشاشة وسهولة إدخال البيانات. يمكنك معاينة النموذج الرسمي (A4) قبل الطباعة أو طباعته مباشرة وحفظه PDF.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button 
+              type="button"
+              variant="outline"
+              onClick={() => setShowPreview(true)}
+              className="rounded-xl text-xs font-bold gap-2 border-slate-300 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 h-10 px-5 shadow-sm transition-all"
+            >
+              <Eye className="w-4 h-4 text-blue-600" />
+              <span>معاينة النموذج</span>
+            </Button>
+            <Button 
+              type="button"
+              onClick={handlePrint}
+              className="bg-[#0B1F3A] hover:bg-[#152e54] text-white rounded-xl text-xs font-bold gap-2 h-10 px-5 shadow-md transition-all"
+            >
+              <Printer className="w-4 h-4 text-[#D4AF37]" />
+              <span>طباعة / حفظ PDF مباشرة</span>
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* PREVIEW ACTIVE TOOLBAR */}
+      {showPreview && (
+        <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-blue-50/90 border border-blue-200 text-blue-950 p-4 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+              <Eye className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-black text-xs block text-blue-950">معاينة النموذج الرسمي المعتمد (A4)</span>
+              <span className="text-[11px] text-blue-700">هذا هو الشكل النهائي الدقيق للمستند كما سيظهر عند الطباعة وحفظ PDF</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              type="button"
+              size="sm" 
+              onClick={handlePrint} 
+              className="bg-[#0B1F3A] hover:bg-[#152e54] text-white rounded-xl text-xs font-bold gap-1.5 h-9 px-4 shadow-sm"
+            >
+              <Printer className="w-3.5 h-3.5 text-[#D4AF37]" />
+              <span>طباعة المستند الآن</span>
+            </Button>
+            <Button 
+              type="button"
+              size="sm" 
+              variant="outline" 
+              onClick={() => setShowPreview(false)} 
+              className="bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold h-9 px-3 border-slate-300"
+            >
+              <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+              <span>إخفاء المعاينة</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* A4 PRINTABLE SHEET (HIDDEN ON SCREEN UNLESS PREVIEW IS CLICKED, ALWAYS VISIBLE IN PRINT) */}
       {currentEmp && (
-        <div className="executive-sheet bg-white rounded-xl border-2 border-[#0B1F3A] shadow-2xl p-8 sm:p-10 text-[#0B1F3A] font-sans" dir="rtl">
+        <div className={`executive-sheet bg-white rounded-xl border-2 border-[#0B1F3A] shadow-2xl p-8 sm:p-10 text-[#0B1F3A] font-sans ${showPreview ? 'block' : 'hidden print:block'}`} dir="rtl">
 
           {/* 1. OFFICIAL HEADER WITH COMPANY LOGO */}
           <div className="flex items-start justify-between pb-4 border-b-2 border-[#0B1F3A]">
@@ -240,14 +610,23 @@ export default function DocumentsPrint() {
               </p>
             </div>
 
-            {/* Center: Logo + Doc Title */}
-            <div className="text-center space-y-2 print-logo" style={{flex: '1 1 40%'}}>
-              <div className="mx-auto w-16 h-16 rounded-full border-2 border-[#D4AF37] bg-gradient-to-tr from-[#0B1F3A] to-[#1E3A8A] flex items-center justify-center shadow-md overflow-hidden">
-                {companyProfile.logo_url ? (
-                  <img src={companyProfile.logo_url || "/company-logo.svg"} onError={(e) => { e.currentTarget.src = "/company-logo.svg"; }} alt="شعار الشركة" className="w-14 h-14 object-contain p-1" />
-                ) : (
-                  <span className="font-serif font-black text-xl tracking-wider text-[#D4AF37]">DC</span>
-                )}
+            {/* Center: Free Logo without border + Doc Title */}
+            <div className="text-center space-y-2.5 print-logo" style={{flex: '1 1 40%'}}>
+              <div className="print-logo-box mx-auto flex items-center justify-center bg-transparent border-0 shadow-none p-0 overflow-visible min-h-[90px]">
+                <img 
+                  src={companyProfile.logo_url || "/company-logo.png"} 
+                  onError={(e) => { 
+                    if (!e.currentTarget.dataset.backup) {
+                      e.currentTarget.dataset.backup = '1';
+                      e.currentTarget.src = "/dorat-cars-logo.png";
+                    } else if (e.currentTarget.dataset.backup === '1') {
+                      e.currentTarget.dataset.backup = '2';
+                      e.currentTarget.src = "/logo.png";
+                    }
+                  }} 
+                  alt="شعار شركة درة السيارة" 
+                  className="h-24 sm:h-28 w-auto max-w-[210px] object-contain drop-shadow-sm select-none" 
+                />
               </div>
               <div className="inline-block px-5 py-1.5 rounded-lg bg-[#0B1F3A] text-white font-bold text-sm tracking-wide shadow border border-[#D4AF37]">
                 {docTitles[docType] || 'نموذج رسمي'}
@@ -327,25 +706,63 @@ export default function DocumentsPrint() {
             {docType === 'loan' && (
               <>
                 <div className="sheet-box-bg rounded-lg border border-slate-300 p-4 bg-slate-50/70">
-                  <div className="text-xs font-bold text-[#0B1F3A] pb-2 mb-2 border-b border-slate-200">تفاصيل بيانات طلب السلفة:</div>
+                  <div className="text-xs font-bold text-[#0B1F3A] pb-2 mb-2 border-b border-slate-200 flex items-center justify-between">
+                    <span>تفاصيل بيانات طلب السلفة:</span>
+                    {existingAdvanceBalance > 0 && (
+                      <span className="text-[11px] font-semibold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full border border-amber-300">
+                        سلفة مجمعة (رصيد سابق: {existingAdvanceBalance.toLocaleString()} ر.س)
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                     <div>
-                      <span className="text-slate-500 block">مبلغ السلفة:</span>
-                      <span className="text-base font-bold font-mono text-[#0B1F3A] ltr-nums" dir="ltr" style={ltrStyle}>{Number(loanAmount || 0).toLocaleString()} ر.س</span>
+                      <span className="text-slate-500 block">مبلغ السلفة المطلوب:</span>
+                      <span className="text-base font-bold font-mono text-[#0B1F3A] ltr-nums" dir="ltr" style={ltrStyle}>{requestedLoanAmount.toLocaleString()} ر.س</span>
                     </div>
-                    <div>
-                      <span className="text-slate-500 block">عدد الأقساط:</span>
-                      <span className="text-base font-bold font-mono text-slate-800 ltr-nums" dir="ltr" style={ltrStyle}>{numInstallments} قسط</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">القسط الشهري:</span>
-                      <span className="text-base font-bold font-mono text-emerald-700 ltr-nums" dir="ltr" style={ltrStyle}>{Math.round(monthlyDeduction).toLocaleString()} ر.س/شهر</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">بداية الخصم:</span>
-                      <span className="text-sm font-bold font-mono text-slate-800 ltr-nums" dir="ltr" style={ltrStyle}>{deductionStart}</span>
-                    </div>
+                    {existingAdvanceBalance > 0 ? (
+                      <>
+                        <div>
+                          <span className="text-slate-500 block">الرصيد السابق المسجل:</span>
+                          <span className="text-base font-bold font-mono text-amber-800 ltr-nums" dir="ltr" style={ltrStyle}>{existingAdvanceBalance.toLocaleString()} ر.س</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">الإجمالي بعد الجمع:</span>
+                          <span className="text-base font-bold font-mono text-[#0B1F3A] ltr-nums" dir="ltr" style={ltrStyle}>{totalLoanAfterAccumulation.toLocaleString()} ر.س</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">القسط الشهري الجديد:</span>
+                          <span className="text-base font-bold font-mono text-emerald-700 ltr-nums" dir="ltr" style={ltrStyle}>{accumulatedMonthlyInstallment.toLocaleString()} ر.س/شهر</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <span className="text-slate-500 block">عدد الأقساط:</span>
+                          <span className="text-base font-bold font-mono text-slate-800 ltr-nums" dir="ltr" style={ltrStyle}>{numInstallments} قسط</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">القسط الشهري:</span>
+                          <span className="text-base font-bold font-mono text-emerald-700 ltr-nums" dir="ltr" style={ltrStyle}>{Math.round(standaloneMonthlyDeduction).toLocaleString()} ر.س/شهر</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">بداية الخصم:</span>
+                          <span className="text-sm font-bold font-mono text-slate-800 ltr-nums" dir="ltr" style={ltrStyle}>{deductionStart}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
+                  {existingAdvanceBalance > 0 && (
+                    <div className="grid grid-cols-2 gap-4 text-xs mt-3 pt-2 border-t border-slate-200">
+                      <div>
+                        <span className="text-slate-500 block">عدد الأقساط الإجمالية:</span>
+                        <span className="font-bold font-mono text-slate-800 ltr-nums" dir="ltr" style={ltrStyle}>{numInstallments} قسط</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">تاريخ بداية الخصم:</span>
+                        <span className="font-bold font-mono text-slate-800 ltr-nums" dir="ltr" style={ltrStyle}>{deductionStart}</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-2 pt-2 border-t border-slate-200 text-xs">
                     <span className="text-slate-500">سبب السلفة: </span>
                     <span className="font-medium text-slate-900">{loanReason}</span>

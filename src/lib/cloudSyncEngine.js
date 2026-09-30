@@ -1,3 +1,61 @@
+import { base44 } from '@/api/base44Client';
+
+export const SYNC_KEYS = {
+  ADVANCES: 'hr_advances_list',
+  ADVANCES_ALIAS: 'green_arrow_hr_advances',
+  EMPLOYEE_ADVANCES: 'hr_flow_employee_advances',
+  LEAVES: 'hr_leave_requests',
+  CORRECTIONS: 'hr_correction_requests',
+  UNIFIED_REQUESTS: 'hr_flow_unified_requests',
+  COMPANY_PROFILE: 'company_profile_data',
+  CONTRACTS: 'hr_flow_v12_contracts_store',
+  EVALUATIONS: 'green_arrow_hr_evaluations_store',
+  ANNOUNCEMENTS: 'green_arrow_hr_live_announcements'
+};
+
+export const SUPABASE_SYNC_MAP = {
+  'hr_advances_list': 'sync_advances',
+  'green_arrow_hr_advances': 'sync_advances',
+  'hr_flow_employee_advances': 'sync_advances',
+  'hr_leave_requests': 'sync_leaves',
+  'hr_correction_requests': 'sync_corrections',
+  'hr_flow_unified_requests': 'sync_unified_requests',
+  'company_profile_data': 'sync_company_profile',
+  'hr_flow_v12_contracts_store': 'sync_contracts',
+  'green_arrow_hr_evaluations_store': 'sync_evaluations',
+  'green_arrow_hr_live_announcements': 'sync_announcements'
+};
+
+/**
+ * Merge two arrays of records non-destructively by unique ID
+ */
+export function mergeRecords(primary = [], secondary = []) {
+  const pList = Array.isArray(primary) ? primary : [];
+  const sList = Array.isArray(secondary) ? secondary : [];
+  const map = new Map();
+
+  // Secondary first
+  sList.forEach(item => {
+    if (item && typeof item === 'object') {
+      const id = String(item.id || item.unified_id || item.request_number || (item.employee_number + '_' + (item.date || item.created_at || '')));
+      if (id) map.set(id, item);
+    }
+  });
+
+  // Primary (newer/cloud) overlays secondary
+  pList.forEach(item => {
+    if (item && typeof item === 'object') {
+      const id = String(item.id || item.unified_id || item.request_number || (item.employee_number + '_' + (item.date || item.created_at || '')));
+      if (id) {
+        const existing = map.get(id);
+        map.set(id, existing ? { ...existing, ...item } : item);
+      }
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 /**
  * Save data locally AND push to Supabase Cloud
  */

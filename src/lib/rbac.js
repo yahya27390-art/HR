@@ -226,6 +226,22 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'settings.view', 'settings.edit', 'roles.manage', 'branches.manage', 'departments.manage', 'approvals.manage'
   ],
 
+  general_manager: [
+    'dashboard.view', 'my.requests',
+    'employees.view', 'employees.create', 'employees.edit', 'employees.salary.view', 'employees.salary.edit', 'employees.photo.edit',
+    'documents.view', 'documents.edit',
+    'payroll.view', 'payroll.approve', 'payroll.lock', 'payroll.reopen', 'payroll.print',
+    'allowances.view', 'allowances.edit',
+    'loans.view', 'loans.create', 'loans.approve.final', 'loans.disburse',
+    'attendance.view', 'attendance.approve', 'attendance.edit', 'attendance.correct', 'shifts.view', 'shifts.manage',
+    'contracts.view', 'contracts.sign', 'contracts.manage', 'contracts.reset',
+    'leave.view', 'leave.create', 'leave.approve', 'requests.view_all', 'requests.approve',
+    'performance.view', 'performance.edit',
+    'announcements.send', 'announcements.manage',
+    'reports.view', 'reports.export', 'alerts.view', 'audit.view',
+    'settings.view', 'settings.edit', 'roles.manage', 'branches.manage', 'departments.manage', 'approvals.manage'
+  ],
+
   accountant: [
     'dashboard.view', 'my.requests',
     'employees.view', 'employees.salary.view',
@@ -271,117 +287,91 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 
 export const ROLE_PERMISSIONS = DEFAULT_ROLE_PERMISSIONS;
 
-// Dynamic RBAC Storage Key
-const RBAC_STORAGE_KEY = 'hr_rbac_matrix_v3';
-const USER_PERMS_KEY_PREFIX = 'hr_user_perms_override_';
-
 /**
- * Get effective role permissions with live fallback
+ * Get effective role permissions.
+ *
+ * SECURITY: Returns only from the static DEFAULT_ROLE_PERMISSIONS table.
+ * The RBAC matrix is NOT stored in localStorage (was an attack vector:
+ * any user could escalate privileges via DevTools).
+ *
+ * Phase 2 migration will add a DB-backed role_permissions table for
+ * runtime overrides, enforced by RLS.
  */
 export function getRolePermissions(role) {
   if (role === 'system_admin') {
     return Object.values(PERMISSIONS);
   }
-
-  try {
-    const saved = localStorage.getItem(RBAC_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && Array.isArray(parsed[role])) {
-        return parsed[role];
-      }
-    }
-  } catch (e) {}
-
   return DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS.employee;
 }
 
 /**
- * Save updated role permissions to persistent storage
+ * Save updated role permissions.
+ * PHASE 2 STUB: Will be replaced by a DB-backed role_permissions table.
+ * Currently a no-op — localStorage is NOT authoritative for RBAC.
  */
 export function saveRolePermissions(role, permissionsList) {
-  try {
-    const saved = localStorage.getItem(RBAC_STORAGE_KEY);
-    const matrix = saved ? JSON.parse(saved) : { ...DEFAULT_ROLE_PERMISSIONS };
-    matrix[role] = permissionsList;
-    localStorage.setItem(RBAC_STORAGE_KEY, JSON.stringify(matrix));
-    window.dispatchEvent(new CustomEvent('hr_permissions_updated', { detail: { role, permissions: permissionsList } }));
-    return true;
-  } catch (e) {
-    console.error('Failed to save role permissions', e);
-    return false;
-  }
+  console.warn('[rbac] saveRolePermissions: PHASE 2 PENDING — DB-backed role permissions not yet implemented.');
+  // Fire event so any listening components can update their UI
+  window.dispatchEvent(new CustomEvent('hr_permissions_updated', { detail: { role, permissions: permissionsList } }));
+  return false;
 }
 
 /**
- * Reset all permissions to system defaults
+ * Reset all permissions to system defaults.
  */
 export function resetAllPermissionsToDefault() {
-  localStorage.setItem(RBAC_STORAGE_KEY, JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
   window.dispatchEvent(new CustomEvent('hr_permissions_updated', { detail: DEFAULT_ROLE_PERMISSIONS }));
   return DEFAULT_ROLE_PERMISSIONS;
 }
 
 /**
- * Get custom permissions override for specific employee
+ * Get custom permissions override for specific employee.
+ * PHASE 2 STUB: Will be replaced by DB-backed per-employee overrides.
+ * Returns empty overrides (no localStorage access).
  */
 export function getEmployeeCustomOverrides(employeeId) {
-  if (!employeeId) return { granted: [], revoked: [] };
-  try {
-    const key = USER_PERMS_KEY_PREFIX + String(employeeId).replace('emp_', '');
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {}
+  // SECURITY: Per-employee overrides from localStorage removed (attack vector).
+  // Phase 2 will implement DB-backed overrides with RLS enforcement.
   return { granted: [], revoked: [] };
 }
 
 /**
- * Save custom permissions override for specific employee
+ * Save custom permissions override for specific employee.
+ * PHASE 2 STUB: no-op until DB-backed implementation.
  */
 export function saveEmployeeCustomOverrides(employeeId, overrides) {
-  if (!employeeId) return false;
-  try {
-    const key = USER_PERMS_KEY_PREFIX + String(employeeId).replace('emp_', '');
-    localStorage.setItem(key, JSON.stringify(overrides));
-    window.dispatchEvent(new CustomEvent('hr_permissions_updated', { detail: { employeeId, overrides } }));
-    return true;
-  } catch (e) {
-    return false;
-  }
+  console.warn('[rbac] saveEmployeeCustomOverrides: PHASE 2 PENDING — DB-backed overrides not yet implemented.');
+  return false;
 }
 
 /**
- * High-performance, Real-time Permission Checker
+ * Permission checker — DB-role authoritative.
+ *
+ * SECURITY:
+ * - Role comes from user.role (set in AuthContext from employees.role DB column)
+ * - No hardcoded employee numbers or emails as bypass
+ * - No localStorage RBAC matrix
+ * - system_admin gets all permissions via role, not via identity bypass
+ *
+ * FRONTEND ONLY: This is for UX (showing/hiding elements).
+ * The authoritative security boundary is RLS at the database level.
  */
 export function hasPermission(user, permission) {
   if (!user) return false;
 
   const role = user.role || 'employee';
-  const empNum = String(user.employee_number || user.id || '').replace('emp_', '');
-  const email = (user.email || '').toLowerCase();
 
-  // Super Admin bypass
-  if (role === 'system_admin' || empNum === '1022' || email === 'yahya9031@gmail.com') {
+  // system_admin has all permissions (by role, not by hardcoded identity)
+  if (role === 'system_admin') {
     return true;
   }
 
-  // 1. Check user-specific custom overrides
-  const overrides = getEmployeeCustomOverrides(user.id || user.employee_number);
-  if (overrides.revoked && overrides.revoked.includes(permission)) {
-    return false;
-  }
-  if (overrides.granted && overrides.granted.includes(permission)) {
-    return true;
+  // Check permissions attached to user object (set by authService from DB role)
+  if (user.permissions && Array.isArray(user.permissions)) {
+    return user.permissions.includes(permission);
   }
 
-  // 2. Check legacy custom_permissions array on user object
-  const custom = user.custom_permissions;
-  if (custom && Array.isArray(custom)) {
-    if (custom.includes('!' + permission)) return false;
-    if (custom.includes(permission)) return true;
-  }
-
-  // 3. Check dynamic role matrix
+  // Fallback: derive from role matrix
   const rolePerms = getRolePermissions(role);
   return rolePerms.includes(permission);
 }
@@ -393,12 +383,11 @@ export function getUserPermissions(user) {
   if (!user) return [];
   const role = user.role || 'employee';
   if (role === 'system_admin') return Object.values(PERMISSIONS);
-  const base = getRolePermissions(role);
-  const overrides = getEmployeeCustomOverrides(user.id || user.employee_number);
-  const granted = overrides.granted || [];
-  const revoked = new Set(overrides.revoked || []);
-  const merged = [...base, ...granted].filter(p => !revoked.has(p));
-  return [...new Set(merged)];
+  // Use pre-computed permissions from AuthContext (set from DB role)
+  if (user.permissions && Array.isArray(user.permissions)) {
+    return user.permissions;
+  }
+  return getRolePermissions(role);
 }
 
 /**
@@ -447,14 +436,26 @@ export const ROLE_META = {
 
 export const getRoleMeta = (user) => ROLE_META[user?.role] || ROLE_META.employee;
 
+/**
+ * DEPRECATED — DO NOT USE for authentication.
+ *
+ * This function determined roles by hardcoded employee numbers and emails,
+ * which was an attack vector (anyone knowing emp_number '1022' could claim admin).
+ *
+ * Role is now authoritative from the database: employees.role column.
+ * This function is kept ONLY for legacy compatibility during the migration
+ * and will be removed in Phase 3.
+ *
+ * @deprecated Use employees.role from DB (via authService.fetchLinkedEmployee)
+ */
 export function determineRoleFromEmployee(emp) {
-  const num   = String(emp?.employee_number || '');
-  const email = (emp?.email  || '').toLowerCase();
-  const job   = (emp?.job_title || '').toLowerCase();
-  if (num === '1001' || email === 'dortalsiarh@gmail.com') return 'owner';
-  if (num === '1005' || email === 'hes.ham42@yahoo.com')   return 'accountant';
-  if (num === '1022' || email === 'yahya9031@gmail.com')   return 'system_admin';
-  if (job.includes('محاسب') || job.includes('حسابات'))     return 'accountant';
-  if (job.includes('موارد بشرية') || job.includes('مسؤول')) return 'hr';
+  // Return the DB role if it exists (Phase 1: DB now has role column)
+  if (emp?.role && ['system_admin','owner','general_manager','accountant','hr','employee'].includes(emp.role)) {
+    return emp.role;
+  }
+  // Fallback (migration period only — remove in Phase 3)
+  const job = (emp?.job_title || '').toLowerCase();
+  if (job.includes('محاسب') || job.includes('حسابات')) return 'accountant';
+  if (job.includes('موارد بشرية')) return 'hr';
   return 'employee';
 }

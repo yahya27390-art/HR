@@ -188,7 +188,98 @@ export function saveUnifiedRequest(requestData, currentUser) {
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   cloudSave(STORAGE_KEY, list);
+
+  // Synchronize to specialized stores so Approvals Center & Notifications pick it up instantly
+  try {
+    if (['annual_leave', 'leave_extension', 'return_from_leave', 'permission'].includes(newRecord.type)) {
+      const leaves = JSON.parse(localStorage.getItem('hr_leave_requests') || '[]');
+      const leaveLabel = newRecord.details?.request_label || (newRecord.type === 'permission' ? `طلب استئذان (${newRecord.details?.permissionHours || 2} س)` : 'طلب إجازة');
+      const leaveItem = {
+        id: newRecord.id,
+        unified_id: newRecord.id,
+        employee_id: newRecord.employee_id,
+        employee_number: newRecord.employee_number,
+        employee_name: newRecord.employee_name,
+        branch_name: newRecord.branch_name,
+        leave_type: leaveLabel,
+        type: newRecord.type,
+        start_date: newRecord.details?.startDate || new Date().toISOString().split('T')[0],
+        end_date: newRecord.details?.endDate || newRecord.details?.startDate || new Date().toISOString().split('T')[0],
+        permission_hours: newRecord.details?.permissionHours || null,
+        permission_type: newRecord.details?.permissionType || null,
+        reason: newRecord.reason || leaveLabel,
+        status: newRecord.status || 'pending',
+        created_at: newRecord.created_at,
+        days_count: Number(newRecord.details?.days) || 1
+      };
+      const lIdx = leaves.findIndex(l => l.id === newRecord.id);
+      if (lIdx !== -1) leaves[lIdx] = { ...leaves[lIdx], ...leaveItem };
+      else leaves.unshift(leaveItem);
+
+      localStorage.setItem('hr_leave_requests', JSON.stringify(leaves));
+      cloudSave('hr_leave_requests', leaves);
+    } else if (newRecord.type === 'advance') {
+      const advs = JSON.parse(localStorage.getItem('hr_advances_list') || '[]');
+      const advItem = {
+        id: newRecord.id,
+        unified_id: newRecord.id,
+        employee_id: newRecord.employee_id,
+        employee_number: newRecord.employee_number,
+        employee_name: newRecord.employee_name,
+        branch_name: newRecord.branch_name,
+        amount: Number(newRecord.details?.amount || 0),
+        installments: Number(newRecord.details?.installments || 1),
+        monthly_deduction: Math.round(Number(newRecord.details?.amount || 0) / Number(newRecord.details?.installments || 1)),
+        reason: newRecord.reason || 'طلب سلفة راتب',
+        status: newRecord.status || 'pending',
+        source: 'employee_request',
+        is_employee_request: true,
+        created_at: newRecord.created_at,
+        date: newRecord.created_at.split('T')[0]
+      };
+      const aIdx = advs.findIndex(a => a.id === newRecord.id);
+      if (aIdx !== -1) advs[aIdx] = { ...advs[aIdx], ...advItem };
+      else advs.unshift(advItem);
+
+      localStorage.setItem('hr_advances_list', JSON.stringify(advs));
+      localStorage.setItem('hr_flow_employee_advances', JSON.stringify(advs));
+      cloudSave('hr_advances_list', advs);
+    } else if (newRecord.type === 'punch_correction' || newRecord.type === 'attendance_correction') {
+      const corrs = JSON.parse(localStorage.getItem('hr_correction_requests') || '[]');
+      const corrDate = newRecord.details?.startDate || newRecord.details?.targetDate || newRecord.details?.log_date || (newRecord.created_at || '').split('T')[0];
+      const checkIn = newRecord.details?.checkInTime || '09:00';
+      const checkOut = newRecord.details?.checkOutTime || '17:00';
+
+      const corrItem = {
+        id: newRecord.id,
+        unified_id: newRecord.id,
+        employee_id: newRecord.employee_id,
+        employee_number: newRecord.employee_number,
+        employee_name: newRecord.employee_name,
+        branch_name: newRecord.branch_name,
+        log_date: corrDate,
+        check_in: checkIn,
+        check_out: checkOut,
+        check_in_time: checkIn,
+        check_out_time: checkOut,
+        reason: newRecord.reason || 'تصحيح بصمة',
+        status: newRecord.status || 'pending',
+        created_at: newRecord.created_at
+      };
+      const cIdx = corrs.findIndex(c => c.id === newRecord.id);
+      if (cIdx !== -1) corrs[cIdx] = { ...corrs[cIdx], ...corrItem };
+      else corrs.unshift(corrItem);
+
+      localStorage.setItem('hr_correction_requests', JSON.stringify(corrs));
+      cloudSave('hr_correction_requests', corrs);
+    }
+  } catch (e) {
+    console.warn('Sync to specialized stores exception:', e);
+  }
+
   window.dispatchEvent(new Event('hr_requests_updated'));
+  window.dispatchEvent(new Event('cloud_data_synced'));
+  window.dispatchEvent(new Event('storage'));
   return newRecord;
 }
 
