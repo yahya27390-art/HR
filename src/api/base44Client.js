@@ -1147,6 +1147,23 @@ function fromDbRecord(entityName, row) {
   return row;
 }
 
+async function _syncEmployeesToCloud(items) {
+  try {
+    if (!supabase) return;
+    const payload = {
+      id: 'sync_hr_flow_v11_dora_Employee',
+      title: 'hr_flow_v11_dora_Employee',
+      content: JSON.stringify(items),
+      category: 'cloud_sync',
+      status: 'active',
+      date: new Date().toISOString().split('T')[0]
+    };
+    await supabase.from('announcements').upsert([payload], { onConflict: 'id' });
+  } catch (e) {
+    console.warn('Sync employees to cloud warning:', e);
+  }
+}
+
 function createEntityHandler(entityName) {
   const tableName = getTableName(entityName);
 
@@ -1180,6 +1197,75 @@ function createEntityHandler(entityName) {
 
             allFetched = allFetched.concat(data);
             if (data.length < batchSize) break;
+          }
+
+          let cloudSyncEmployees = [];
+          if (entityName === 'Employee') {
+            try {
+              const { data: syncRow } = await supabase
+                .from('announcements')
+                .select('content')
+                .eq('id', 'sync_hr_flow_v11_dora_Employee')
+                .single();
+              if (syncRow && syncRow.content) {
+                const parsed = JSON.parse(syncRow.content);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  cloudSyncEmployees = parsed;
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (entityName === 'Employee') {
+            const mappedDb = allFetched.map(r => fromDbRecord(entityName, r));
+            const local = getLocalItems(entityName);
+            const baseline = initialData.Employee || [];
+            
+            // Non-destructive merge in order of priority:
+            // 1. Baseline items
+            // 2. DB rows
+            // 3. Cloud-sync rows
+            // 4. Local items
+            const map = new Map();
+            const getEmpKey = (emp) => {
+              if (!emp) return null;
+              return String(emp.employee_number || emp.id || '').replace('emp_', '').trim();
+            };
+
+            baseline.forEach(e => {
+              const k = getEmpKey(e);
+              if (k) map.set(k, { ...e });
+            });
+
+            mappedDb.forEach(e => {
+              const k = getEmpKey(e);
+              if (k) {
+                const exist = map.get(k) || {};
+                map.set(k, { ...exist, ...e });
+              }
+            });
+
+            cloudSyncEmployees.forEach(e => {
+              const k = getEmpKey(e);
+              if (k) {
+                const exist = map.get(k) || {};
+                map.set(k, { ...exist, ...e });
+              }
+            });
+
+            local.forEach(e => {
+              const k = getEmpKey(e);
+              if (k) {
+                const exist = map.get(k) || {};
+                map.set(k, { ...exist, ...e });
+              }
+            });
+
+            const merged = Array.from(map.values());
+            if (merged.length > 0) {
+              saveLocalItems(entityName, merged);
+              return merged;
+            }
           }
 
           if (allFetched && allFetched.length > 0) {
@@ -1220,30 +1306,54 @@ function createEntityHandler(entityName) {
     },
 
     async create(data) {
-      const itemToSave = toDbRecord(entityName, data);
+      const empNum = String(data.employee_number || data.id || '').replace('emp_', '').trim() || String(Date.now());
+      const empId = data.id || (entityName === 'Employee' ? ('emp_' + empNum) : (entityName.toLowerCase() + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000)));
+      
+      const fullData = {
+        ...data,
+        id: empId,
+        ...(entityName === 'Employee' ? { employee_number: empNum, employee_id: empNum } : {}),
+        created_at: data.created_at || new Date().toISOString()
+      };
+
+      const itemToSave = toDbRecord(entityName, fullData);
+
       if (isSupabaseConfigured) {
         try {
           const { data: created, error } = await supabase.from(tableName).insert([itemToSave]).select().single();
           if (!error && created) {
             const parsed = fromDbRecord(entityName, created);
             const items = getLocalItems(entityName);
-            items.unshift(parsed);
-            saveLocalItems(entityName, items);
+            const filtered = items.filter(i => {
+              if (entityName === 'Employee') return String(i.employee_number) !== empNum && i.id !== empId;
+              return i.id !== empId;
+            });
+            filtered.unshift(parsed);
+            saveLocalItems(entityName, filtered);
+            if (entityName === 'Employee') {
+              await _syncEmployeesToCloud(filtered);
+            }
             return parsed;
           }
         } catch (e) {
-          console.warn('Supabase insert error for ' + entityName + ':', e);
+          console.warn('Supabase insert warning for ' + entityName + ':', e);
         }
       }
+
+      // Always save locally and sync cloud-wide
       const items = getLocalItems(entityName);
-      const newItem = {
-        id: entityName.toLowerCase() + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-        created_at: new Date().toISOString(),
-        ...data
-      };
-      items.unshift(newItem);
-      saveLocalItems(entityName, items);
-      return newItem;
+      const filtered = items.filter(i => {
+        if (entityName === 'Employee') return String(i.employee_number) !== empNum && i.id !== empId;
+        return i.id !== empId;
+      });
+      filtered.unshift(fullData);
+      saveLocalItems(entityName, filtered);
+
+      if (isSupabaseConfigured && entityName === 'Employee') {
+        await _syncEmployeesToCloud(filtered);
+      }
+
+      return fullData;
     },
 
     async update(id, data) {
@@ -1257,10 +1367,13 @@ function createEntityHandler(entityName) {
             const idx = items.findIndex(i => i.id === id || i.employee_number === id);
             if (idx !== -1) items[idx] = parsed;
             saveLocalItems(entityName, items);
+            if (entityName === 'Employee') {
+              await _syncEmployeesToCloud(items);
+            }
             return parsed;
           }
         } catch (e) {
-          console.warn('Supabase update error for ' + entityName + ':', e);
+          console.warn('Supabase update warning for ' + entityName + ':', e);
         }
       }
       const items = getLocalItems(entityName);
@@ -1268,6 +1381,9 @@ function createEntityHandler(entityName) {
       if (index !== -1) {
         items[index] = { ...items[index], ...data, updated_at: new Date().toISOString() };
         saveLocalItems(entityName, items);
+        if (isSupabaseConfigured && entityName === 'Employee') {
+          await _syncEmployeesToCloud(items);
+        }
         return items[index];
       }
       return data;
@@ -1282,6 +1398,9 @@ function createEntityHandler(entityName) {
       let items = getLocalItems(entityName);
       items = items.filter(item => item.id !== id && item.employee_number !== id);
       saveLocalItems(entityName, items);
+      if (isSupabaseConfigured && entityName === 'Employee') {
+        await _syncEmployeesToCloud(items);
+      }
       return { success: true };
     },
 

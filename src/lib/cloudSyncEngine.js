@@ -10,7 +10,8 @@ export const SYNC_KEYS = {
   COMPANY_PROFILE: 'company_profile_data',
   CONTRACTS: 'hr_flow_v12_contracts_store',
   EVALUATIONS: 'green_arrow_hr_evaluations_store',
-  ANNOUNCEMENTS: 'green_arrow_hr_live_announcements'
+  ANNOUNCEMENTS: 'green_arrow_hr_live_announcements',
+  EMPLOYEES: 'hr_flow_v11_dora_Employee'
 };
 
 export const SUPABASE_SYNC_MAP = {
@@ -23,7 +24,8 @@ export const SUPABASE_SYNC_MAP = {
   'company_profile_data': 'sync_company_profile',
   'hr_flow_v12_contracts_store': 'sync_contracts',
   'green_arrow_hr_evaluations_store': 'sync_evaluations',
-  'green_arrow_hr_live_announcements': 'sync_announcements'
+  'green_arrow_hr_live_announcements': 'sync_announcements',
+  'hr_flow_v11_dora_Employee': 'sync_hr_flow_v11_dora_Employee'
 };
 
 /**
@@ -34,10 +36,16 @@ export function mergeRecords(primary = [], secondary = []) {
   const sList = Array.isArray(secondary) ? secondary : [];
   const map = new Map();
 
+  const getRecordKey = (item) => {
+    if (!item || typeof item !== 'object') return null;
+    if (item.employee_number) return 'emp_' + String(item.employee_number).replace('emp_', '');
+    return String(item.id || item.unified_id || item.request_number || (item.date || item.created_at || ''));
+  };
+
   // Secondary first
   sList.forEach(item => {
     if (item && typeof item === 'object') {
-      const id = String(item.id || item.unified_id || item.request_number || (item.employee_number + '_' + (item.date || item.created_at || '')));
+      const id = getRecordKey(item);
       if (id) map.set(id, item);
     }
   });
@@ -45,7 +53,7 @@ export function mergeRecords(primary = [], secondary = []) {
   // Primary (newer/cloud) overlays secondary
   pList.forEach(item => {
     if (item && typeof item === 'object') {
-      const id = String(item.id || item.unified_id || item.request_number || (item.employee_number + '_' + (item.date || item.created_at || '')));
+      const id = getRecordKey(item);
       if (id) {
         const existing = map.get(id);
         map.set(id, existing ? { ...existing, ...item } : item);

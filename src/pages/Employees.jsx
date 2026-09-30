@@ -1,6 +1,6 @@
 import { MaskedSalary, PrivacyMaskToggle } from '@/lib/FinancialPrivacyContext';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { sanitizeCsvRow } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
@@ -78,6 +78,7 @@ export default function Employees() {
     { id: 'sh_ramadan', name: 'شفت رمضان', working_hours: 5.5 }
   ]);
   const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Filters & Search (Default to active employees only per user directive)
   const [search, setSearch] = useState('');
@@ -94,13 +95,13 @@ export default function Employees() {
     job_title: 'بائع قطع غيار',
     branch_name: 'الفرع الرئيسي',
     department_name: 'درة السيارة لقطع الغيار',
-    shift: 'فترة عمل غير السعوديين',
+    shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
     nationality: 'سعودي',
     national_id: '',
     phone: '',
     email: '',
     salary: 3000,
-    join_date: '2026-01-01',
+    join_date: new Date().toISOString().split('T')[0],
     gender: 'male',
     status: 'active'
   });
@@ -127,6 +128,43 @@ export default function Employees() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Handle ?action=new from URL (e.g. QuickActionsGrid or Dashboard button)
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      const validNums = (employees || [])
+        .map(e => Number(e.employee_number))
+        .filter(n => !isNaN(n) && n > 0);
+      const maxNum = validNums.length > 0 ? Math.max(...validNums) : 1035;
+      const nextNum = String(maxNum + 1);
+
+      setEditingEmp(null);
+      setForm({
+        employee_number: nextNum,
+        full_name: '',
+        job_title: 'بائع قطع غيار',
+        branch_name: 'الفرع الرئيسي',
+        department_name: 'درة السيارة لقطع الغيار',
+        shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
+        nationality: 'سعودي',
+        national_id: '',
+        phone: '',
+        email: '',
+        salary: 3000,
+        join_date: new Date().toISOString().split('T')[0],
+        gender: 'male',
+        status: 'active'
+      });
+      setModalOpen(true);
+
+      // Clean URL parameter
+      setSearchParams(prev => {
+        const p = new URLSearchParams(prev);
+        p.delete('action');
+        return p;
+      }, { replace: true });
+    }
+  }, [searchParams, employees, setSearchParams]);
 
   // Statistics calculation (Ektefa Exact KPI cards)
   const stats = useMemo(() => {
@@ -190,7 +228,12 @@ export default function Employees() {
 
   // Handle Add New
   const handleOpenAdd = () => {
-    const nextNum = String(Math.max(...employees.map(e => Number(e.employee_number) || 1000)) + 1);
+    const validNums = (employees || [])
+      .map(e => Number(e.employee_number))
+      .filter(n => !isNaN(n) && n > 0);
+    const maxNum = validNums.length > 0 ? Math.max(...validNums) : 1035;
+    const nextNum = String(maxNum + 1);
+
     setEditingEmp(null);
     setForm({
       employee_number: nextNum,
@@ -198,10 +241,10 @@ export default function Employees() {
       job_title: 'بائع قطع غيار',
       branch_name: 'الفرع الرئيسي',
       department_name: 'درة السيارة لقطع الغيار',
-      shift: 'فترة عمل غير السعوديين',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       nationality: 'سعودي',
       national_id: '',
-      phone: '966',
+      phone: '',
       email: '',
       salary: 3000,
       join_date: new Date().toISOString().split('T')[0],
@@ -251,7 +294,14 @@ export default function Employees() {
         toast({ title: '✓ تم تحديث بيانات الموظف والوردية بنجاح وحفظها في قاعدة البيانات' });
       } else {
         await base44.entities.Employee.create(form);
-        toast({ title: '✓ تم إضافة الموظف الجديد بنجاح' });
+        toast({
+          title: '✓ تم إضافة الموظف الجديد بنجاح',
+          description: `تم حفظ الموظف (${form.full_name}) برقم ${form.employee_number} ومزامنته سحابياً`
+        });
+        // Switch to 'all' so new employee is immediately visible at the top!
+        setActiveTabFilter('all');
+        setBranchFilter('all');
+        setSearch('');
       }
       setModalOpen(false);
       await loadData();

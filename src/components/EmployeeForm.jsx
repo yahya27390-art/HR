@@ -54,18 +54,18 @@ const empty = {
   job_title: '',
   department: 'مكتب الإدارة',
   department_name: 'مكتب الإدارة',
-  branch: 'مكتب الإدارة',
-  branch_name: 'مكتب الإدارة',
-  shift: 'فترة عمل غير سعودي',
+  branch: 'الفرع الرئيسي',
+  branch_name: 'الفرع الرئيسي',
+  shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
   leave_policy: 'الاجازة السنوية',
-  hire_date: '2025-01-01',
-  join_date: '2025-01-01',
+  hire_date: new Date().toISOString().split('T')[0],
+  join_date: new Date().toISOString().split('T')[0],
   salary: '3000',
   housing_allowance: '0',
   transport_allowance: '0',
   status: 'active',
-  employee_id: '1036',
-  employee_number: '1036',
+  employee_id: '',
+  employee_number: '',
   national_id: '',
   id_expiry_date: '',
   nationality: 'سعودي',
@@ -100,9 +100,9 @@ export default function EmployeeForm({ open, onOpenChange, employee, departments
           ...employee,
           department: employee.department || employee.department_name || 'مكتب الإدارة',
           department_name: employee.department_name || employee.department || 'مكتب الإدارة',
-          branch: employee.branch || employee.branch_name || 'مكتب الإدارة',
-          branch_name: employee.branch_name || employee.branch || 'مكتب الإدارة',
-          shift: employee.shift || 'فترة عمل غير سعودي',
+          branch: employee.branch || employee.branch_name || 'الفرع الرئيسي',
+          branch_name: employee.branch_name || employee.branch || 'الفرع الرئيسي',
+          shift: employee.shift || 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
           leave_policy: employee.leave_policy || 'الاجازة السنوية',
           annual_leave_entitlement: employee.annual_leave_entitlement !== undefined && employee.annual_leave_entitlement !== null ? employee.annual_leave_entitlement : 21,
           opening_consumed_leaves: employee.opening_consumed_leaves !== undefined && employee.opening_consumed_leaves !== null ? employee.opening_consumed_leaves : 0,
@@ -115,7 +115,22 @@ export default function EmployeeForm({ open, onOpenChange, employee, departments
           gosi_number: isInsuredVal ? (employee.gosi_number || '') : ''
         });
       } else {
-        setForm({ ...empty, employee_number: String(1000 + Math.floor(Math.random() * 900)) });
+        base44.entities.Employee.list().then(list => {
+          const validNums = (list || [])
+            .map(e => Number(e.employee_number))
+            .filter(n => !isNaN(n) && n > 0);
+          const maxNum = validNums.length > 0 ? Math.max(...validNums) : 1035;
+          const nextNum = String(maxNum + 1);
+          setForm({
+            ...empty,
+            employee_number: nextNum,
+            employee_id: nextNum,
+            join_date: new Date().toISOString().split('T')[0],
+            hire_date: new Date().toISOString().split('T')[0]
+          });
+        }).catch(() => {
+          setForm(empty);
+        });
       }
       setShowIdentity(false);
     }
