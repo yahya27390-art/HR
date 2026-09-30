@@ -1565,6 +1565,90 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     }
   });
 
+  // ─── ENSURE FULL CALENDAR GRID FOR THE MONTH (توليد شبكة أيام الشهر كاملة للمسير) ───
+  // A complete monthly payroll table must display all calendar days (1 to 28/29/30/31).
+  // Days without punch logs must be represented as:
+  // - Friday (عطلة جمعة)
+  // - Saudi National Day (اليوم الوطني السعودي)
+  // - Official Holiday (عطلة رسمية)
+  // - Absent (غائب) for regular work days with no attendance
+  let targetYear = null;
+  let targetMonth = null;
+  let daysInMonth = 30;
+
+  if (monthPrefix && monthPrefix.includes('-')) {
+    const parts = monthPrefix.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+      targetYear = y;
+      targetMonth = m;
+      daysInMonth = new Date(y, m, 0).getDate();
+    }
+  } else {
+    const now = new Date();
+    targetYear = now.getFullYear();
+    targetMonth = now.getMonth() + 1;
+    daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+  }
+
+  if (targetYear && targetMonth) {
+    const yStr = String(targetYear);
+    const mStr = String(targetMonth).padStart(2, '0');
+    const hireDateStr = emp.join_date || emp.hire_date || null;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dStr = `${yStr}-${mStr}-${String(day).padStart(2, '0')}`;
+      if (!dateMap[dStr]) {
+        const dummyLog = { log_date: dStr };
+        const isFri = isFriday(dummyLog);
+        const isNatDay = isNationalDay(dummyLog);
+        const holidayInfo = isOfficialHoliday(dummyLog);
+        const isBeforeHire = hireDateStr && dStr < hireDateStr;
+
+        let dayStatus = 'absent';
+        let dayStatusLabel = 'غائب';
+        let isExemptDay = false;
+
+        if (isFri) {
+          dayStatus = 'friday';
+          dayStatusLabel = 'جمعة (عطلة أسبوعية)';
+        } else if (isNatDay) {
+          dayStatus = 'official_holiday';
+          dayStatusLabel = 'اليوم الوطني السعودي 🇸🇦';
+        } else if (holidayInfo) {
+          dayStatus = 'official_holiday';
+          dayStatusLabel = holidayInfo.name || 'عطلة رسمية';
+        } else if (isBeforeHire) {
+          dayStatus = 'exempt';
+          dayStatusLabel = 'قبل تاريخ المباشرة';
+          isExemptDay = true;
+        }
+
+        dateMap[dStr] = {
+          id: `att_${empNum || empId}_${dStr.replace(/-/g, '_')}`,
+          log_date: dStr,
+          day_name: getArabicDayName(dStr),
+          employee_id: empId,
+          employee_number: empNum,
+          employee_name: empName,
+          check_in: null,
+          check_out: null,
+          period_1_in: '',
+          period_1_out: '',
+          period_2_in: '',
+          period_2_out: '',
+          total_hours: 0,
+          actual_minutes: 0,
+          status: dayStatus,
+          status_label: dayStatusLabel,
+          is_exempt: isExemptDay,
+          is_synthesized_day: true
+        };
+      }
+    }
+  }
+
   const uniqueLogs = Object.values(dateMap).sort((a, b) => (a.log_date || '').localeCompare(b.log_date || ''));
 
   let totalRequiredMinutes = 0, totalActualMinutes = 0;
