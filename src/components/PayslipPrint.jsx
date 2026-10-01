@@ -88,6 +88,7 @@ export default function PayslipPrint({ payroll, monthLabel, onClose }) {
 
   const {
     emp = {}, basicSalary = 0, housing = 0, transport = 0,
+    purchasesAllowance = 0, electricity = 0, otherAllowance = 0,
     fridayAllowance = 0, fridayNote = '',
     nationalDayAllowance = 0, nationalDayNote = '',
     dailyOvertimeAllowance = 0, dailyOvertimeNote = '',
@@ -384,6 +385,22 @@ export default function PayslipPrint({ payroll, monthLabel, onClose }) {
                     <span className="font-bold text-slate-800">بدل الانتقال والمواصلات</span>
                     <span className="font-mono font-bold text-slate-800">{fmtSAR(transport)} ر.س</span>
                   </div>
+
+                  {/* Purchases Allowance (بدل مشتريات) */}
+                  {(Number(purchasesAllowance) > 0 || Number(payroll.purchases_allowance) > 0) && (
+                    <div className="flex items-center justify-between p-1.5 hover:bg-slate-50">
+                      <span className="font-bold text-slate-800">بدل المشتريات</span>
+                      <span className="font-mono font-bold text-slate-800">+{fmtSAR(purchasesAllowance || payroll.purchases_allowance)} ر.س</span>
+                    </div>
+                  )}
+
+                  {/* Electricity / Other Allowance */}
+                  {(Number(electricity) > 0 || Number(otherAllowance) > 0) && (
+                    <div className="flex items-center justify-between p-1.5 hover:bg-slate-50">
+                      <span className="font-bold text-slate-800">بدلات أخرى / كهرباء</span>
+                      <span className="font-mono font-bold text-slate-800">+{fmtSAR((Number(electricity) || 0) + (Number(otherAllowance) || 0))} ر.س</span>
+                    </div>
+                  )}
 
                   {/* Friday Allowance */}
                   {fridayAllowance > 0 && (

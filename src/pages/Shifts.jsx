@@ -161,9 +161,9 @@ export default function Shifts() {
         return empNum === '1001' || empShift.includes('المدير') || empShift.includes('الاداره');
       }
 
-      // 3. Overtime Non-Saudi Match (Yahya Basha & Hesham Zaghloul)
+      // 3. Overtime Non-Saudi Match (Yahya Basha)
       if (shiftName.includes('9 ساعات') || shiftId === 'sh_non_saudi_overtime') {
-        return empNum === '1022' || empNum === '1005' || empShift.includes('745') || empShift.includes('إضافي');
+        return empNum === '1022' || empShift.includes('745') || empShift.includes('إضافي 100');
       }
 
       // 4. Saudi Morning Match
@@ -183,7 +183,7 @@ export default function Shifts() {
 
       // 7. Base Non-Saudi 8h Match
       if (shiftName.includes('الأساسي') || shiftName === 'فترة عمل غير سعودي' || shiftId === 'sh_non_saudi') {
-        if (empNum === '1022' || empNum === '1005' || empNum === '1001') return false;
+        if (empNum === '1022' || empNum === '1001') return false;
         return (
           e.nationality !== 'سعودي' || 
           empShift.includes('غير سعودي') || 

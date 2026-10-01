@@ -1,9 +1,28 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteRule ^index\.html$ - [L]
+
+  # ADMS Cloud Biometric Protocol Routes
+  RewriteRule ^iclock/cdata.*$ /iclock/cdata.php [L,QSA]
+  RewriteRule ^iclock/getrequest.*$ /iclock/getrequest.php [L,QSA]
+  RewriteRule ^iclock/devicecmd.*$ /iclock/devicecmd.php [L,QSA]
+  RewriteRule ^cdata.*$ /iclock/cdata.php [L,QSA]
+  RewriteRule ^getrequest.*$ /iclock/getrequest.php [L,QSA]
+  RewriteRule ^devicecmd.*$ /iclock/devicecmd.php [L,QSA]
+  RewriteRule ^iclock/.*$ /iclock/cdata.php [L,QSA]
+  RewriteRule ^api/adms/push.*$ /iclock/cdata.php [L,QSA]
+
+  # Existing files and directories
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteCond %{REQUEST_FILENAME} !-l
   RewriteRule . /index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|htm)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
 </IfModule>

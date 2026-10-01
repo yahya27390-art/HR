@@ -127,6 +127,7 @@ export default function EmployeeDetail() {
   const [allowanceForm, setAllowanceForm] = useState({
     housing_allowance: 0,
     transport_allowance: 0,
+    purchases_allowance: 0,
     electricity_allowance: 0,
     phone_allowance: 0,
     other_allowance: 0,
@@ -359,6 +360,48 @@ export default function EmployeeDetail() {
 
       setEditInsuranceModal(false);
       toast({ title: '✓ تم حفظ وتحديث بيانات التأمين وطريقة الصرف المالي بنجاح' });
+    } catch (e) {
+      toast({ title: 'خطأ أثناء الحفظ', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  // Save Allowances Package
+  const handleSaveAllowances = async () => {
+    if (!employee) return;
+    try {
+      const updated = {
+        ...employee,
+        housing_allowance:     Number(allowanceForm.housing_allowance)     || 0,
+        transport_allowance:   Number(allowanceForm.transport_allowance)   || 0,
+        purchases_allowance:   Number(allowanceForm.purchases_allowance)   || 0,
+        procurement_allowance: Number(allowanceForm.purchases_allowance)   || 0,
+        electricity_allowance: Number(allowanceForm.electricity_allowance) || 0,
+        phone_allowance:       Number(allowanceForm.phone_allowance)       || 0,
+        other_allowance:       Number(allowanceForm.other_allowance)       || 0,
+        allowance_notes:       allowanceForm.allowance_notes || ''
+      };
+
+      await base44.entities.Employee.update(employee.id, updated);
+      setEmployee(updated);
+
+      // Sync local storage caches
+      const storageKeys = ['green_arrow_hr_Employee', 'green_arrow_hr_employees', 'hr_flow_employees'];
+      storageKeys.forEach(k => {
+        try {
+          const list = JSON.parse(localStorage.getItem(k) || '[]');
+          if (Array.isArray(list)) {
+            const idx = list.findIndex(e => String(e.id) === String(employee.id) || String(e.employee_number) === String(employee.employee_number));
+            if (idx !== -1) {
+              list[idx] = { ...list[idx], ...updated };
+              localStorage.setItem(k, JSON.stringify(list));
+            }
+          }
+        } catch (e) {}
+      });
+
+      window.dispatchEvent(new CustomEvent('hr_employee_updated', { detail: updated }));
+      setEditAllowancesModal(false);
+      toast({ title: '✓ تم حفظ باقة البدلات وتحديث ملف الموظف بنجاح' });
     } catch (e) {
       toast({ title: 'خطأ أثناء الحفظ', description: e.message, variant: 'destructive' });
     }
@@ -1513,6 +1556,7 @@ export default function EmployeeDetail() {
                         setAllowanceForm({
                           housing_allowance: employee.housing_allowance || 0,
                           transport_allowance: employee.transport_allowance || 0,
+                          purchases_allowance: employee.purchases_allowance !== undefined ? employee.purchases_allowance : (employee.procurement_allowance !== undefined ? employee.procurement_allowance : (employee.phone_allowance || 0)),
                           electricity_allowance: employee.electricity_allowance || 0,
                           phone_allowance: employee.phone_allowance || 0,
                           other_allowance: employee.other_allowance || 0,
@@ -1527,11 +1571,12 @@ export default function EmployeeDetail() {
                     </Button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
                   <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border">الأساسي: <strong className="font-mono"><MaskedSalary value={employee.salary} /></strong></div>
                   <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border">بدل السكن: <strong className="font-mono text-sky-700"><MaskedSalary value={employee.housing_allowance || 0} /></strong></div>
                   <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border">بدل النقل: <strong className="font-mono text-emerald-700"><MaskedSalary value={employee.transport_allowance || 0} /></strong></div>
-                  <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300">إجمالي الراتب: <strong className="font-mono text-emerald-800 font-black"><MaskedSalary value={Number(employee.salary || 0) + Number(employee.housing_allowance || 0) + Number(employee.transport_allowance || 0) + Number(employee.electricity_allowance || 0) + Number(employee.phone_allowance || 0) + Number(employee.other_allowance || 0)} /></strong></div>
+                  <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-300">بدل مشتريات: <strong className="font-mono text-sky-800 font-bold"><MaskedSalary value={employee.purchases_allowance !== undefined ? employee.purchases_allowance : (employee.procurement_allowance !== undefined ? employee.procurement_allowance : (employee.phone_allowance || 0))} /></strong></div>
+                  <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300">إجمالي الراتب: <strong className="font-mono text-emerald-800 font-black"><MaskedSalary value={Number(employee.salary || 0) + Number(employee.housing_allowance || 0) + Number(employee.transport_allowance || 0) + Number(employee.purchases_allowance !== undefined ? employee.purchases_allowance : (employee.procurement_allowance !== undefined ? employee.procurement_allowance : (employee.phone_allowance || 0))) + Number(employee.electricity_allowance || 0) + Number(employee.other_allowance || 0)} /></strong></div>
                 </div>
               </div>
             </Card>
@@ -1565,6 +1610,122 @@ export default function EmployeeDetail() {
         </div>
 
       </div>
+
+      {/* ─── MODAL 0: EDIT ALLOWANCES PACKAGE ────────────────────────────── */}
+      <Dialog open={editAllowancesModal} onOpenChange={setEditAllowancesModal}>
+        <DialogContent className="sm:max-w-md rounded-3xl" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-heading font-black flex items-center gap-2">
+              <Coins className="w-5 h-5 text-indigo-600" />
+              <span>تعديل باقة بدلات الموظف</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            {/* Basic Salary (read-only reference) */}
+            <div className="p-3 rounded-2xl bg-muted/40 border flex justify-between items-center">
+              <span className="font-bold text-foreground">الراتب الأساسي (مرجع):</span>
+              <span className="font-mono font-black text-foreground">{Number(employee?.salary || 0).toLocaleString('en-US')} ر.س</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="font-bold">🏠 بدل السكن (ر.س):</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={allowanceForm.housing_allowance}
+                  onChange={(e) => setAllowanceForm(prev => ({ ...prev, housing_allowance: Number(e.target.value) }))}
+                  className="rounded-xl font-mono text-xs font-bold h-9"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="font-bold">🚗 بدل النقل (ر.س):</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={allowanceForm.transport_allowance}
+                  onChange={(e) => setAllowanceForm(prev => ({ ...prev, transport_allowance: Number(e.target.value) }))}
+                  className="rounded-xl font-mono text-xs font-bold h-9"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="font-bold">⚡ بدل الكهرباء (ر.س):</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={allowanceForm.electricity_allowance}
+                  onChange={(e) => setAllowanceForm(prev => ({ ...prev, electricity_allowance: Number(e.target.value) }))}
+                  className="rounded-xl font-mono text-xs font-bold h-9"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="font-bold text-sky-800 dark:text-sky-300">🛒 بدل المشتريات (ر.س):</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={allowanceForm.purchases_allowance}
+                  onChange={(e) => setAllowanceForm(prev => ({ ...prev, purchases_allowance: Number(e.target.value) }))}
+                  className="rounded-xl font-mono text-xs font-bold h-9"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="font-bold">📱 بدل الهاتف (ر.س):</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={allowanceForm.phone_allowance}
+                  onChange={(e) => setAllowanceForm(prev => ({ ...prev, phone_allowance: Number(e.target.value) }))}
+                  className="rounded-xl font-mono text-xs font-bold h-9"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="font-bold">➕ بدلات أخرى (ر.س):</Label>
+              <Input
+                type="number"
+                min="0"
+                value={allowanceForm.other_allowance}
+                onChange={(e) => setAllowanceForm(prev => ({ ...prev, other_allowance: Number(e.target.value) }))}
+                className="rounded-xl font-mono text-xs font-bold h-9"
+                placeholder="0"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="font-bold">ملاحظات الباقة:</Label>
+              <Input
+                value={allowanceForm.allowance_notes}
+                onChange={(e) => setAllowanceForm(prev => ({ ...prev, allowance_notes: e.target.value }))}
+                className="rounded-xl text-xs h-9"
+                placeholder="ملاحظات..."
+              />
+            </div>
+
+            {/* Live Total Preview */}
+            <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 flex justify-between items-center">
+              <span className="font-bold text-emerald-800 dark:text-emerald-200">إجمالي الراتب الكلي:</span>
+              <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base">
+                {(Number(employee?.salary || 0) + Number(allowanceForm.housing_allowance || 0) + Number(allowanceForm.transport_allowance || 0) + Number(allowanceForm.purchases_allowance || 0) + Number(allowanceForm.electricity_allowance || 0) + Number(allowanceForm.phone_allowance || 0) + Number(allowanceForm.other_allowance || 0)).toLocaleString('en-US')} ر.س
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 mt-2">
+            <Button variant="outline" onClick={() => setEditAllowancesModal(false)} className="rounded-xl font-bold text-xs">إلغاء</Button>
+            <Button onClick={handleSaveAllowances} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md gap-1">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>حفظ باقة البدلات سحابياً 💾</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── MODAL 1: EDIT INSURANCE & GOSI ──────────────────────────────── */}
       <Dialog open={editInsuranceModal} onOpenChange={setEditInsuranceModal}>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { cleanCell } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
+import { cloudSave } from '@/lib/cloudSyncEngine';
 import { useAuth } from '@/lib/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -220,12 +221,18 @@ export default function Allowances() {
 
       try {
         localStorage.setItem('hr_allowances_backup_' + emp.id, JSON.stringify(updatedRecord));
+        if (emp.employee_number) {
+          localStorage.setItem('hr_allowances_backup_' + emp.employee_number, JSON.stringify(updatedRecord));
+          localStorage.setItem('hr_allowances_backup_emp_' + emp.employee_number, JSON.stringify(updatedRecord));
+        }
+        cloudSave('hr_allowances_backup_' + emp.id, updatedRecord);
       } catch (err) {}
 
       await base44.entities.Employee.update(emp.id, updatedRecord);
 
       // In-memory update
-      setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, ...updatedRecord } : e));
+      setEmployees(prev => prev.map(e => (e.id === emp.id || e.employee_number === emp.employee_number) ? { ...e, ...updatedRecord } : e));
+      window.dispatchEvent(new CustomEvent('hr_employee_updated', { detail: updatedRecord }));
 
       toast({
         title: '✓ تم حفظ وتحديث البدلات بنجاح',

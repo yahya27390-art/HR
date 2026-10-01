@@ -65,7 +65,7 @@ export function mergeRecords(primary = [], secondary = []) {
 }
 
 /**
- * Save data locally AND push to Supabase Cloud
+ * Save data locally AND push to Hostinger Cloud Backend (and Supabase)
  */
 export async function cloudSave(key, data) {
   try {
@@ -79,8 +79,15 @@ export async function cloudSave(key, data) {
       localStorage.setItem(SYNC_KEYS.ADVANCES, serialized);
     }
 
+    // 1. Primary: Hostinger PHP Cloud Sync (Instant & No RLS blocking)
+    fetch('/api/cloud_sync.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set', key, data })
+    }).catch(err => console.warn('PHP CloudSave non-critical warning:', err));
+
+    // 2. Secondary: Supabase Cloud
     const safeSyncId = 'sync_' + key.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 60);
-    
     if (base44.supabase) {
       const payload = {
         id: safeSyncId,
@@ -91,9 +98,11 @@ export async function cloudSave(key, data) {
         date: new Date().toISOString().split('T')[0],
       };
 
-      await base44.supabase
+      base44.supabase
         .from('announcements')
-        .upsert([payload], { onConflict: 'id' });
+        .upsert([payload], { onConflict: 'id' })
+        .then(() => {})
+        .catch(() => {});
     }
   } catch (e) {
     console.warn('CloudSave warning for key ' + key + ':', e);
@@ -106,13 +115,14 @@ export async function cloudSave(key, data) {
 export async function cloudLoad(key, defaultValue = []) {
   try {
     // 1. Get current local data
-    let localData = [];
+    let localData = null;
     const local = localStorage.getItem(key);
     if (local !== null) {
       try {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) localData = parsed;
-      } catch (e) {}
+        localData = JSON.parse(local);
+      } catch (e) {
+        localData = local;
+      }
     }
 
     // Also check alias if advances
@@ -121,51 +131,73 @@ export async function cloudLoad(key, defaultValue = []) {
         const altKey = key === SYNC_KEYS.ADVANCES ? SYNC_KEYS.ADVANCES_ALIAS : SYNC_KEYS.ADVANCES;
         const alt = JSON.parse(localStorage.getItem(altKey) || '[]');
         if (Array.isArray(alt) && alt.length > 0) {
-          localData = mergeRecords(localData, alt);
+          localData = mergeRecords(Array.isArray(localData) ? localData : [], alt);
         }
       } catch (e) {}
     }
 
-    // 2. Fetch from Supabase Cloud
-    const syncId = SUPABASE_SYNC_MAP[key] || (key.startsWith('hr_flow_approval_') ? ('sync_appr_' + key.replace('hr_flow_approval_', '')) : null);
-    let cloudData = [];
+    let cloudData = null;
 
-    if (syncId && base44.supabase) {
-      const { data, error } = await base44.supabase
-        .from('announcements')
-        .select('content')
-        .eq('id', syncId)
-        .single();
+    // 2. Fetch from Hostinger PHP Cloud Sync (Authoritative)
+    try {
+      const res = await fetch(`/api/cloud_sync.php?action=get&key=${encodeURIComponent(key)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.status === 'success' && json.data !== null && json.data !== undefined) {
+          cloudData = json.data;
+        }
+      }
+    } catch (e) {}
 
-      if (!error && data && data.content) {
+    // 3. Fallback to Supabase Cloud if PHP had nothing
+    if (cloudData === null) {
+      const syncId = SUPABASE_SYNC_MAP[key] || (key.startsWith('hr_flow_approval_') ? ('sync_appr_' + key.replace('hr_flow_approval_', '')) : null);
+      if (syncId && base44.supabase) {
         try {
-          const parsed = JSON.parse(data.content);
-          if (Array.isArray(parsed)) cloudData = parsed;
+          const { data, error } = await base44.supabase
+            .from('announcements')
+            .select('content')
+            .eq('id', syncId)
+            .single();
+
+          if (!error && data && data.content) {
+            try {
+              cloudData = JSON.parse(data.content);
+            } catch (e) {
+              cloudData = data.content;
+            }
+          }
         } catch (e) {}
       }
     }
 
-    // 3. Smart Merge: NEVER erase local with empty cloud
-    const merged = mergeRecords(cloudData, localData);
-
-    // If local had items not in cloud, push merged back to cloud!
-    if (merged.length > 0) {
-      const serialized = JSON.stringify(merged);
-      localStorage.setItem(key, serialized);
-      if (key === SYNC_KEYS.ADVANCES) localStorage.setItem(SYNC_KEYS.ADVANCES_ALIAS, serialized);
-      else if (key === SYNC_KEYS.ADVANCES_ALIAS) localStorage.setItem(SYNC_KEYS.ADVANCES, serialized);
-
-      if (cloudData.length < merged.length && syncId && base44.supabase) {
-        cloudSave(key, merged);
+    // 4. Merge logic
+    if (Array.isArray(cloudData) || Array.isArray(localData)) {
+      const merged = mergeRecords(Array.isArray(cloudData) ? cloudData : [], Array.isArray(localData) ? localData : []);
+      if (merged.length > 0) {
+        const serialized = JSON.stringify(merged);
+        localStorage.setItem(key, serialized);
+        if (key === SYNC_KEYS.ADVANCES) localStorage.setItem(SYNC_KEYS.ADVANCES_ALIAS, serialized);
+        else if (key === SYNC_KEYS.ADVANCES_ALIAS) localStorage.setItem(SYNC_KEYS.ADVANCES, serialized);
+        return merged;
       }
+    } else if (cloudData && typeof cloudData === 'object') {
+      const mergedObj = { ...(localData && typeof localData === 'object' ? localData : {}), ...cloudData };
+      localStorage.setItem(key, JSON.stringify(mergedObj));
+      return mergedObj;
+    } else if (cloudData !== null && cloudData !== undefined) {
+      const strVal = typeof cloudData === 'object' ? JSON.stringify(cloudData) : String(cloudData);
+      localStorage.setItem(key, strVal);
+      return cloudData;
     }
 
-    return merged.length > 0 ? merged : (Array.isArray(defaultValue) ? defaultValue : []);
+    if (localData !== null && localData !== undefined) return localData;
+    return defaultValue;
   } catch (e) {
     console.warn('CloudLoad warning for key ' + key + ':', e);
     try {
       const fallback = JSON.parse(localStorage.getItem(key) || '[]');
-      return Array.isArray(fallback) ? fallback : defaultValue;
+      return fallback !== null && fallback !== undefined ? fallback : defaultValue;
     } catch(err) {
       return defaultValue;
     }
@@ -176,38 +208,73 @@ export async function cloudLoad(key, defaultValue = []) {
  * Initial Full Cloud Sync on App Startup with Non-Destructive Merging
  */
 export async function initFullCloudSync() {
-  if (!base44.supabase) return;
-
   try {
-    const { data, error } = await base44.supabase
-      .from('announcements')
-      .select('id, title, content')
-      .eq('category', 'cloud_sync');
-
-    if (!error && Array.isArray(data) && data.length > 0) {
-      data.forEach(row => {
-        if (row.title && row.content) {
-          try {
-            const cloudArr = JSON.parse(row.content);
-            if (Array.isArray(cloudArr)) {
-              let localArr = [];
-              try { localArr = JSON.parse(localStorage.getItem(row.title) || '[]'); } catch(e) {}
-              const merged = mergeRecords(cloudArr, localArr);
-              localStorage.setItem(row.title, JSON.stringify(merged));
-              if (row.title === SYNC_KEYS.ADVANCES) {
-                localStorage.setItem(SYNC_KEYS.ADVANCES_ALIAS, JSON.stringify(merged));
-              } else if (row.title === SYNC_KEYS.ADVANCES_ALIAS) {
-                localStorage.setItem(SYNC_KEYS.ADVANCES, JSON.stringify(merged));
+    // 1. Load all synced datasets from Hostinger PHP Cloud Sync
+    let phpSyncedCount = 0;
+    try {
+      const res = await fetch('/api/cloud_sync.php?action=get_all');
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.status === 'success' && json.data) {
+          Object.entries(json.data).forEach(([rawKey, val]) => {
+            try {
+              if (Array.isArray(val)) {
+                let localArr = [];
+                try { localArr = JSON.parse(localStorage.getItem(rawKey) || '[]'); } catch(e) {}
+                const merged = mergeRecords(val, localArr);
+                localStorage.setItem(rawKey, JSON.stringify(merged));
+                if (rawKey === SYNC_KEYS.ADVANCES) localStorage.setItem(SYNC_KEYS.ADVANCES_ALIAS, JSON.stringify(merged));
+                else if (rawKey === SYNC_KEYS.ADVANCES_ALIAS) localStorage.setItem(SYNC_KEYS.ADVANCES, JSON.stringify(merged));
+              } else if (val && typeof val === 'object') {
+                let localObj = {};
+                try { localObj = JSON.parse(localStorage.getItem(rawKey) || '{}'); } catch(e) {}
+                const merged = { ...localObj, ...val };
+                localStorage.setItem(rawKey, JSON.stringify(merged));
+              } else {
+                localStorage.setItem(rawKey, String(val));
               }
-            } else {
-              localStorage.setItem(row.title, row.content);
-            }
-          } catch (e) {}
+              phpSyncedCount++;
+            } catch(e) {}
+          });
         }
-      });
-      console.log('✓ Green Arrow Cloud Sync: Merged ' + data.length + ' datasets from Supabase Cloud');
-      window.dispatchEvent(new Event('cloud_data_synced'));
+      }
+    } catch(e) {
+      console.warn('PHP full cloud sync warning:', e);
     }
+
+    // 2. Also try Supabase Cloud Sync
+    if (base44.supabase) {
+      try {
+        const { data, error } = await base44.supabase
+          .from('announcements')
+          .select('id, title, content')
+          .eq('category', 'cloud_sync');
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          data.forEach(row => {
+            if (row.title && row.content) {
+              try {
+                const cloudArr = JSON.parse(row.content);
+                if (Array.isArray(cloudArr)) {
+                  let localArr = [];
+                  try { localArr = JSON.parse(localStorage.getItem(row.title) || '[]'); } catch(e) {}
+                  const merged = mergeRecords(cloudArr, localArr);
+                  localStorage.setItem(row.title, JSON.stringify(merged));
+                } else if (cloudArr && typeof cloudArr === 'object') {
+                  let localObj = {};
+                  try { localObj = JSON.parse(localStorage.getItem(row.title) || '{}'); } catch(e) {}
+                  const merged = { ...localObj, ...cloudArr };
+                  localStorage.setItem(row.title, JSON.stringify(merged));
+                }
+              } catch (e) {}
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    console.log(`✓ Green Arrow Cloud Sync: Synced ${phpSyncedCount} datasets from Cloud`);
+    window.dispatchEvent(new Event('cloud_data_synced'));
   } catch (e) {
     console.warn('Initial Cloud Sync Error:', e);
   }

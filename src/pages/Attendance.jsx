@@ -3,6 +3,7 @@ import { sanitizeCsvRow } from '@/lib/security';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { syncCloudAttendanceLogs } from '@/lib/biometricDevices';
 import {
   Clock,
   Sun,
@@ -84,7 +85,7 @@ export default function Attendance() {
     const emp = employees.find(e => String(e.id) === String(empId) || String(e.employee_number) === String(empId));
     const empShift = emp?.shift || '';
     
-    if (empShift.includes('9 ساعات') || emp?.employee_number === '1022' || emp?.employee_number === '1005') {
+    if (empShift.includes('9 ساعات') || empShift.includes('إضافي 100') || emp?.employee_number === '1022') {
       setManualForm(prev => ({
         ...prev,
         employee_id: empId,
@@ -163,6 +164,30 @@ export default function Attendance() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Live Biometric Poller: Stream attendance logs moment by moment from cloud ADMS receiver
+  useEffect(() => {
+    let isMounted = true;
+    const pollLivePunches = async () => {
+      if (employees.length === 0) return;
+      try {
+        const res = await syncCloudAttendanceLogs(employees);
+        if (isMounted && res.success && res.importedCount > 0) {
+          const freshLogs = await base44.entities.AttendanceLog.list('-log_date', 2000);
+          if (isMounted) setAttendanceLogs(freshLogs || []);
+        }
+      } catch (err) {}
+    };
+
+    const initialTimer = setTimeout(pollLivePunches, 2000);
+    const interval = setInterval(pollLivePunches, 15000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [employees]);
 
   useEffect(() => {
     if (searchParams.get('mode') === 'manual') {
@@ -524,6 +549,12 @@ function normalizeIsoDate(str, fallback) {
           <p className="text-xs text-muted-foreground mt-0.5">
             مركز تدقيق ومراقبة حركات الدخول والخروج من أجهزة البصمة المربوطة سحابياً
           </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              بث حي مباشر لحظة بلحظة (ADMS Cloud Live)
+            </span>
+          </div>
         </div>
 
         {/* Time Filters Bar (اليوم • الأمس • الفترة الزمنية) */}

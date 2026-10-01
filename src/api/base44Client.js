@@ -113,7 +113,7 @@ export const initialData = {
       break_end: '16:00',
       working_hours: 9,
       grace_minutes: 15,
-      description: 'دوام فترتين مخصص (يحيى باشا & هشام زغلول): 9:00 ص إلى 1:00 م & 4:00 ع إلى 9:00 م (ساعة إضافية يومية = 100 ريال)'
+      description: 'دوام فترتين مخصص (يحيى باشا): 9:00 ص إلى 1:00 م & 4:00 ع إلى 9:00 م (ساعة إضافية يومية = 100 ريال)'
     },
     {
       id: 'sh_non_saudi',
@@ -212,7 +212,7 @@ export const initialData = {
       job_title: 'مصمم و مسئول الموارد البشرية',
       department_name: 'مكتب الإدارة',
       branch_name: 'مكتب الإدارة',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (9 ساعات + إضافي 100 ريال)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'مصري',
       national_id: '2554901666',
@@ -238,7 +238,7 @@ export const initialData = {
       job_title: 'مدير الحسابات',
       department_name: 'مكتب الإدارة',
       branch_name: 'مكتب الإدارة',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'مصري',
       national_id: '2406494993',
@@ -264,7 +264,7 @@ export const initialData = {
       job_title: 'مسئول متجر الكتروني',
       department_name: 'مكتب الإدارة',
       branch_name: 'مكتب الإدارة',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'HR DORAT CARS',
       nationality: 'سوري',
       national_id: '',
@@ -290,7 +290,7 @@ export const initialData = {
       job_title: 'بائع قطع غيار',
       department_name: 'الفرع الرئيسي',
       branch_name: 'الفرع الرئيسي',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'سوري',
       national_id: '2151595283',
@@ -323,11 +323,14 @@ export const initialData = {
       id_expiry_date: '1450-07-17',
       birth_date: '1999-02-18',
       join_date: '2022-11-01',
-      salary: 4000,
+      salary: 3800,
       is_insured: true,
       gosi_number: 'GSI-464430',
       housing_allowance: 0,
       transport_allowance: 0,
+      purchases_allowance: 300,
+      procurement_allowance: 300,
+      phone_allowance: 300,
       leave_policy: 'الاجازة السنوية (30 يوم)',
       annual_leave_entitlement: 30,
       opening_consumed_leaves: 11,
@@ -394,7 +397,7 @@ export const initialData = {
       job_title: 'بائع قطع غيار',
       department_name: 'فرع هونداي ( الرواف )',
       branch_name: 'فرع هونداي ( الرواف )',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'يمني',
       national_id: '2539519401',
@@ -447,7 +450,7 @@ export const initialData = {
       job_title: 'بائع قطع غيار',
       department_name: 'فرع كيا ( السليم )',
       branch_name: 'فرع كيا ( السليم )',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'يمني',
       national_id: '2541925349',
@@ -603,7 +606,7 @@ export const initialData = {
       job_title: 'بائع قطع غيار',
       department_name: 'الفرع الرئيسي',
       branch_name: 'الفرع الرئيسي',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'يمني',
       national_id: '2564699011',
@@ -629,7 +632,7 @@ export const initialData = {
       job_title: 'بائع قطع غيار',
       department_name: 'فرع هونداي ( الرواف )',
       branch_name: 'فرع هونداي ( الرواف )',
-      shift: 'فترة عمل غير سعودي',
+      shift: 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: 'فهد ناصر محمد الجوعي',
       nationality: 'يمني',
       national_id: '2611459286',
@@ -763,7 +766,8 @@ function toDbRecord(entityName, item) {
     }
 
     const electricityAllowance = Number(item.electricity_allowance !== undefined ? item.electricity_allowance : existingMeta.electricity_allowance) || 0;
-    const phoneAllowance = Number(item.phone_allowance !== undefined ? item.phone_allowance : (item.purchases_allowance !== undefined ? item.purchases_allowance : (existingMeta.phone_allowance !== undefined ? existingMeta.phone_allowance : existingMeta.purchases_allowance))) || 0;
+    const purchasesAllowance = Number(item.purchases_allowance !== undefined ? item.purchases_allowance : (item.procurement_allowance !== undefined ? item.procurement_allowance : (existingMeta.purchases_allowance !== undefined ? existingMeta.purchases_allowance : (item.phone_allowance !== undefined ? item.phone_allowance : existingMeta.phone_allowance)))) || 0;
+    const phoneAllowance = Number(item.phone_allowance !== undefined ? item.phone_allowance : (existingMeta.phone_allowance !== undefined ? existingMeta.phone_allowance : purchasesAllowance)) || 0;
     const otherAllowance = Number(item.other_allowance !== undefined ? item.other_allowance : existingMeta.other_allowance) || 0;
     const allowanceNotes = item.allowance_notes !== undefined ? item.allowance_notes : (existingMeta.allowance_notes || '');
 
@@ -790,7 +794,8 @@ function toDbRecord(entityName, item) {
       opening_consumed_leaves: Number(item.opening_consumed_leaves) || 0,
       electricity_allowance: electricityAllowance,
       phone_allowance: phoneAllowance,
-      purchases_allowance: phoneAllowance,
+      purchases_allowance: purchasesAllowance,
+      procurement_allowance: purchasesAllowance,
       other_allowance: otherAllowance,
       allowance_notes: allowanceNotes
     });
@@ -807,7 +812,7 @@ function toDbRecord(entityName, item) {
       job_title: item.job_title || '',
       department_name: item.department_name || item.department || 'مكتب الإدارة',
       branch_name: item.branch_name || item.branch || 'مكتب الإدارة',
-      shift: item.shift || 'فترة عمل غير سعودي',
+      shift: item.shift || 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       manager_name: meta,
       nationality: item.nationality || 'سعودي',
       national_id: item.national_id || '',
@@ -819,7 +824,8 @@ function toDbRecord(entityName, item) {
       transport_allowance: Number(item.transport_allowance) || 0,
       electricity_allowance: electricityAllowance,
       phone_allowance: phoneAllowance,
-      purchases_allowance: phoneAllowance,
+      purchases_allowance: purchasesAllowance,
+      procurement_allowance: purchasesAllowance,
       other_allowance: otherAllowance,
       allowance_notes: allowanceNotes,
       leave_policy: item.leave_policy || 'الاجازة السنوية',
@@ -1043,15 +1049,31 @@ function fromDbRecord(entityName, row) {
         meta = JSON.parse(row.manager_name);
       } catch (e) {}
     }
+    let backup = null;
+    try {
+      const bRaw = localStorage.getItem('hr_allowances_backup_' + (row.id || '')) ||
+                   localStorage.getItem('hr_allowances_backup_' + (row.employee_number || '')) ||
+                   localStorage.getItem('hr_allowances_backup_emp_' + (row.employee_number || ''));
+      if (bRaw) backup = JSON.parse(bRaw);
+    } catch (e) {}
+
+    const housingVal = Number(backup?.housing_allowance !== undefined ? backup.housing_allowance : row.housing_allowance) || 0;
+    const transportVal = Number(backup?.transport_allowance !== undefined ? backup.transport_allowance : row.transport_allowance) || 0;
+    const electricityVal = Number(backup?.electricity_allowance !== undefined ? backup.electricity_allowance : (row.electricity_allowance !== undefined ? row.electricity_allowance : meta.electricity_allowance)) || 0;
+    const purchasesVal = Number(backup?.purchases_allowance !== undefined ? backup.purchases_allowance : (backup?.procurement_allowance !== undefined ? backup.procurement_allowance : (backup?.phone !== undefined ? backup.phone : (row.purchases_allowance !== undefined ? row.purchases_allowance : (row.procurement_allowance !== undefined ? row.procurement_allowance : (meta.purchases_allowance !== undefined ? meta.purchases_allowance : (meta.procurement_allowance !== undefined ? meta.procurement_allowance : (row.phone_allowance !== undefined ? row.phone_allowance : meta.phone_allowance)))))))) || 0;
+    const phoneVal = Number(backup?.phone_allowance !== undefined ? backup.phone_allowance : (row.phone_allowance !== undefined ? row.phone_allowance : (meta.phone_allowance !== undefined ? meta.phone_allowance : purchasesVal))) || 0;
+    const otherVal = Number(backup?.other_allowance !== undefined ? backup.other_allowance : (row.other_allowance !== undefined ? row.other_allowance : meta.other_allowance)) || 0;
+
     return {
       ...row,
-      housing_allowance: Number(row.housing_allowance) || 0,
-      transport_allowance: Number(row.transport_allowance) || 0,
-      electricity_allowance: Number(row.electricity_allowance !== undefined ? row.electricity_allowance : meta.electricity_allowance) || 0,
-      phone_allowance: Number(row.phone_allowance !== undefined ? row.phone_allowance : (row.purchases_allowance !== undefined ? row.purchases_allowance : (meta.phone_allowance !== undefined ? meta.phone_allowance : meta.purchases_allowance))) || 0,
-      purchases_allowance: Number(row.purchases_allowance !== undefined ? row.purchases_allowance : (row.phone_allowance !== undefined ? row.phone_allowance : (meta.purchases_allowance !== undefined ? meta.purchases_allowance : meta.phone_allowance))) || 0,
-      other_allowance: Number(row.other_allowance !== undefined ? row.other_allowance : meta.other_allowance) || 0,
-      allowance_notes: row.allowance_notes || meta.allowance_notes || '',
+      housing_allowance: housingVal,
+      transport_allowance: transportVal,
+      electricity_allowance: electricityVal,
+      phone_allowance: phoneVal,
+      purchases_allowance: purchasesVal,
+      procurement_allowance: purchasesVal,
+      other_allowance: otherVal,
+      allowance_notes: backup?.allowance_notes || row.allowance_notes || meta.allowance_notes || '',
       is_insured: meta.is_insured !== undefined ? meta.is_insured : (row.is_insured || false),
       gosi_number: meta.gosi_number || row.gosi_number || '',
       insured_salary: meta.insured_salary !== undefined ? meta.insured_salary : (row.insured_salary || row.salary || 0),
@@ -1069,7 +1091,7 @@ function fromDbRecord(entityName, row) {
       contract_type: meta.contract_type || 'محدد',
       contract_end_date: meta.contract_end_date || null,
       manager_name: meta.manager_name || (typeof row.manager_name === 'string' && !row.manager_name.startsWith('{') ? row.manager_name : null),
-      shift: row.shift || 'فترة عمل غير سعودي',
+      shift: row.shift || 'فترة عمل غير سعودي (الأساسي 8 ساعات)',
       leave_policy: (() => {
         const empNum = String(row.employee_number || row.id || '').replace('emp_', '').trim();
         const baseline = AUTHORITATIVE_LEAVE_BASELINES[empNum];
@@ -1157,16 +1179,40 @@ function fromDbRecord(entityName, row) {
 
 async function _syncEmployeesToCloud(items) {
   try {
-    if (!supabase) return;
-    const payload = {
-      id: 'sync_hr_flow_v11_dora_Employee',
-      title: 'hr_flow_v11_dora_Employee',
-      content: JSON.stringify(items),
-      category: 'cloud_sync',
-      status: 'active',
-      date: new Date().toISOString().split('T')[0]
-    };
-    await supabase.from('announcements').upsert([payload], { onConflict: 'id' });
+    // 1. Primary: Hostinger PHP Cloud Sync
+    fetch('/api/cloud_sync.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set',
+        key: 'hr_flow_v11_dora_Employee',
+        data: items
+      })
+    }).catch(() => {});
+
+    // 2. Also mirror to legacy keys
+    fetch('/api/cloud_sync.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set',
+        key: 'green_arrow_hr_Employee',
+        data: items
+      })
+    }).catch(() => {});
+
+    // 3. Secondary: Supabase
+    if (supabase) {
+      const payload = {
+        id: 'sync_hr_flow_v11_dora_Employee',
+        title: 'hr_flow_v11_dora_Employee',
+        content: JSON.stringify(items),
+        category: 'cloud_sync',
+        status: 'active',
+        date: new Date().toISOString().split('T')[0]
+      };
+      supabase.from('announcements').upsert([payload], { onConflict: 'id' }).catch(() => {});
+    }
   } catch (e) {
     console.warn('Sync employees to cloud warning:', e);
   }
@@ -1198,7 +1244,6 @@ function createEntityHandler(entityName) {
 
             const { data, error } = await query;
             if (error) {
-              console.warn('Supabase query error for ' + entityName + ':', error);
               break;
             }
             if (!data || data.length === 0) break;
@@ -1209,19 +1254,33 @@ function createEntityHandler(entityName) {
 
           let cloudSyncEmployees = [];
           if (entityName === 'Employee') {
+            // 1. Try Hostinger PHP Cloud Sync (Authoritative)
             try {
-              const { data: syncRow } = await supabase
-                .from('announcements')
-                .select('content')
-                .eq('id', 'sync_hr_flow_v11_dora_Employee')
-                .single();
-              if (syncRow && syncRow.content) {
-                const parsed = JSON.parse(syncRow.content);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  cloudSyncEmployees = parsed;
+              const res = await fetch('/api/cloud_sync.php?action=get&key=hr_flow_v11_dora_Employee');
+              if (res.ok) {
+                const json = await res.json();
+                if (json && json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
+                  cloudSyncEmployees = json.data;
                 }
               }
             } catch (e) {}
+
+            // 2. Fallback to Supabase if PHP was empty
+            if (cloudSyncEmployees.length === 0) {
+              try {
+                const { data: syncRow } = await supabase
+                  .from('announcements')
+                  .select('content')
+                  .eq('id', 'sync_hr_flow_v11_dora_Employee')
+                  .single();
+                if (syncRow && syncRow.content) {
+                  const parsed = JSON.parse(syncRow.content);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    cloudSyncEmployees = parsed;
+                  }
+                }
+              } catch (e) {}
+            }
           }
 
           if (entityName === 'Employee') {

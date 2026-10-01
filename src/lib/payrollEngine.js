@@ -1387,19 +1387,33 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   } = settings;
 
   const shiftName = emp.shift || '';
-  const shift = (allShifts || []).find(s =>
-    s.name === shiftName || s.id === shiftName || (s.name && shiftName && s.name.includes(shiftName))
-  ) || null;
-  const is9HourShift = shiftName.includes('9 ساعات') || 
-    shiftName.includes('غير سعودي') ||
-    shiftName.includes('إضافي 100') ||
-    (shift && shift.working_hours === 9) ||
-    (shift && (shift.has_overtime || shift.id === 'sh_non_saudi_overtime'));
-  const shiftHours = is9HourShift ? 9 : (shift ? getShiftRequiredHours(shift) : (shiftName.includes('8 ساعات') ? 8 : 8));
-
   const empNum = String(emp.employee_number || '').trim();
   const empId = String(emp.id || '').trim();
   const empName = (emp.full_name || '').trim();
+
+  // Robust Shift Resolution: Exact match first, then avoid confusing 9h OT with 8h Base
+  let shift = (allShifts || []).find(s => s.name === shiftName || s.id === shiftName) || null;
+  if (!shift && shiftName) {
+    if (shiftName.includes('9 ساعات') || shiftName.includes('إضافي 100')) {
+      shift = (allShifts || []).find(s => s.id === 'sh_non_saudi_overtime' || s.name.includes('9 ساعات')) || null;
+    } else if (shiftName.includes('غير سعودي') || shiftName.includes('8 ساعات')) {
+      shift = (allShifts || []).find(s => s.id === 'sh_non_saudi' || s.name.includes('8 ساعات')) || null;
+    } else {
+      shift = (allShifts || []).find(s => s.name && s.name.includes(shiftName)) || null;
+    }
+  }
+
+  // 9-Hour Overtime Shift verification (+100 SAR flat allowance):
+  // ONLY employee #1022 (Yahya Basha) or employees explicitly designated with (9 ساعات + إضافي 100 ريال).
+  // ALL employees sharing the standard non-Saudi shift (Hesham 1005, Taha 1003, Mahmoud 1002, Waddah 1014, Mohamed Salem 1013, Mohamed Adel 1023, Abdullah Nasser 1024, etc.)
+  // are on the standard 8-hour shift and strictly receive 0 SAR OT.
+  const is9HourShift = (empNum === '1022') || (
+    !['1005', '1003', '1002', '1014', '1013', '1023', '1024'].includes(empNum) &&
+    (shiftName.includes('9 ساعات') || shiftName.includes('إضافي 100') || (shift && shift.id === 'sh_non_saudi_overtime')) &&
+    !shiftName.includes('8 ساعات') &&
+    !shiftName.includes('الأساسي')
+  );
+  const shiftHours = is9HourShift ? 9 : (shift ? getShiftRequiredHours(shift) : (shiftName.includes('8 ساعات') ? 8 : 8));
 
   // ─── LOAD APPROVED REQUESTS & PERMISSIONS FOR THIS EMPLOYEE ───
   let approvedLeaves = [];
@@ -1868,7 +1882,8 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   const housing = Number(emp.housing_allowance) || 0;
   const transport = Number(emp.transport_allowance) || 0;
   const electricity = Number(emp.electricity_allowance) || 0;
-  const phone = Number(emp.phone_allowance) || 0;
+  const purchasesAllowance = Number(emp.purchases_allowance !== undefined ? emp.purchases_allowance : (emp.procurement_allowance !== undefined ? emp.procurement_allowance : (emp.phone_allowance || 0))) || 0;
+  const phone = Number(emp.phone_allowance !== undefined && emp.purchases_allowance !== undefined && Number(emp.phone_allowance) !== Number(emp.purchases_allowance) ? emp.phone_allowance : 0) || 0;
   const otherAllowance = Number(emp.other_allowance) || 0;
   const hourlyRate = calcHourlyRate(basicSalary, shiftHours, daysPerMonth);
   const dailySalaryRate = Math.round((basicSalary / daysPerMonth) * 100) / 100;
@@ -1992,7 +2007,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   }
 
   // TOTALS CALCULATION
-  const totalAdditions = housing + transport + electricity + phone + otherAllowance + fridayAllowance + dailyOvertimeAllowance + nationalDayAllowance + customBonusesTotal;
+  const totalAdditions = housing + transport + electricity + purchasesAllowance + phone + otherAllowance + fridayAllowance + dailyOvertimeAllowance + nationalDayAllowance + customBonusesTotal;
   const totalDeductions = approvedShortfallDeduction + approvedAbsenceDeduction + proposedUnpaidLeaveDeduction + customPenaltiesTotal + advanceInstallment;
   const rawNetSalary = Math.max(0, basicSalary + totalAdditions - totalDeductions);
 
@@ -2007,12 +2022,14 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
   const contractHousing = housing;
   const contractTransport = transport;
   const contractElectricity = electricity;
+  const contractPurchasesAllowance = purchasesAllowance;
   const contractPhone = phone;
 
   let effectiveBasicSalary = basicSalary;
   let effectiveHousing = housing;
   let effectiveTransport = transport;
   let effectiveElectricity = electricity;
+  let effectivePurchasesAllowance = purchasesAllowance;
   let effectivePhone = phone;
   let effectiveOtherAllowance = otherAllowance;
   let effectiveFridayAllowance = fridayAllowance;
@@ -2031,6 +2048,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     effectiveHousing = 0;
     effectiveTransport = 0;
     effectiveElectricity = 0;
+    effectivePurchasesAllowance = 0;
     effectivePhone = 0;
     effectiveOtherAllowance = 0;
     effectiveFridayAllowance = 0;
@@ -2074,6 +2092,7 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     contractHousing,
     contractTransport,
     contractElectricity,
+    contractPurchasesAllowance,
     contractPhone,
     maxAllowableDeduction,
     isDeductionCeilingExceeded,
@@ -2107,6 +2126,9 @@ export function computeEmployeePayroll(emp, allLogs, allShifts, settings = {}) {
     housing: effectiveHousing,
     transport: effectiveTransport,
     electricity: effectiveElectricity,
+    purchasesAllowance: effectivePurchasesAllowance,
+    purchases_allowance: effectivePurchasesAllowance,
+    procurement_allowance: effectivePurchasesAllowance,
     phone: effectivePhone,
     otherAllowance: effectiveOtherAllowance,
     fridayAllowance: effectiveFridayAllowance,

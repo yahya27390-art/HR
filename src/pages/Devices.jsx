@@ -2,30 +2,28 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
-import { 
-  Fingerprint, 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  Wifi, 
-  WifiOff, 
-  Copy, 
-  Check, 
-  RefreshCw, 
-  Play, 
-  Sliders, 
-  Building2, 
-  Clock, 
-  ShieldCheck,
+import {
+  Fingerprint,
+  Plus,
+  Pencil,
+  Trash2,
+  Wifi,
+  WifiOff,
+  Copy,
+  Check,
+  RefreshCw,
+  Download,
+  Sliders,
+  Building2,
   Server,
   Activity,
   Key,
   Network,
   Eye,
   EyeOff,
-  CheckCircle2,
-  AlertTriangle,
-  Radio
+  Terminal,
+  FileText,
+  HelpCircle
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,10 +33,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { 
-  getBiometricDevices, 
-  saveBiometricDevices, 
-  testDeviceConnection 
+import {
+  getBiometricDevices,
+  saveBiometricDevices,
+  testDeviceConnection,
+  requestDevicePull,
+  syncCloudAttendanceLogs
 } from '@/lib/biometricDevices';
 
 export default function Devices() {
@@ -53,6 +53,8 @@ export default function Devices() {
   const [loading, setLoading] = useState(true);
   const [testingId, setTestingId] = useState(null);
   const [testingAll, setTestingAll] = useState(false);
+  const [pullingId, setPullingId] = useState(null);
+  const [syncingCloud, setSyncingCloud] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
   const [showKeys, setShowKeys] = useState({});
 
@@ -65,16 +67,16 @@ export default function Devices() {
     branch_id: '',
     brand: 'Ektefa ai806 (Face & Fingerprint)',
     ip_address: '192.168.8.',
-    port: '80',
+    port: '443',
     comm_port: '5005',
     comm_key: '12345678',
     status: 'offline'
   });
 
-  // Simulator states
-  const [simOpen, setSimOpen] = useState(false);
-  const [selectedEmp, setSelectedEmp] = useState('');
-  const [punchType, setPunchType] = useState('check_in');
+  // Cloud Logs Dialog state
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [cloudLogs, setCloudLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -88,7 +90,6 @@ export default function Devices() {
       setDevices(loadedDevices);
       setBranches(b || []);
       setEmployees(e || []);
-      if (e && e.length > 0) setSelectedEmp(e[0].id);
     } catch (err) {
       console.error('Error loading devices:', err);
       setDevices(getBiometricDevices());
@@ -133,7 +134,7 @@ export default function Devices() {
 
       if (result.success) {
         toast({
-          title: `نجح الاتصال الفعلي بجهاز (${dev.name}) ✓`,
+          title: `نجح فحص الاتصال بجهاز (${dev.name}) ✓`,
           description: result.message,
           className: 'bg-emerald-950/90 text-emerald-100 border-emerald-700'
         });
@@ -183,9 +184,104 @@ export default function Devices() {
 
     toast({
       title: 'اكتمل فحص اتصال جميع الأجهزة 📡',
-      description: `الأجهزة المتصلة أونلاين: ${onlineCount} | الأجهزة غير المتصلة: ${offlineCount}`,
+      description: `الأجهزة المتصلة: ${onlineCount} | الأجهزة غير المتصلة: ${offlineCount}`,
       className: onlineCount > 0 ? 'bg-slate-900 text-white border-primary' : ''
     });
+  };
+
+  // Dispatch live pull command to remote cloud device (طلب سحب الحركات من الجهاز)
+  const handleTriggerDevicePull = async (dev) => {
+    setPullingId(dev.id);
+    try {
+      const res = await requestDevicePull(dev.serial_number);
+      toast({
+        title: 'تم إرسال أمر سحب الحركات السحابي ⚡',
+        description: `تم توجيه الأمر (C:101:DATA QUERY ATTLOG) للجهاز (${dev.serial_number}). عند أول نبضة سيتولى الجهاز تفريغ سجلات الحركات على السحابة.`
+      });
+
+      // Automatically attempt sync right after
+      await handleCloudSyncAll();
+    } catch (e) {
+      toast({
+        title: 'تعذر إرسال أمر السحب السحابي',
+        description: e.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setPullingId(null);
+    }
+  };
+
+  // Sync cloud punches from Hostinger ADMS receiver into attendance logs
+  const handleCloudSyncAll = async () => {
+    setSyncingCloud(true);
+    try {
+      const res = await syncCloudAttendanceLogs(employees);
+      if (res.success) {
+        if (res.importedCount > 0) {
+          toast({
+            title: `تم سحب ومزامنة الحركات السحابية بنجاح ✓`,
+            description: `تم استيراد وتحديث ${res.importedCount} حركة حضور وانصراف من خادم ADMS السحابي.`,
+            className: 'bg-emerald-950/90 text-emerald-100 border-emerald-700'
+          });
+        } else if (res.totalOnServer > 0) {
+          toast({
+            title: 'سجلات الحركات متطابقة بالفعل ✓',
+            description: `جميع الحركات المسجلة على الخادم (${res.totalOnServer} حركة) موجودة مسبقاً في النظام ومحدثة.`
+          });
+        } else {
+          toast({
+            title: 'جاهزية السيرفر السحابي (0 حركات جديدة حالياً)',
+            description: `السيرفر السحابي متصل ويعمل. بانتظار قيام الموظفين بتسجيل بصماتهم أو إتمام تفريغ ذاكرة الجهاز.`
+          });
+        }
+
+        // Update local device total punches if matching
+        const updated = devices.map(d => {
+          if (d.serial_number === 'EK0201000043' || d.id === 'dev_main_01') {
+            return {
+              ...d,
+              status: 'online',
+              total_punches_synced: res.totalOnServer,
+              last_sync: `سحابي (${res.totalOnServer} حركة مسجلة)`
+            };
+          }
+          return d;
+        });
+        setDevices(updated);
+        saveBiometricDevices(updated);
+      } else {
+        toast({
+          title: 'فشل مزامنة السحابة',
+          description: res.error || 'تعذر الاتصال بخادم ADMS',
+          variant: 'destructive'
+        });
+      }
+    } catch (e) {
+      toast({
+        title: 'خطأ أثناء المزامنة',
+        description: e.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setSyncingCloud(false);
+    }
+  };
+
+  // Fetch live server logs for debugging
+  const handleOpenLogs = async () => {
+    setLogsOpen(true);
+    setLoadingLogs(true);
+    try {
+      const res = await fetch('https://gold-hare-970225.hostingersite.com/api/adms_sync.php?logs=1', { cache: 'no-store' });
+      const data = await res.json();
+      setCloudLogs(data.recent_logs || []);
+    } catch (e) {
+      console.error('Error fetching cloud logs:', e);
+      setCloudLogs(['تعذر جلب السجلات المباشرة: ' + e.message]);
+    } finally {
+      setLoadingLogs(false);
+    }
   };
 
   const handleOpenAdd = () => {
@@ -195,8 +291,8 @@ export default function Devices() {
       serial_number: 'EK' + Math.floor(1000000000 + Math.random() * 9000000000),
       branch_id: branches[0]?.id || '',
       brand: 'Ektefa ai806 (Face & Fingerprint)',
-      ip_address: '192.168.8.',
-      port: '80',
+      ip_address: '192.168.1.111',
+      port: '443',
       comm_port: '5005',
       comm_key: '12345678',
       status: 'offline'
@@ -239,37 +335,6 @@ export default function Devices() {
     toast({ title: 'تم حذف الجهاز بنجاح' });
   };
 
-  // Simulate Cloud Push Punch from machine
-  const handleSimulatePunch = async () => {
-    const emp = employees.find(e => e.id === selectedEmp);
-    if (!emp) return;
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const isLate = timeStr > '08:15' && punchType === 'check_in';
-
-    const newLog = {
-      id: 'att_' + Date.now(),
-      employee_id: emp.id,
-      employee_number: emp.employee_number || emp.id,
-      employee_name: emp.full_name,
-      log_date: now.toISOString().split('T')[0],
-      check_in: punchType === 'check_in' ? timeStr : null,
-      check_out: punchType === 'check_out' ? timeStr : null,
-      status: isLate ? 'late' : 'present',
-      notes: `تم التسجيل تلقائياً عبر جهاز بصمة ADMS (${devices[0]?.name || 'Ektefa'})`
-    };
-
-    if (base44.entities.AttendanceLog) {
-      await base44.entities.AttendanceLog.create(newLog);
-    }
-    setSimOpen(false);
-    toast({ 
-      title: `تم تسجيل بصمة ${emp.full_name} بنجاح!`, 
-      description: `النوع: ${punchType === 'check_in' ? 'تسجيل حضور' : 'تسجيل خروج'} في تمام الساعة ${timeStr}`
-    });
-  };
-
   return (
     <div className="space-y-6" style={{ direction: 'rtl' }}>
       {/* Header */}
@@ -280,23 +345,38 @@ export default function Devices() {
             <span>أجهزة البصمة والربط السحابي (ADMS Cloud & Hardware)</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            متابعة حالة اتصال الأجهزة الحقيقية (أونلاين / أوفلاين)، فحص الاتصال الفعلي، وبيانات الشبكة والـ ADMS
+            متابعة حالة اتصال الأجهزة الحقيقية (أونلاين / أوفلاين)، سحب الحركات سحابياً عبر ADMS، وفحص الاتصال الفعلي
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button 
-            onClick={handleTestAllDevices} 
+          <Button
+            onClick={handleCloudSyncAll}
+            disabled={syncingCloud}
+            variant="outline"
+            className="border-emerald-600/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-bold gap-1.5 h-10 shadow-sm"
+          >
+            <Download className={`w-4 h-4 text-emerald-600 ${syncingCloud ? 'animate-bounce' : ''}`} />
+            <span>{syncingCloud ? 'جاري سحب الحركات...' : 'سحب الحركات سحابياً (ADMS Pull)'}</span>
+          </Button>
+
+          <Button
+            onClick={handleTestAllDevices}
             disabled={testingAll}
-            variant="outline" 
+            variant="outline"
             className="border-primary/40 text-primary hover:bg-primary/10 font-bold gap-1.5 h-10 shadow-sm"
           >
             <RefreshCw className={`w-4 h-4 ${testingAll ? 'animate-spin' : ''}`} />
-            <span>{testingAll ? 'جاري فحص جميع الأجهزة...' : 'فحص اتصال جميع الأجهزة 📡'}</span>
+            <span>{testingAll ? 'جاري فحص الأجهزة...' : 'فحص اتصال جميع الأجهزة 📡'}</span>
           </Button>
 
-          <Button onClick={() => setSimOpen(true)} variant="outline" className="border-border text-foreground hover:bg-secondary font-bold gap-1.5 h-10">
-            <Play className="w-4 h-4 text-emerald-600" />
-            <span>محاكي إرسال بصمة</span>
+          <Button
+            onClick={handleOpenLogs}
+            variant="outline"
+            className="border-border text-foreground hover:bg-secondary font-bold gap-1.5 h-10"
+            title="سجل الاتصالات المباشرة بين الأجهزة والسحابة"
+          >
+            <Terminal className="w-4 h-4 text-indigo-500" />
+            <span>سجل اتصال السحابة (Logs)</span>
           </Button>
 
           <Button onClick={handleOpenAdd} className="bg-primary text-primary-foreground font-bold shadow-md h-10 gap-1.5">
@@ -316,11 +396,11 @@ export default function Devices() {
             <div>
               <h3 className="font-heading font-black text-base text-foreground">بيانات الربط السحابي في شاشة الجهاز (Cloud Server / ADMS):</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                ادخل إلى قائمة الجهاز بالفرع: <span className="font-bold text-foreground">Menu &gt; Comm. &gt; Cloud Server / ADMS</span> واضبط الإعدادات التالية:
+                ادخل إلى شاشة الجهاز بالفرع: <span className="font-bold text-foreground">القائمة &gt; الاتصالات &gt; إعدادات خادم السحابة (ADMS)</span> واضبط ما يلي:
               </p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-2">
             <div className="bg-card px-3.5 py-2 rounded-xl border text-xs font-mono font-bold text-foreground shadow-sm flex items-center gap-2">
               <span className="text-muted-foreground font-sans text-[11px]">Server:</span>
@@ -332,7 +412,7 @@ export default function Devices() {
 
             <div className="bg-card px-3.5 py-2 rounded-xl border text-xs font-mono font-bold text-foreground shadow-sm flex items-center gap-2">
               <span className="text-muted-foreground font-sans text-[11px]">Port:</span>
-              <span className="text-emerald-600 font-bold">443 (HTTPS)</span>
+              <span className="text-emerald-600 font-bold">443 (أو 80)</span>
             </div>
           </div>
         </div>
@@ -345,32 +425,32 @@ export default function Devices() {
         ) : devices.map((dev) => {
           const isOnline = dev.status === 'online';
           const isCurrentlyTesting = testingId === dev.id;
+          const isCurrentlyPulling = pullingId === dev.id;
+          const isCloudDevice = dev.serial_number === 'EK0201000043' || dev.id === 'dev_main_01';
 
           return (
-            <Card 
-              key={dev.id} 
-              className={`p-5 rounded-2xl border shadow-sm transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
-                isOnline 
-                  ? 'border-emerald-300 dark:border-emerald-800/80 bg-gradient-to-br from-emerald-500/5 via-card to-card hover:shadow-md' 
+            <Card
+              key={dev.id}
+              className={`p-5 rounded-2xl border shadow-sm transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${isOnline
+                  ? 'border-emerald-300 dark:border-emerald-800/80 bg-gradient-to-br from-emerald-500/5 via-card to-card hover:shadow-md'
                   : 'border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300'
-              }`}
+                }`}
             >
               <div>
                 {/* Card Top: Title, Branch, LED Status Light, Edit/Delete */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3.5">
                     {/* Device Icon with Status Badge Ring */}
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
-                      isOnline 
-                        ? 'bg-emerald-500/15 text-emerald-600 ring-2 ring-emerald-500/30 shadow-inner' 
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold shrink-0 ${isOnline
+                        ? 'bg-emerald-500/15 text-emerald-600 ring-2 ring-emerald-500/30 shadow-inner'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-500 ring-1 ring-slate-200 dark:ring-slate-700'
-                    }`}>
+                      }`}>
                       <Fingerprint className="w-6 h-6" />
                     </div>
 
                     <div>
                       <h3 className="font-heading font-black text-base text-foreground leading-snug">{dev.name}</h3>
-                      
+
                       <div className="flex flex-wrap items-center gap-2 mt-1.5">
                         <Badge variant="outline" className="text-[11px] font-semibold bg-secondary/80 text-foreground border-border">
                           <Building2 className="w-3 h-3 me-1 text-primary" />
@@ -391,25 +471,31 @@ export default function Devices() {
                             <span>غير متصل (Offline)</span>
                           </span>
                         )}
+
+                        {isCloudDevice && (
+                          <Badge variant="secondary" className="text-[10px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/30">
+                            ربط سحابي ADMS
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Actions: Edit & Delete */}
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => { setEditingDevice(dev); setDeviceForm({ ...dev }); setFormOpen(true); }} 
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => { setEditingDevice(dev); setDeviceForm({ ...dev }); setFormOpen(true); }}
                       className="h-8 w-8 hover:bg-secondary rounded-lg"
                       title="تعديل بيانات الجهاز"
                     >
                       <Pencil className="w-4 h-4 text-muted-foreground" />
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => handleDeleteDevice(dev)} 
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteDevice(dev)}
                       className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg"
                       title="حذف الجهاز"
                     >
@@ -420,31 +506,56 @@ export default function Devices() {
 
                 {/* Connection Specs Box */}
                 <div className="mt-4 bg-secondary/30 p-3.5 rounded-xl border border-border/50 space-y-2 text-xs">
-                  {/* IP Address & Port */}
+                  {/* Internal LAN IP Address & Port */}
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
+                    <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
                       <Network className="w-3.5 h-3.5 text-primary" />
-                      <span>عنوان الـ IP الداخلي والمنفذ:</span>
+                      <span>العنوان الداخلي للجهاز (LAN IP):</span>
                     </span>
                     <div className="flex items-center gap-1.5 font-mono font-bold text-foreground">
-                      <span className="text-primary">{dev.ip_address || dev.ip || '192.168.8.110'}</span>
+                      <span className="text-primary">{dev.ip_address || dev.ip || (isCloudDevice ? '192.168.1.111' : '192.168.8.110')}</span>
                       <span className="text-muted-foreground">:</span>
-                      <span className="text-emerald-600 font-bold">{dev.port || '80'}</span>
+                      <span className="text-emerald-600 font-bold">{dev.port || (isCloudDevice ? '443' : '80')}</span>
                       {dev.comm_port && dev.comm_port !== dev.port && (
                         <span className="text-[10px] text-muted-foreground font-sans font-normal">
                           (Comm: {dev.comm_port})
                         </span>
                       )}
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-5 w-5" 
-                        onClick={() => copyToClipboard(`${dev.ip_address || dev.ip}:${dev.port || 80}`, `ip_${dev.id}`)}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
+                        onClick={() => copyToClipboard(`${dev.ip_address || dev.ip || (isCloudDevice ? '192.168.1.111' : '192.168.8.110')}:${dev.port || (isCloudDevice ? '443' : '80')}`, `ip_${dev.id}`)}
+                        title="نسخ الآي بي والمنفذ الداخلي"
                       >
                         {copiedKey === `ip_${dev.id}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
                       </Button>
                     </div>
                   </div>
+
+                  {/* Cloud Server Address & Port (for cloud-connected devices) */}
+                  {isCloudDevice && (
+                    <div className="flex items-center justify-between bg-emerald-500/5 px-2 py-1.5 rounded-lg border border-emerald-500/20">
+                      <span className="text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 font-medium">
+                        <Server className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>سيرفر السحابة (ADMS Server):</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 font-mono font-bold">
+                        <span className="text-primary text-[11px]">gold-hare-970225.hostingersite.com</span>
+                        <span className="text-muted-foreground">:</span>
+                        <span className="text-emerald-600 font-bold">443</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5"
+                          onClick={() => copyToClipboard('gold-hare-970225.hostingersite.com', `cloud_${dev.id}`)}
+                          title="نسخ عنوان سيرفر السحابة"
+                        >
+                          {copiedKey === `cloud_${dev.id}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Serial Number */}
                   <div className="flex items-center justify-between">
@@ -454,10 +565,10 @@ export default function Devices() {
                     </span>
                     <div className="flex items-center gap-1 font-mono font-bold text-foreground">
                       <span>{dev.serial_number || dev.serial}</span>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-5 w-5" 
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
                         onClick={() => copyToClipboard(dev.serial_number || dev.serial, `sn_${dev.id}`)}
                       >
                         {copiedKey === `sn_${dev.id}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
@@ -473,19 +584,19 @@ export default function Devices() {
                     </span>
                     <div className="flex items-center gap-1.5 font-mono font-bold text-foreground">
                       <span>{showKeys[dev.id] ? (dev.comm_key || '12345678') : '••••••••'}</span>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-5 w-5" 
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
                         onClick={() => toggleShowKey(dev.id)}
                         title={showKeys[dev.id] ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                       >
                         {showKeys[dev.id] ? <EyeOff className="w-3 h-3 text-muted-foreground" /> : <Eye className="w-3 h-3 text-muted-foreground" />}
                       </Button>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-5 w-5" 
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
                         onClick={() => copyToClipboard(dev.comm_key || '12345678', `key_${dev.id}`)}
                       >
                         {copiedKey === `key_${dev.id}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
@@ -503,25 +614,25 @@ export default function Devices() {
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">سجلات الحركات المسحوبة:</span>
                     <Badge variant={dev.total_punches_synced > 0 ? 'default' : 'secondary'} className="text-[11px] font-mono font-bold">
-                      {dev.total_punches_synced ? `${dev.total_punches_synced.toLocaleString('en-US')} حركة متزامنة` : '0 حركات (بانتظار الربط)'}
+                      {dev.total_punches_synced ? `${dev.total_punches_synced.toLocaleString('en-US')} حركة متزامنة` : '0 حركات (بانتظار تلقي البصمات)'}
                     </Badge>
                   </div>
                 </div>
               </div>
 
-              {/* Card Footer: Real Test Connection Button & Push URL */}
+              {/* Card Footer: Real Test Connection & Pull Buttons */}
               <div className="mt-4 pt-3 border-t border-border/50 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => copyToClipboard(dev.api_endpoint || 'https://gold-hare-970225.hostingersite.com/api/adms/push', `push_${dev.id}`)}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(dev.api_endpoint || 'https://gold-hare-970225.hostingersite.com/api/adms_sync.php', `push_${dev.id}`)}
                     className="h-8 text-xs font-semibold gap-1.5"
                   >
                     {copiedKey === `push_${dev.id}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>نسخ رابط Push</span>
+                    <span>رابط المزامنة</span>
                   </Button>
-                  
+
                   {dev.last_ping_time && (
                     <span className="text-[11px] font-mono text-emerald-600 font-bold bg-emerald-500/10 px-2 py-1 rounded-md">
                       {dev.last_ping_time}
@@ -529,20 +640,36 @@ export default function Devices() {
                   )}
                 </div>
 
-                {/* Real Test Connection Button */}
-                <Button
-                  size="sm"
-                  onClick={() => handleTestDevice(dev)}
-                  disabled={isCurrentlyTesting}
-                  className={`h-8 px-3.5 rounded-xl font-bold text-xs gap-1.5 shadow-sm transition-all ${
-                    isOnline
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                      : 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                  }`}
-                >
-                  <Activity className={`w-3.5 h-3.5 ${isCurrentlyTesting ? 'animate-spin' : ''}`} />
-                  <span>{isCurrentlyTesting ? 'جاري فحص الاتصال...' : 'فحص الاتصال الفعلي (Ping)'}</span>
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {/* Dedicated Pull Button for Cloud Device */}
+                  {isCloudDevice && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleTriggerDevicePull(dev)}
+                      disabled={isCurrentlyPulling || syncingCloud}
+                      className="h-8 px-3 rounded-xl font-bold text-xs gap-1.5 border-emerald-600/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                      title="إرسال أمر سحب حركات البصمة المحفوظة في الجهاز"
+                    >
+                      <Download className={`w-3.5 h-3.5 ${isCurrentlyPulling ? 'animate-bounce' : ''}`} />
+                      <span>{isCurrentlyPulling ? 'جاري السحب...' : 'سحب الحركات سحابياً'}</span>
+                    </Button>
+                  )}
+
+                  {/* Real Test Connection Button */}
+                  <Button
+                    size="sm"
+                    onClick={() => handleTestDevice(dev)}
+                    disabled={isCurrentlyTesting}
+                    className={`h-8 px-3.5 rounded-xl font-bold text-xs gap-1.5 shadow-sm transition-all ${isOnline
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                      }`}
+                  >
+                    <Activity className={`w-3.5 h-3.5 ${isCurrentlyTesting ? 'animate-spin' : ''}`} />
+                    <span>{isCurrentlyTesting ? 'جاري فحص الاتصال...' : 'فحص الاتصال الفعلي (Ping)'}</span>
+                  </Button>
+                </div>
               </div>
             </Card>
           );
@@ -560,17 +687,17 @@ export default function Devices() {
           <div className="space-y-4 py-2 text-xs">
             <div className="space-y-1.5">
               <Label>اسم الجهاز / موقع التركيب *</Label>
-              <Input 
-                placeholder="مثال: جهاز بصمة فرع كيا - السليم" 
-                value={deviceForm.name} 
-                onChange={(e) => setDeviceForm(prev => ({ ...prev, name: e.target.value }))} 
+              <Input
+                placeholder="مثال: جهاز بصمة فرع كيا - السليم"
+                value={deviceForm.name}
+                onChange={(e) => setDeviceForm(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
 
             <div className="space-y-1.5">
               <Label>الفرع التابع له الجهاز</Label>
-              <Select 
-                value={deviceForm.branch_id} 
+              <Select
+                value={deviceForm.branch_id}
                 onValueChange={(v) => {
                   const b = branches.find(item => item.id === v);
                   setDeviceForm(prev => ({ ...prev, branch_id: v, branch_name: b ? b.name : '' }));
@@ -578,30 +705,32 @@ export default function Devices() {
               >
                 <SelectTrigger><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
                 <SelectContent>
-                  {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  {branches.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>عنوان الـ IP الداخلي *</Label>
-                <Input 
-                  placeholder="192.168.8.110" 
-                  value={deviceForm.ip_address} 
-                  onChange={(e) => setDeviceForm(prev => ({ ...prev, ip_address: e.target.value }))} 
-                  className="font-mono text-left" 
+                <Label>الرقم التسلسلي للجهاز (SN) *</Label>
+                <Input
+                  placeholder="EK0201000043"
+                  value={deviceForm.serial_number}
+                  onChange={(e) => setDeviceForm(prev => ({ ...prev, serial_number: e.target.value }))}
+                  className="font-mono text-left"
                   dir="ltr"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label>منفذ الويب / API (Port)</Label>
-                <Input 
-                  placeholder="80 أو 5005" 
-                  value={deviceForm.port} 
-                  onChange={(e) => setDeviceForm(prev => ({ ...prev, port: e.target.value }))} 
-                  className="font-mono text-left" 
+                <Label>عنوان الـ IP الداخلي</Label>
+                <Input
+                  placeholder="192.168.1.111"
+                  value={deviceForm.ip_address}
+                  onChange={(e) => setDeviceForm(prev => ({ ...prev, ip_address: e.target.value }))}
+                  className="font-mono text-left"
                   dir="ltr"
                 />
               </div>
@@ -609,23 +738,23 @@ export default function Devices() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>الرقم التسلسلي (SN) *</Label>
-                <Input 
-                  placeholder="مثال: EK0201000044" 
-                  value={deviceForm.serial_number} 
-                  onChange={(e) => setDeviceForm(prev => ({ ...prev, serial_number: e.target.value }))} 
-                  className="font-mono text-left" 
+                <Label>منفذ الخدمة (Port)</Label>
+                <Input
+                  placeholder="443 أو 80"
+                  value={deviceForm.port}
+                  onChange={(e) => setDeviceForm(prev => ({ ...prev, port: e.target.value }))}
+                  className="font-mono text-left"
                   dir="ltr"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <Label>كلمة مرور الاتصال (Comm Key)</Label>
-                <Input 
-                  placeholder="12345678 أو 0" 
-                  value={deviceForm.comm_key} 
-                  onChange={(e) => setDeviceForm(prev => ({ ...prev, comm_key: e.target.value }))} 
-                  className="font-mono text-left" 
+                <Input
+                  placeholder="12345678 أو 0"
+                  value={deviceForm.comm_key}
+                  onChange={(e) => setDeviceForm(prev => ({ ...prev, comm_key: e.target.value }))}
+                  className="font-mono text-left"
                   dir="ltr"
                 />
               </div>
@@ -633,10 +762,10 @@ export default function Devices() {
 
             <div className="space-y-1.5">
               <Label>طراز وموديل الجهاز</Label>
-              <Input 
-                placeholder="مثال: Ektefa ai806 (Face & Fingerprint)" 
-                value={deviceForm.brand} 
-                onChange={(e) => setDeviceForm(prev => ({ ...prev, brand: e.target.value }))} 
+              <Input
+                placeholder="مثال: Ektefa ai806 (Face & Fingerprint)"
+                value={deviceForm.brand}
+                onChange={(e) => setDeviceForm(prev => ({ ...prev, brand: e.target.value }))}
               />
             </div>
           </div>
@@ -649,44 +778,40 @@ export default function Devices() {
         </DialogContent>
       </Dialog>
 
-      {/* Simulator Dialog */}
-      <Dialog open={simOpen} onOpenChange={setSimOpen}>
-        <DialogContent className="sm:max-w-md" style={{ direction: 'rtl' }}>
+      {/* Cloud Live Logs Dialog */}
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="sm:max-w-2xl" style={{ direction: 'rtl' }}>
           <DialogHeader>
-            <DialogTitle className="font-heading font-black text-lg">
-              محاكي إرسال البصمات السحابي (Cloud Push Tester)
+            <DialogTitle className="font-heading font-black text-lg flex items-center gap-2">
+              <Terminal className="w-5 h-5 text-indigo-500" />
+              <span>سجل الاتصالات المباشرة للسحابة (ADMS Server Logs)</span>
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2 text-xs">
+          <div className="space-y-3 py-2 text-xs">
             <p className="text-muted-foreground">
-              يمكنك تجربة إرسال حركة بصمة كأن الجهاز المتصل أرسلها الآن لمشاهدة تسجيل الحضور فورياً في النظام:
+              سجل النبضات الفعلي والحركات المستلمة من أجهزة البصمة المتصلة عبر الإنترنت:
             </p>
-
-            <div className="space-y-1.5">
-              <Label>اختر الموظف</Label>
-              <Select value={selectedEmp} onValueChange={setSelectedEmp}>
-                <SelectTrigger><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name} ({e.employee_number})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>نوع البصمة</Label>
-              <Select value={punchType} onValueChange={setPunchType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="check_in">تسجيل حضور (Check-In)</SelectItem>
-                  <SelectItem value="check_out">تسجيل انصراف (Check-Out)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="bg-slate-950 text-slate-100 p-4 rounded-xl font-mono text-[11px] h-64 overflow-y-auto border border-slate-800 space-y-1.5" dir="ltr">
+              {loadingLogs ? (
+                <div className="text-center text-slate-400 py-10">جاري قراءة السجلات الحية من السيرفر...</div>
+              ) : cloudLogs.length === 0 ? (
+                <div className="text-center text-slate-500 py-10">لا توجد سجلات بعد (بانتظار اتصال الجهاز بالسيرفر)</div>
+              ) : (
+                cloudLogs.map((line, idx) => (
+                  <div key={idx} className="whitespace-pre-wrap break-all leading-relaxed hover:bg-slate-900 px-1 rounded">
+                    {line}
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSimOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSimulatePunch} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-              إرسال البصمة الآن 🚀
+            <Button variant="outline" onClick={() => handleOpenLogs()} disabled={loadingLogs} className="gap-1.5 text-xs">
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} />
+              <span>تحديث السجل</span>
+            </Button>
+            <Button onClick={() => setLogsOpen(false)} className="text-xs">
+              إغلاق
             </Button>
           </DialogFooter>
         </DialogContent>
